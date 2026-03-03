@@ -95,35 +95,31 @@ Add the hook to your `.claude/settings.json` (global or project):
 
 ### 4. Speech Input (STT)
 
-**Option A: Whisper Voice Input (Recommended)**
+**Option A: [Voquill](https://github.com/nicobailey/Voquill) (Recommended — open source)**
 
-Uses your local Whisper server for high-accuracy transcription. Much better than macOS dictation for technical terms, code, and non-English languages.
+Voquill is an open-source macOS speech input app that works system-wide. Best dictation UX — works with any app including Claude Code.
+
+**Option B: Whisper Voice Input (Best accuracy)**
+
+Uses your local Whisper server. Much better than macOS dictation for technical terms, code, and non-English languages. Runs as a background service in a separate terminal:
 
 ```bash
-# Single shot — speak, auto-submits when you pause
-python scripts/voice-input.py
+# Start voice input (keeps listening, types text)
+./scripts/start-input-voice-whisper.sh
 
-# Loop mode — keeps listening continuously
-python scripts/voice-input.py --loop
+# Say "submit", "send it", or "go ahead" at the end to press Enter
 
-# Type only, don't press Enter
-python scripts/voice-input.py --no-submit
-
-# Adjust silence detection (default 1.5s)
-python scripts/voice-input.py --loop --silence 1.0
+# Options:
+./scripts/start-input-voice-whisper.sh --submit      # always auto-press Enter
+./scripts/start-input-voice-whisper.sh --silence 2.5  # adjust silence detection
 ```
 
-Focus the Claude Code input field, then run the script. It records your mic, sends audio to your local Whisper server, and types + submits the transcription.
+> Requires Accessibility permission for Terminal/VS Code (System Settings → Privacy & Security → Accessibility). One-time setup.
+> Only types into allowed apps (Terminal, VS Code, iTerm2, Warp) — won't send text to wrong windows.
 
-> **Tip:** Run it in a separate terminal alongside Claude Code for a hands-free voice loop.
+**Option C: macOS Dictation (Zero setup fallback)**
 
-**Option B: macOS Dictation (Simple fallback)**
-
-Press **fn fn** (fn key twice) to use Apple's built-in dictation. Works anywhere but less accurate than Whisper for technical speech.
-
-**Option C: [Voquill](https://github.com/nicobailey/Voquill) (Open Source)**
-
-Voquill is an open-source macOS speech input app that works system-wide.
+Press **fn fn** (fn key twice) to dictate. Works instantly, no extra scripts needed. Text appears in the Claude Code input field — review it, then press Enter.
 
 > **Note:** The VS Code Speech extension (`ms-vscode.vscode-speech`) does **not** work with Claude Code's chat panel, as it uses a custom UI component.
 
@@ -149,10 +145,11 @@ Claude-Whisperer/
 │   └── tts-hook.sh           # Claude Code stop hook (async TTS)
 ├── servers/
 │   ├── whisper_server.py     # OpenAI-compatible Whisper STT server
-│   └── start-servers.sh      # Launch both servers
+│   └── start-servers.sh      # Launch STT + TTS servers
 └── scripts/
-    ├── speak.sh              # Standalone TTS utility
-    └── voice-input.py        # Whisper-powered voice input bridge
+    ├── speak.sh                       # Standalone TTS utility
+    ├── start-input-voice-whisper.sh   # Start voice input (run in separate terminal)
+    └── voice-input.py                 # Whisper-powered voice input bridge
 ```
 
 ## How the VOICE Tag Works
