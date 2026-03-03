@@ -67,8 +67,8 @@ echo '       }]'
 echo '     }'
 echo '   }'
 echo ""
-echo "4. Enable macOS Dictation for voice input:"
-echo "   System Settings > Keyboard > Dictation > Enable"
-echo "   Press fn fn (fn key twice) to start dictating into Claude Code"
+echo "4. Voice input (uses your local Whisper for high-accuracy STT):"
+echo "   python $SCRIPT_DIR/scripts/voice-input.py --loop"
+echo "   (Focus the Claude Code input field first, then run in a separate terminal)"
 echo ""
 echo "5. (Optional) Test TTS:  echo 'Hello world' | ./scripts/speak.sh"

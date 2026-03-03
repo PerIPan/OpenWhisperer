@@ -88,28 +88,35 @@ Add the hook to your project's `.claude/settings.json`:
 
 ### 4. Speech Input (STT)
 
-For speech-to-text input into Claude Code, you have three options:
+**Option A: Whisper Voice Input (Recommended)**
 
-**Option A: macOS Dictation (Recommended)**
+Uses your local Whisper server for high-accuracy transcription. Much better than macOS dictation for technical terms, code, and non-English languages.
 
-Built into macOS, works in any text field including Claude Code's chat panel.
+```bash
+# Single shot — speak, auto-submits when you pause
+python scripts/voice-input.py
 
-1. Go to **System Settings > Keyboard > Dictation** and enable it
-2. Press **fn fn** (fn key twice) or the **microphone key** to start dictating
-3. Speak your message, then press fn again or click Done
+# Loop mode — keeps listening continuously
+python scripts/voice-input.py --loop
 
-No extensions needed. Works everywhere on your Mac.
+# Type only, don't press Enter
+python scripts/voice-input.py --no-submit
 
-**Option B: macOS Voice Control**
+# Adjust silence detection (default 1.5s)
+python scripts/voice-input.py --loop --silence 1.0
+```
 
-For fully hands-free operation:
+Focus the Claude Code input field, then run the script. It records your mic, sends audio to your local Whisper server, and types + submits the transcription.
 
-1. Go to **System Settings > Accessibility > Voice Control** and enable it
-2. Say "click" to focus the input, dictate your message, then say "press return"
+> **Tip:** Run it in a separate terminal alongside Claude Code for a hands-free voice loop.
+
+**Option B: macOS Dictation (Simple fallback)**
+
+Press **fn fn** (fn key twice) to use Apple's built-in dictation. Works anywhere but less accurate than Whisper for technical speech.
 
 **Option C: [Voquill](https://github.com/nicobailey/Voquill) (Open Source)**
 
-Voquill is an open-source macOS speech input app that works system-wide with your local Whisper server.
+Voquill is an open-source macOS speech input app that works system-wide.
 
 > **Note:** The VS Code Speech extension (`ms-vscode.vscode-speech`) does **not** work with Claude Code's chat panel, as it uses a custom UI component.
 
@@ -137,7 +144,8 @@ Claude-Local-Speech-STT-TTS-Whisper/
 │   ├── whisper_server.py     # OpenAI-compatible Whisper STT server
 │   └── start-servers.sh      # Launch both servers
 └── scripts/
-    └── speak.sh              # Standalone TTS utility
+    ├── speak.sh              # Standalone TTS utility
+    └── voice-input.py        # Whisper-powered voice input bridge
 ```
 
 ## How the VOICE Tag Works
