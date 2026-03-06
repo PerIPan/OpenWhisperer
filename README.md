@@ -8,7 +8,7 @@ You use Claude Code normally. After every response, Claude's answer is automatic
 
 Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
-## Quick Install (DMG)
+## Install
 
 [**Download ClaudeWhisperer-1.0.0.dmg**](https://github.com/PerIPan/Claude-Whisperer/releases/download/v1.0.0/ClaudeWhisperer-1.0.0.dmg) — drag to Applications and launch.
 
@@ -25,75 +25,6 @@ The menubar icon gives you:
 - View server logs
 
 After setup, use the **Claude Hook Setup** and **Voquill Setup** buttons in the menubar for configuration instructions.
-
-## Manual Setup (5 minutes)
-
-If you prefer running from source instead of the app:
-
-### Prerequisites
-
-- Mac with Apple Silicon (M1/M2/M3/M4)
-- [Claude Code](https://claude.ai/claude-code) (CLI or VS Code extension)
-- [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- [jq](https://jqlang.github.io/jq/) (`brew install jq`)
-
-### Step 1: Install
-
-```bash
-git clone https://github.com/PerIPan/Claude-Whisperer.git
-cd Claude-Whisperer
-chmod +x setup.sh && ./setup.sh
-```
-
-This creates a Python venv at `~/mlx-openai-whisper` and installs everything (MLX Audio, Whisper, Kokoro TTS, spaCy).
-
-### Step 2: Start the servers
-
-```bash
-./servers/start-servers.sh
-```
-
-Two servers start:
-- `localhost:8000` — Whisper STT (speech-to-text)
-- `localhost:8100` — Kokoro TTS (text-to-speech)
-
-Keep this terminal open while using Claude.
-
-### Step 3: Tell Claude to speak
-
-Copy the `CLAUDE.md` file into any project where you want voice mode:
-
-```bash
-cp CLAUDE.md ~/my-project/
-```
-
-This tells Claude to add a `[VOICE: ...]` tag to every response with a short spoken summary.
-
-### Step 4: Add the TTS hook
-
-Add this to your `~/.claude/settings.json` (or your project's `.claude/settings.json`):
-
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/absolute/path/to/Claude-Whisperer/hooks/tts-hook.sh",
-            "timeout": 60
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Replace `/absolute/path/to/Claude-Whisperer` with where you cloned the repo (e.g. `/Users/yourname/Claude-Whisperer`).
-
-**That's it!** Open Claude Code and ask it something. You'll see the response on screen and hear a spoken summary through your speakers.
 
 ## Speech Input with Voquill
 
@@ -166,6 +97,85 @@ Here's the full code with detailed explanation...
 - Make sure `model` field is included in requests
 - Run `./setup.sh` again to reinstall spaCy model
 
+---
+
+## Manual Setup (from source)
+
+If you prefer running from source instead of the app:
+
+### Prerequisites
+
+- Mac with Apple Silicon (M1/M2/M3/M4)
+- [Claude Code](https://claude.ai/claude-code) (CLI or VS Code extension)
+- [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- [jq](https://jqlang.github.io/jq/) (`brew install jq`)
+
+### Step 1: Install
+
+```bash
+git clone https://github.com/PerIPan/Claude-Whisperer.git
+cd Claude-Whisperer
+chmod +x setup.sh && ./setup.sh
+```
+
+This creates a Python venv at `~/mlx-openai-whisper` and installs everything (MLX Audio, Whisper, Kokoro TTS, spaCy).
+
+### Step 2: Start the servers
+
+```bash
+./servers/start-servers.sh
+```
+
+Two servers start:
+- `localhost:8000` — Whisper STT (speech-to-text)
+- `localhost:8100` — Kokoro TTS (text-to-speech)
+
+Keep this terminal open while using Claude.
+
+### Step 3: Tell Claude to speak
+
+Copy the `CLAUDE.md` file into any project where you want voice mode:
+
+```bash
+cp CLAUDE.md ~/my-project/
+```
+
+This tells Claude to add a `[VOICE: ...]` tag to every response with a short spoken summary.
+
+### Step 4: Add the TTS hook
+
+Add this to your `~/.claude/settings.json` (or your project's `.claude/settings.json`):
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/absolute/path/to/Claude-Whisperer/hooks/tts-hook.sh",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Replace `/absolute/path/to/Claude-Whisperer` with where you cloned the repo (e.g. `/Users/yourname/Claude-Whisperer`).
+
+### Building the App from Source
+
+```bash
+cd app
+chmod +x build-dmg.sh
+./build-dmg.sh
+```
+
+Requires Xcode Command Line Tools. Produces `Claude Whisperer.app` and `ClaudeWhisperer-1.0.0.dmg` in `app/.build/`.
+
 ## File Structure
 
 ```
@@ -185,16 +195,6 @@ Claude-Whisperer/
     ├── Resources/
     └── build-dmg.sh       # Build the .dmg yourself
 ```
-
-## Building the App from Source
-
-```bash
-cd app
-chmod +x build-dmg.sh
-./build-dmg.sh
-```
-
-Requires Xcode Command Line Tools. Produces `Claude Whisperer.app` and `ClaudeWhisperer-1.0.0.dmg` in `app/.build/`.
 
 ## Credits
 
