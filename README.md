@@ -1,10 +1,10 @@
-<p align="center">
-  <img src="icon.png" width="128" height="128" alt="Claude Whisperer">
-</p>
-
 # Claude Whisperer
 
 Voice mode for [Claude Code](https://claude.ai/claude-code) on Apple Silicon. Talk to Claude, hear Claude talk back — all running locally on your Mac.
+
+<p align="center">
+  <img src="screenshot.png" width="320" alt="Claude Whisperer menubar app">
+</p>
 
 ## What It Does
 
@@ -23,10 +23,11 @@ On first launch, the app:
 
 The menubar icon gives you:
 - Start/Stop/Restart servers with configurable ports
+- **Voice picker** — choose from 8 Kokoro voices (no server restart needed)
 - **Automation** — Auto-Submit and Auto-Focus (requires Accessibility permission)
 - Claude Hook Setup (settings.json + CLAUDE.md — one button per step)
 - Voquill Setup + download link
-- Separate STT and TTS logs
+- Separate STT and TTS logs (STT log includes transcribed text)
 
 After setup, use the menubar buttons for configuration instructions.
 

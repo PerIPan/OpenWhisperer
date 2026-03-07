@@ -1,11 +1,17 @@
 import AppKit
 import SwiftUI
+import CoreText
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     let serverManager = ServerManager()
     let setupManager = SetupManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Register bundled Outfit font
+        if let fontURL = Bundle.main.url(forResource: "Outfit-VariableFont_wght", withExtension: "ttf") {
+            CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
+        }
+
         // Hide dock icon (menubar-only app)
         NSApp.setActivationPolicy(.accessory)
 
@@ -26,6 +32,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        serverManager.stopAll()
+        serverManager.stopAll(synchronous: true)
     }
 }

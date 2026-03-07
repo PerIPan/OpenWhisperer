@@ -33,9 +33,10 @@ mkdir -p "$APP_BUNDLE/Contents/Resources/scripts"
 # Copy binary
 cp "$BINARY" "$APP_BUNDLE/Contents/MacOS/ClaudeWhisperer"
 
-# Copy Info.plist and icon
+# Copy Info.plist, icon, and fonts
 cp "$SCRIPT_DIR/Resources/Info.plist" "$APP_BUNDLE/Contents/"
 cp "$SCRIPT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
+cp "$SCRIPT_DIR/Resources/Outfit-VariableFont_wght.ttf" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 
 # Step 3: Bundle project scripts
 cp "$PROJECT_DIR/hooks/tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"

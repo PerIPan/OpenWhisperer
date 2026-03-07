@@ -9,6 +9,19 @@ struct MenuBarView: View {
     @State private var focusSelection = "Code"  // visual default; only written on explicit toggle
     @State private var customFocusApp = ""
     @State private var saveDebounce: DispatchWorkItem?
+    @State private var selectedVoice = "af_heart"
+    @State private var showStoppedBanner = false
+
+    private static let voices: [(id: String, label: String)] = [
+        ("af_heart", "Heart (Female)"),
+        ("af_bella", "Bella (Female)"),
+        ("af_sarah", "Sarah (Female)"),
+        ("af_nicole", "Nicole (Female)"),
+        ("am_michael", "Michael (Male)"),
+        ("am_adam", "Adam (Male)"),
+        ("bf_emma", "Emma (British F)"),
+        ("bm_george", "George (British M)"),
+    ]
 
     private static let focusApps = [
         "Code",
@@ -24,28 +37,26 @@ struct MenuBarView: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             // Header
-            HStack(spacing: 6) {
-                Image(systemName: "waveform")
-                    .font(.title3)
-                    .foregroundStyle(.linearGradient(
-                        colors: [.purple, .blue],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ))
+            HStack(spacing: 8) {
+                if let appIcon = NSApp.applicationIconImage {
+                    Image(nsImage: appIcon)
+                        .resizable()
+                        .frame(width: 32, height: 32)
+                }
                 Text("Claude Whisperer")
-                    .font(.headline)
+                    .font(.custom("Outfit", size: 16).weight(.semibold))
             }
-            .padding(.bottom, 2)
+            .padding(.bottom, 4)
 
-            Divider().opacity(0.5)
+            Divider().opacity(0.4)
 
             // Setup in progress
             if case .inProgress(let step) = setupManager.state {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(step)
-                        .font(.caption)
+                        .font(.custom("Outfit", size: 12))
                         .foregroundColor(.secondary)
                     ProgressView(value: setupManager.progress)
                         .progressViewStyle(.linear)
@@ -55,14 +66,14 @@ struct MenuBarView: View {
             } else if case .failed(let reason) = setupManager.state {
                 VStack(alignment: .leading, spacing: 4) {
                     Label(reason, systemImage: "exclamationmark.triangle")
-                        .font(.caption)
+                        .font(.custom("Outfit", size: 12))
                         .foregroundColor(.red)
                     Button("Retry Setup") {
                         setupManager.resetAndRerun { success in
                             if success { serverManager.startAll() }
                         }
                     }
-                    .buttonStyle(MenuBarButtonStyle(tint: .orange))
+                    .buttonStyle(MenuBarButtonStyle())
                 }
                 .padding(.vertical, 4)
             } else {
@@ -71,42 +82,38 @@ struct MenuBarView: View {
                 StatusRow(label: "Kokoro TTS", port: "\(serverManager.ttsPort)", status: serverManager.ttsStatus)
             }
 
-            Divider().opacity(0.5)
+            Divider().opacity(0.4)
 
-            // Automation group
+            // Automation — checkboxes up top, info below
             HStack(spacing: 4) {
                 Image(systemName: "gearshape.2")
-                    .font(.caption2)
+                    .font(.system(size: 10))
                     .foregroundColor(.secondary)
                 Text("Automation")
-                    .font(.caption.weight(.medium))
+                    .font(.custom("Outfit", size: 11).weight(.medium))
                     .foregroundColor(.secondary)
-                Text("(Accessibility)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
             }
 
-            Toggle(isOn: $autoSubmit) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Auto-Submit")
-                    Text("Say \"submit\" / \"send\" at end of phrase")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
+            HStack(spacing: 16) {
+                Toggle("Auto-Submit", isOn: $autoSubmit)
+                    .font(.custom("Outfit", size: 13))
+                    .toggleStyle(.checkbox)
+
+                Toggle("Auto-Focus", isOn: $autoFocusEnabled)
+                    .font(.custom("Outfit", size: 13))
+                    .toggleStyle(.checkbox)
             }
-            .toggleStyle(.checkbox)
             .onChange(of: autoSubmit) { _, enabled in
                 if enabled {
                     try? "on".write(to: Paths.autoSubmitFlag, atomically: true, encoding: .utf8)
                 } else {
-                    try? FileManager.default.removeItem(at: Paths.autoSubmitFlag)
+                    do {
+                        try FileManager.default.removeItem(at: Paths.autoSubmitFlag)
+                    } catch {
+                        NSLog("Failed to remove auto-submit flag: \(error)")
+                    }
                 }
             }
-
-            Toggle(isOn: $autoFocusEnabled) {
-                Text("Auto-Focus")
-            }
-            .toggleStyle(.checkbox)
             .onChange(of: autoFocusEnabled) { _, enabled in
                 if enabled {
                     if focusAppName.isEmpty {
@@ -117,6 +124,17 @@ struct MenuBarView: View {
                     try? FileManager.default.removeItem(at: Paths.autoFocusApp)
                 }
             }
+
+            // Info text below checkboxes
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Submit: say \"submit\" or \"send\" at end of phrase")
+                    .font(.custom("Outfit", size: 10))
+                    .foregroundColor(.secondary)
+                Text("Requires Accessibility permission")
+                    .font(.custom("Outfit", size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.leading, 2)
 
             if autoFocusEnabled {
                 Picker("", selection: $focusSelection) {
@@ -139,7 +157,7 @@ struct MenuBarView: View {
                 if focusSelection == "Custom" {
                     TextField("App name", text: $customFocusApp)
                         .textFieldStyle(.roundedBorder)
-                        .font(.caption)
+                        .font(.custom("Outfit", size: 12))
                         .padding(.leading, 20)
                         .onChange(of: customFocusApp) { _, newValue in
                             if !newValue.isEmpty {
@@ -150,46 +168,72 @@ struct MenuBarView: View {
                 }
             }
 
-            Divider().opacity(0.5)
+            Divider().opacity(0.4)
 
-            // Ports (always visible, editable only when stopped)
+            // Ports & Voice
             let isStopped = serverManager.sttStatus == .stopped && serverManager.ttsStatus == .stopped
             PortField(label: "STT Port", port: $serverManager.sttPort, disabled: !isStopped)
             PortField(label: "TTS Port", port: $serverManager.ttsPort, disabled: !isStopped)
+
+            HStack {
+                Text("Voice")
+                    .font(.custom("Outfit", size: 12))
+                    .frame(width: 60, alignment: .leading)
+                Picker("", selection: $selectedVoice) {
+                    ForEach(Self.voices, id: \.id) { voice in
+                        Text(voice.label).tag(voice.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+            }
+            .onChange(of: selectedVoice) { _, newValue in
+                try? newValue.write(to: Paths.ttsVoice, atomically: true, encoding: .utf8)
+            }
+
+            Divider().opacity(0.4)
 
             // Server controls
             HStack(spacing: 6) {
                 if isStopped {
                     Button(action: { serverManager.startAll() }) {
-                        Label("Start", systemImage: "play.fill")
+                        Label("Start Servers", systemImage: "play.fill")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(MenuBarButtonStyle(tint: .green))
+                    .buttonStyle(MenuBarButtonStyle())
                 } else {
                     Button(action: {
                         serverManager.stopAll()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            showStoppedAlert()
+                        showStoppedBanner = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            showStoppedBanner = false
                         }
                     }) {
                         Label("Stop", systemImage: "stop.fill")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(MenuBarButtonStyle(tint: .red))
+                    .buttonStyle(MenuBarButtonStyle())
 
                     Button(action: { serverManager.restartAll() }) {
                         Label("Restart", systemImage: "arrow.clockwise")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(MenuBarButtonStyle(tint: .orange))
+                    .buttonStyle(MenuBarButtonStyle())
                 }
             }
-            .padding(.top, 2)
 
-            Divider().opacity(0.5)
+            if showStoppedBanner {
+                Text("Servers stopped")
+                    .font(.custom("Outfit", size: 11))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .transition(.opacity)
+            }
+
+            Divider().opacity(0.4)
 
             // Claude setup
-            SectionHeader(title: "Claude Setup", icon: "hammer")
+            SectionHeader(title: "Claude Setup Instructions", icon: "hammer")
 
             Button(action: { ConfigManager.showClaudeSettingsInstructions() }) {
                 Label("settings.json (Hook)", systemImage: "gearshape")
@@ -203,10 +247,10 @@ struct MenuBarView: View {
             }
             .buttonStyle(MenuBarRowButtonStyle())
 
-            Divider().opacity(0.5)
+            Divider().opacity(0.4)
 
             // Voquill
-            SectionHeader(title: "Voquill", icon: "mic")
+            SectionHeader(title: "Voquill Setup Instructions", icon: "mic")
 
             Button(action: { ConfigManager.showVoquillInstructions(sttPort: serverManager.sttPort) }) {
                 Label("Voquill Setup", systemImage: "mic.badge.plus")
@@ -220,7 +264,7 @@ struct MenuBarView: View {
             }
             .buttonStyle(MenuBarRowButtonStyle())
 
-            Divider().opacity(0.5)
+            Divider().opacity(0.4)
 
             // Logs
             SectionHeader(title: "Logs", icon: "doc.text.magnifyingglass")
@@ -239,25 +283,26 @@ struct MenuBarView: View {
                 .buttonStyle(MenuBarRowButtonStyle())
             }
 
-            Divider().opacity(0.5)
+            Divider().opacity(0.4)
 
             HStack {
-                Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.0")")
-                    .font(.caption2)
+                Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
+                    .font(.custom("Outfit", size: 10))
                     .foregroundStyle(.tertiary)
 
                 Spacer()
 
                 Button(action: { NSApplication.shared.terminate(nil) }) {
                     Label("Quit", systemImage: "power")
-                        .font(.caption)
+                        .font(.custom("Outfit", size: 12))
                 }
                 .buttonStyle(MenuBarRowButtonStyle())
                 .keyboardShortcut("q")
             }
         }
-        .padding(14)
-        .frame(width: 270)
+        .font(.custom("Outfit", size: 13))
+        .padding(16)
+        .frame(width: 260)
         .onAppear {
             autoSubmit = FileManager.default.fileExists(atPath: Paths.autoSubmitFlag.path)
             autoFocusEnabled = FileManager.default.fileExists(atPath: Paths.autoFocusApp.path)
@@ -270,6 +315,13 @@ struct MenuBarView: View {
                 } else {
                     focusSelection = "Custom"
                     customFocusApp = name
+                }
+            }
+            if let savedVoice = try? String(contentsOf: Paths.ttsVoice, encoding: .utf8),
+               !savedVoice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let voice = savedVoice.trimmingCharacters(in: .whitespacesAndNewlines)
+                if Self.voices.contains(where: { $0.id == voice }) {
+                    selectedVoice = voice
                 }
             }
         }
@@ -286,15 +338,6 @@ struct MenuBarView: View {
         saveDebounce = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
-
-    private func showStoppedAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Servers Stopped"
-        alert.informativeText = "Both STT and TTS servers have been stopped."
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
-    }
 }
 
 // MARK: - Section Header
@@ -306,10 +349,10 @@ struct SectionHeader: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.caption2)
+                .font(.system(size: 10))
                 .foregroundColor(.secondary)
             Text(title)
-                .font(.caption.weight(.medium))
+                .font(.custom("Outfit", size: 11).weight(.medium))
                 .foregroundColor(.secondary)
         }
     }
@@ -318,18 +361,16 @@ struct SectionHeader: View {
 // MARK: - Button Styles
 
 struct MenuBarButtonStyle: ButtonStyle {
-    var tint: Color = .accentColor
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.caption.weight(.medium))
+            .font(.custom("Outfit", size: 12).weight(.medium))
             .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(tint.opacity(configuration.isPressed ? 0.25 : 0.15))
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.15 : 0.08))
             )
-            .foregroundColor(tint)
+            .foregroundColor(.primary)
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
@@ -338,12 +379,12 @@ struct MenuBarButtonStyle: ButtonStyle {
 struct MenuBarRowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.caption)
+            .font(.custom("Outfit", size: 12))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.primary.opacity(configuration.isPressed ? 0.12 : 0.0))
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.12 : 0.04))
             )
             .contentShape(RoundedRectangle(cornerRadius: 5))
             .foregroundColor(.primary)
@@ -359,16 +400,22 @@ struct PortField: View {
     var disabled: Bool = false
     @State private var text: String = ""
 
+    private var isValid: Bool {
+        guard let p = Int(text) else { return false }
+        return p >= 1024 && p <= 65535
+    }
+
     var body: some View {
         HStack {
             Text(label)
-                .font(.caption)
-                .frame(width: 60, alignment: .leading)
+                .font(.custom("Outfit", size: 12))
+                .frame(minWidth: 60, alignment: .leading)
             TextField("", text: $text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 70)
                 .disabled(disabled)
                 .opacity(disabled ? 0.5 : 1.0)
+                .foregroundColor(isValid || text.isEmpty ? .primary : .red)
                 .onAppear { text = "\(port)" }
                 .onChange(of: text) { _, newValue in
                     if let p = Int(newValue), p >= 1024, p <= 65535 {
@@ -395,12 +442,12 @@ struct StatusRow: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 7, height: 7)
-                .shadow(color: statusColor.opacity(0.6), radius: status == .running ? 3 : 0)
+                .shadow(color: statusColor.opacity(0.4), radius: status == .running ? 2 : 0)
             Text(label)
-                .font(.system(.caption, design: .default))
+                .font(.custom("Outfit", size: 13))
             Spacer()
             Text(":\(port)")
-                .font(.caption2)
+                .font(.custom("Outfit", size: 10))
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 1)

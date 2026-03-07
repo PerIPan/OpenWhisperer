@@ -48,7 +48,7 @@ class ServerManager: ObservableObject {
         }
     }
 
-    func stopAll() {
+    func stopAll(synchronous: Bool = false) {
         // Cancel any pending restart (BUG-12)
         pendingRestart?.cancel()
         pendingRestart = nil
@@ -58,11 +58,10 @@ class ServerManager: ObservableObject {
         pendingInitialCheck?.cancel()
         pendingInitialCheck = nil
 
-        // Non-blocking stop (BUG-02)
         stoppingSTT = true
         stoppingTTS = true
-        stopProcess(&sttProcess, pidFile: Paths.sttPidFile)
-        stopProcess(&ttsProcess, pidFile: Paths.ttsPidFile)
+        stopProcess(&sttProcess, pidFile: Paths.sttPidFile, synchronous: synchronous)
+        stopProcess(&ttsProcess, pidFile: Paths.ttsPidFile, synchronous: synchronous)
 
         sttStatus = .stopped
         ttsStatus = .stopped
@@ -78,7 +77,7 @@ class ServerManager: ObservableObject {
             self?.startAll()
         }
         pendingRestart = restart
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: restart)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: restart)
     }
 
     // MARK: - STT Server
@@ -97,6 +96,7 @@ class ServerManager: ObservableObject {
         process.environment = env
 
         let logFile = FileHandle.forWritingOrCreate(at: Paths.sttLog)
+        logFile.seekToEndOfFile()
         process.standardOutput = logFile
         process.standardError = logFile
 
@@ -111,11 +111,11 @@ class ServerManager: ObservableObject {
             }
         }
 
-        stoppingSTT = false
         sttProcess = process
 
         do {
             try process.run()
+            stoppingSTT = false
             writePID(process.processIdentifier, to: Paths.sttPidFile)
         } catch {
             sttProcess = nil
@@ -138,6 +138,7 @@ class ServerManager: ObservableObject {
         process.environment = makeEnv()
 
         let logFile = FileHandle.forWritingOrCreate(at: Paths.ttsLog)
+        logFile.seekToEndOfFile()
         process.standardOutput = logFile
         process.standardError = logFile
 
@@ -152,11 +153,11 @@ class ServerManager: ObservableObject {
             }
         }
 
-        stoppingTTS = false
         ttsProcess = process
 
         do {
             try process.run()
+            stoppingTTS = false
             writePID(process.processIdentifier, to: Paths.ttsPidFile)
         } catch {
             ttsProcess = nil
@@ -211,18 +212,31 @@ class ServerManager: ObservableObject {
 
     // MARK: - Process Management
 
-    private func stopProcess(_ process: inout Process?, pidFile: URL) {
+    private func stopProcess(_ process: inout Process?, pidFile: URL, synchronous: Bool = false) {
         if let proc = process, proc.isRunning {
             proc.terminate()
-            DispatchQueue.global(qos: .utility).async {
-                // Give process 3s to exit gracefully, then SIGKILL
-                let exited = proc.waitUntilExitWithTimeout(seconds: 3)
-                if !exited, proc.isRunning {
-                    proc.interrupt() // SIGINT
-                    if !proc.waitUntilExitWithTimeout(seconds: 1), proc.isRunning {
-                        kill(proc.processIdentifier, SIGKILL)
-                    }
+            let killBlock = {
+                // Poll for exit — wait up to 3s for SIGTERM
+                for _ in 0..<30 {
+                    if !proc.isRunning { return }
+                    Thread.sleep(forTimeInterval: 0.1)
                 }
+                // Escalate to SIGINT, wait 1s
+                guard proc.isRunning else { return }
+                proc.interrupt()
+                for _ in 0..<10 {
+                    if !proc.isRunning { return }
+                    Thread.sleep(forTimeInterval: 0.1)
+                }
+                // Last resort: SIGKILL
+                if proc.isRunning {
+                    kill(proc.processIdentifier, SIGKILL)
+                }
+            }
+            if synchronous {
+                killBlock()
+            } else {
+                DispatchQueue.global(qos: .utility).async(execute: killBlock)
             }
         }
         process = nil
@@ -239,20 +253,6 @@ class ServerManager: ObservableObject {
         env["PATH"] = "\(venvBin):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
         env["VIRTUAL_ENV"] = Paths.venv.path
         return env
-    }
-}
-
-// MARK: - Process Helper
-
-extension Process {
-    /// Wait for exit with a timeout. Returns true if process exited within the timeout.
-    func waitUntilExitWithTimeout(seconds: TimeInterval) -> Bool {
-        let sema = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .utility).async {
-            self.waitUntilExit()
-            sema.signal()
-        }
-        return sema.wait(timeout: .now() + seconds) == .success
     }
 }
 

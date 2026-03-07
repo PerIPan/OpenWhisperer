@@ -57,6 +57,9 @@ enum Paths {
     /// Auto-focus app file (whisper_server.py reads target app name from this)
     static let autoFocusApp = appSupport.appendingPathComponent("auto_focus_app")
 
+    /// TTS voice file (tts-hook.sh reads voice name from this)
+    static let ttsVoice = appSupport.appendingPathComponent("tts_voice")
+
     /// Claude Code settings
     static let claudeSettings: URL = {
         FileManager.default.homeDirectoryForCurrentUser

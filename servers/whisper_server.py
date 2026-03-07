@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import tempfile, os, uvicorn
 from concurrent.futures import ThreadPoolExecutor
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("whisper_server")
 
 app = FastAPI()
@@ -184,6 +185,8 @@ async def do_transcribe(file, model, language, response_format):
             lambda p=tmp_path, l=language: _serialize_transcribe(p, l or None)
         )
         text = result.get("text", "")
+        if text.strip():
+            logger.info("Transcribed: %s", text.strip())
     except Exception:
         logger.exception("Transcription failed")
         return JSONResponse({"error": "Transcription failed"}, status_code=500)

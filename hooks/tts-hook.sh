@@ -96,7 +96,14 @@ fi
 
 # Run entire TTS pipeline in background (non-blocking)
 (
-  VOICE="${TTS_VOICE:-af_heart}"
+  # Read voice from app config, fall back to env var, then default
+  VOICE_FILE="$APP_SUPPORT/tts_voice"
+  if [ -f "$VOICE_FILE" ] && [ ! -L "$VOICE_FILE" ]; then
+    SAVED_VOICE=$(cat "$VOICE_FILE" 2>/dev/null | tr -d '[:space:]')
+    VOICE="${SAVED_VOICE:-${TTS_VOICE:-af_heart}}"
+  else
+    VOICE="${TTS_VOICE:-af_heart}"
+  fi
   MODEL="${TTS_MODEL:-prince-canuma/Kokoro-82M}"
   TMPFILE=$(mktemp "$TTS_TMPDIR/tts_XXXXXX.wav")
 
