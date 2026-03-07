@@ -16,11 +16,18 @@ class ServerManager: ObservableObject {
 
     private var sttProcess: Process?
     private var ttsProcess: Process?
+    private var sttLogHandle: FileHandle?
+    private var ttsLogHandle: FileHandle?
     private var healthCheckTimer: Timer?
     private var pendingRestart: DispatchWorkItem?
     private var pendingInitialCheck: DispatchWorkItem?
+    private var sttStartTime: Date?
+    private var ttsStartTime: Date?
     private var stoppingSTT = false
     private var stoppingTTS = false
+
+    private static let startupTimeout: TimeInterval = 60
+    private static let maxLogSize: UInt64 = 10 * 1024 * 1024  // 10MB
 
     var isRunning: Bool {
         sttStatus == .running && ttsStatus == .running
@@ -71,13 +78,57 @@ class ServerManager: ObservableObject {
         // Cancel any previous pending restart (BUG-12)
         pendingRestart?.cancel()
 
-        stopAll()
+        sttStatus = .stopped
+        ttsStatus = .stopped
+
+        // Capture process refs before nilling them (avoids race)
+        let sttProc = sttProcess
+        let ttsProc = ttsProcess
+        sttProcess = nil
+        ttsProcess = nil
+
+        healthCheckTimer?.invalidate()
+        healthCheckTimer = nil
+        pendingInitialCheck?.cancel()
+        pendingInitialCheck = nil
+
+        let sttPid = Paths.sttPidFile
+        let ttsPid = Paths.ttsPidFile
 
         let restart = DispatchWorkItem { [weak self] in
-            self?.startAll()
+            // Terminate on background thread (blocking waits)
+            Self.terminateProcess(sttProc, pidFile: sttPid)
+            Self.terminateProcess(ttsProc, pidFile: ttsPid)
+            DispatchQueue.main.async {
+                self?.startAll()
+            }
         }
         pendingRestart = restart
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: restart)
+        DispatchQueue.global(qos: .userInitiated).async(execute: restart)
+    }
+
+    /// Terminate a process synchronously (safe to call from any thread, no state mutation)
+    private static func terminateProcess(_ process: Process?, pidFile: URL) {
+        guard let proc = process, proc.isRunning else {
+            try? FileManager.default.removeItem(at: pidFile)
+            return
+        }
+        proc.terminate()
+        for _ in 0..<30 {
+            if !proc.isRunning { break }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        if proc.isRunning {
+            proc.interrupt()
+            for _ in 0..<10 {
+                if !proc.isRunning { break }
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+        }
+        if proc.isRunning {
+            kill(proc.processIdentifier, SIGKILL)
+        }
+        try? FileManager.default.removeItem(at: pidFile)
     }
 
     // MARK: - STT Server
@@ -95,14 +146,19 @@ class ServerManager: ObservableObject {
         env["STT_PORT"] = "\(sttPort)"
         process.environment = env
 
+        try? sttLogHandle?.close()
+        Self.rotateLogIfNeeded(at: Paths.sttLog)
         let logFile = FileHandle.forWritingOrCreate(at: Paths.sttLog)
         logFile.seekToEndOfFile()
+        sttLogHandle = logFile
         process.standardOutput = logFile
         process.standardError = logFile
 
         process.terminationHandler = { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self else { return }
+                try? self.sttLogHandle?.close()
+                self.sttLogHandle = nil
                 if self.stoppingSTT {
                     self.stoppingSTT = false
                 } else {
@@ -112,6 +168,7 @@ class ServerManager: ObservableObject {
         }
 
         sttProcess = process
+        sttStartTime = Date()
 
         do {
             try process.run()
@@ -137,14 +194,19 @@ class ServerManager: ObservableObject {
         process.currentDirectoryURL = Paths.appSupport
         process.environment = makeEnv()
 
+        try? ttsLogHandle?.close()
+        Self.rotateLogIfNeeded(at: Paths.ttsLog)
         let logFile = FileHandle.forWritingOrCreate(at: Paths.ttsLog)
         logFile.seekToEndOfFile()
+        ttsLogHandle = logFile
         process.standardOutput = logFile
         process.standardError = logFile
 
         process.terminationHandler = { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self else { return }
+                try? self.ttsLogHandle?.close()
+                self.ttsLogHandle = nil
                 if self.stoppingTTS {
                     self.stoppingTTS = false
                 } else {
@@ -154,6 +216,7 @@ class ServerManager: ObservableObject {
         }
 
         ttsProcess = process
+        ttsStartTime = Date()
 
         do {
             try process.run()
@@ -171,9 +234,11 @@ class ServerManager: ObservableObject {
     private func startHealthChecks() {
         // Timer must be on main thread RunLoop (BUG-08)
         healthCheckTimer?.invalidate()
-        healthCheckTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.checkHealth()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        healthCheckTimer = timer
         // Cancellable first check after 3s to give servers time to boot
         let initialCheck = DispatchWorkItem { [weak self] in
             self?.checkHealth()
@@ -186,13 +251,25 @@ class ServerManager: ObservableObject {
         checkEndpoint("http://localhost:\(sttPort)/models") { [weak self] ok in
             DispatchQueue.main.async {
                 guard let self, self.sttStatus == .starting || self.sttStatus == .running else { return }
-                self.sttStatus = ok ? .running : .starting
+                if ok {
+                    self.sttStatus = .running
+                } else if self.sttStatus == .starting,
+                          let start = self.sttStartTime,
+                          Date().timeIntervalSince(start) > Self.startupTimeout {
+                    self.sttStatus = .error
+                }
             }
         }
         checkEndpoint("http://localhost:\(ttsPort)/v1/models") { [weak self] ok in
             DispatchQueue.main.async {
                 guard let self, self.ttsStatus == .starting || self.ttsStatus == .running else { return }
-                self.ttsStatus = ok ? .running : .starting
+                if ok {
+                    self.ttsStatus = .running
+                } else if self.ttsStatus == .starting,
+                          let start = self.ttsStartTime,
+                          Date().timeIntervalSince(start) > Self.startupTimeout {
+                    self.ttsStatus = .error
+                }
             }
         }
     }
@@ -213,38 +290,34 @@ class ServerManager: ObservableObject {
     // MARK: - Process Management
 
     private func stopProcess(_ process: inout Process?, pidFile: URL, synchronous: Bool = false) {
-        if let proc = process, proc.isRunning {
-            proc.terminate()
-            let killBlock = {
-                // Poll for exit — wait up to 3s for SIGTERM
-                for _ in 0..<30 {
-                    if !proc.isRunning { return }
-                    Thread.sleep(forTimeInterval: 0.1)
-                }
-                // Escalate to SIGINT, wait 1s
-                guard proc.isRunning else { return }
-                proc.interrupt()
-                for _ in 0..<10 {
-                    if !proc.isRunning { return }
-                    Thread.sleep(forTimeInterval: 0.1)
-                }
-                // Last resort: SIGKILL
-                if proc.isRunning {
-                    kill(proc.processIdentifier, SIGKILL)
-                }
-            }
-            if synchronous {
-                killBlock()
-            } else {
-                DispatchQueue.global(qos: .utility).async(execute: killBlock)
-            }
+        guard let proc = process, proc.isRunning else {
+            process = nil
+            try? FileManager.default.removeItem(at: pidFile)
+            return
         }
         process = nil
-        try? FileManager.default.removeItem(at: pidFile)
+        proc.terminate()
+        if synchronous {
+            Self.terminateProcess(proc, pidFile: pidFile)
+        } else {
+            DispatchQueue.global(qos: .utility).async {
+                Self.terminateProcess(proc, pidFile: pidFile)
+            }
+        }
     }
 
     private func writePID(_ pid: Int32, to url: URL) {
         try? "\(pid)".write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static func rotateLogIfNeeded(at url: URL) {
+        let fm = FileManager.default
+        guard let attrs = try? fm.attributesOfItem(atPath: url.path),
+              let size = attrs[.size] as? UInt64,
+              size > maxLogSize else { return }
+        let backup = url.appendingPathExtension("old")
+        try? fm.removeItem(at: backup)
+        try? fm.moveItem(at: url, to: backup)
     }
 
     private func makeEnv() -> [String: String] {

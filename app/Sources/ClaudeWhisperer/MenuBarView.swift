@@ -11,6 +11,12 @@ struct MenuBarView: View {
     @State private var saveDebounce: DispatchWorkItem?
     @State private var selectedVoice = "af_heart"
     @State private var showStoppedBanner = false
+    @State private var hookApplied = false
+    @State private var claudeMdApplied = false
+    @State private var applyMessage = ""
+    @State private var ttsReachable = false
+    @State private var sttHasTraffic = false
+    @ObservedObject private var overlay = TranscriptionOverlay.shared
 
     private static let voices: [(id: String, label: String)] = [
         ("af_heart", "Heart (Female)"),
@@ -79,7 +85,9 @@ struct MenuBarView: View {
             } else {
                 // Server status
                 StatusRow(label: "Whisper STT", port: "\(serverManager.sttPort)", status: serverManager.sttStatus)
+                    .help("Speech-to-Text — converts your voice to text using MLX Whisper")
                 StatusRow(label: "Kokoro TTS", port: "\(serverManager.ttsPort)", status: serverManager.ttsStatus)
+                    .help("Text-to-Speech — reads Claude's responses aloud using Kokoro")
             }
 
             Divider().opacity(0.4)
@@ -233,19 +241,64 @@ struct MenuBarView: View {
             Divider().opacity(0.4)
 
             // Claude setup
-            SectionHeader(title: "Claude Setup Instructions", icon: "hammer")
+            SectionHeader(title: "Claude Setup", icon: "hammer")
 
-            Button(action: { ConfigManager.showClaudeSettingsInstructions() }) {
-                Label("settings.json (Hook)", systemImage: "gearshape")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(MenuBarRowButtonStyle())
+            HStack(spacing: 6) {
+                Button(action: { ConfigManager.showClaudeSettingsInstructions() }) {
+                    Label("Hook", systemImage: "gearshape")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(MenuBarRowButtonStyle())
 
-            Button(action: { ConfigManager.showClaudeMdInstructions() }) {
-                Label("CLAUDE.md (Voice Tag)", systemImage: "doc.text")
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(action: {
+                    let result = ConfigManager.applyHookToSettings()
+                    hookApplied = result.success
+                    applyMessage = result.message
+                    refreshDiagnostics()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { applyMessage = "" }
+                }) {
+                    Label(hookApplied ? "Applied" : "Auto-Apply", systemImage: hookApplied ? "checkmark.circle.fill" : "bolt.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(MenuBarRowButtonStyle())
+                .help("Writes the TTS hook into ~/.claude/settings.json")
             }
-            .buttonStyle(MenuBarRowButtonStyle())
+
+            HStack(spacing: 6) {
+                Button(action: { ConfigManager.showClaudeMdInstructions() }) {
+                    Label("Voice Tag", systemImage: "doc.text")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(MenuBarRowButtonStyle())
+
+                Button(action: {
+                    let result = ConfigManager.applyClaudeMd()
+                    claudeMdApplied = result.success
+                    applyMessage = result.message
+                    refreshDiagnostics()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { applyMessage = "" }
+                }) {
+                    Label(claudeMdApplied ? "Applied" : "Auto-Apply", systemImage: claudeMdApplied ? "checkmark.circle.fill" : "bolt.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(MenuBarRowButtonStyle())
+                .help("Appends VOICE tag instructions to ~/.claude/CLAUDE.md")
+            }
+
+            if !applyMessage.isEmpty {
+                Text(applyMessage)
+                    .font(.custom("Outfit", size: 10))
+                    .foregroundColor(applyMessage.contains("failed") || applyMessage.contains("Failed") ? .red : .green)
+                    .transition(.opacity)
+            }
+
+            // Diagnostics checklist
+            VStack(alignment: .leading, spacing: 2) {
+                DiagnosticRow(label: "Hook configured", ok: hookApplied)
+                DiagnosticRow(label: "Voice tag active", ok: claudeMdApplied)
+                DiagnosticRow(label: "TTS reachable", ok: ttsReachable)
+            }
+            .padding(.leading, 2)
 
             Divider().opacity(0.4)
 
@@ -263,6 +316,13 @@ struct MenuBarView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(MenuBarRowButtonStyle())
+
+            if serverManager.sttStatus == .running && !sttHasTraffic {
+                Text("No speech received yet — is Voquill configured?")
+                    .font(.custom("Outfit", size: 10))
+                    .foregroundColor(.orange)
+                    .padding(.leading, 2)
+            }
 
             Divider().opacity(0.4)
 
@@ -282,6 +342,19 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(MenuBarRowButtonStyle())
             }
+
+            Toggle("Transcription Overlay", isOn: Binding(
+                get: { overlay.isVisible },
+                set: { enabled in
+                    if enabled {
+                        overlay.show()
+                    } else {
+                        overlay.hide()
+                    }
+                }
+            ))
+                .font(.custom("Outfit", size: 11))
+                .toggleStyle(.checkbox)
 
             Divider().opacity(0.4)
 
@@ -324,6 +397,16 @@ struct MenuBarView: View {
                     selectedVoice = voice
                 }
             }
+            refreshDiagnostics()
+        }
+    }
+
+    private func refreshDiagnostics() {
+        hookApplied = ConfigManager.checkHookConfigured()
+        claudeMdApplied = ConfigManager.checkClaudeMdConfigured()
+        sttHasTraffic = ConfigManager.sttHasReceivedRequests()
+        ConfigManager.testTTS(port: serverManager.ttsPort) { ok in
+            ttsReachable = ok
         }
     }
 
@@ -426,6 +509,24 @@ struct PortField: View {
                     let portStr = "\(newPort)"
                     if text != portStr { text = portStr }
                 }
+        }
+    }
+}
+
+// MARK: - Diagnostic Row
+
+struct DiagnosticRow: View {
+    let label: String
+    let ok: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle")
+                .font(.system(size: 9))
+                .foregroundColor(ok ? .green : .secondary)
+            Text(label)
+                .font(.custom("Outfit", size: 10))
+                .foregroundColor(ok ? .primary : .secondary)
         }
     }
 }

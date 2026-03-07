@@ -10,7 +10,7 @@ import mlx_whisper
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
-import tempfile, os, uvicorn
+import tempfile, time, os, uvicorn
 from concurrent.futures import ThreadPoolExecutor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -40,6 +40,7 @@ SUBMIT_TRIGGERS = ["submit", "send it", "go ahead", "send", "enter"]
 SUBMIT_TRIGGERS.sort(key=len, reverse=True)
 
 _transcribe_lock = threading.Lock()
+_pending_enter_task: asyncio.Task | None = None
 # Dedicated single-thread executor for transcription to avoid starving the default pool
 _transcribe_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="transcribe")
 
@@ -135,8 +136,16 @@ def kill_tts():
         except (FileNotFoundError, ValueError):
             pass
 
-        # Also kill afplay spawned by this user's hook
-        subprocess.run(["pkill", "-f", "afplay.*tts_"], capture_output=True, timeout=2)
+        # Send SIGINT to afplay for cleaner stop, then SIGTERM to shells
+        subprocess.run(
+            ["pkill", "-INT", "-U", str(os.getuid()), "-f", "afplay.*tts_"],
+            capture_output=True, timeout=2
+        )
+        time.sleep(0.15)
+        subprocess.run(
+            ["pkill", "-U", str(os.getuid()), "-f", "afplay.*tts_"],
+            capture_output=True, timeout=2
+        )
 
         # Clean up files
         for path in (TTS_PIDFILE, TTS_LOCKFILE):
@@ -163,10 +172,18 @@ def press_cmd_enter():
 async def do_transcribe(file, model, language, response_format):
     tmp_path = None
     try:
-        # Read with size limit
-        data = await file.read()
-        if len(data) > MAX_UPLOAD_BYTES:
-            return JSONResponse({"error": "File too large (max 100MB)"}, status_code=413)
+        # Stream-read with size limit to avoid unbounded memory use
+        chunks = []
+        total = 0
+        while True:
+            chunk = await file.read(1024 * 1024)  # 1MB chunks
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_UPLOAD_BYTES:
+                return JSONResponse({"error": "File too large (max 100MB)"}, status_code=413)
+            chunks.append(chunk)
+        data = b"".join(chunks)
 
         # Preserve original file extension for correct decoder selection
         ext = ".wav"
@@ -210,8 +227,11 @@ async def do_transcribe(file, model, language, response_format):
 
     # Barge-in + submit: kill TTS and press Cmd+Enter
     if should_submit:
+        global _pending_enter_task
+        if _pending_enter_task and not _pending_enter_task.done():
+            _pending_enter_task.cancel()
         await loop.run_in_executor(None, kill_tts)
-        _submit_task = asyncio.create_task(_delayed_enter())
+        _pending_enter_task = asyncio.create_task(_delayed_enter())
 
     if response_format == "text":
         return PlainTextResponse(text)

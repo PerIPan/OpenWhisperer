@@ -112,6 +112,152 @@ enum ConfigManager {
         window.show()
     }
 
+    // MARK: - Auto-apply hook to settings.json
+
+    static func applyHookToSettings() -> (success: Bool, message: String) {
+        let hookPath = Paths.ttsHook.path
+        let settingsDir = Paths.claudeSettings.deletingLastPathComponent()
+        let fm = FileManager.default
+
+        // Ensure ~/.claude/ exists
+        try? fm.createDirectory(at: settingsDir, withIntermediateDirectories: true)
+
+        var settings: [String: Any] = [:]
+        if fm.fileExists(atPath: Paths.claudeSettings.path),
+           let data = try? Data(contentsOf: Paths.claudeSettings),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            settings = json
+        }
+
+        // Build the hook entry
+        let hookEntry: [String: Any] = ["type": "command", "command": hookPath, "timeout": 60]
+        let stopEntry: [String: Any] = ["hooks": [hookEntry]]
+
+        // Get or create hooks.Stop array
+        var hooks = settings["hooks"] as? [String: Any] ?? [:]
+        var stopArray = hooks["Stop"] as? [[String: Any]] ?? []
+
+        // Check if hook is already present
+        let alreadyPresent = stopArray.contains { entry in
+            if let innerHooks = entry["hooks"] as? [[String: Any]] {
+                return innerHooks.contains { $0["command"] as? String == hookPath }
+            }
+            return false
+        }
+
+        if alreadyPresent {
+            return (true, "Hook already configured")
+        }
+
+        stopArray.append(stopEntry)
+        hooks["Stop"] = stopArray
+        settings["hooks"] = hooks
+
+        // Write back (convert to 2-space indent to match Claude Code style)
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
+              let rawString = String(data: jsonData, encoding: .utf8) else {
+            return (false, "Failed to serialize JSON")
+        }
+        let jsonString = rawString.replacingOccurrences(
+            of: "    ", with: "  "
+        )
+
+        do {
+            try jsonString.write(to: Paths.claudeSettings, atomically: true, encoding: .utf8)
+            return (true, "Hook applied to settings.json")
+        } catch {
+            return (false, "Write failed: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Auto-apply CLAUDE.md voice tag
+
+    static func applyClaudeMd() -> (success: Bool, message: String) {
+        let claudeMdPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude").appendingPathComponent("CLAUDE.md")
+        let fm = FileManager.default
+
+        let voiceBlock = """
+
+        ## Voice Mode
+        ALWAYS include a `[VOICE: ...]` tag at the END of every response. This tag contains a short, conversational spoken summary (1-3 sentences) that the TTS hook extracts and reads aloud. Write the voice content as natural speech — no code, no file paths, no markdown, no technical jargon unless the user used it first.
+
+        Example: `[VOICE: I fixed the bug in the login page. It was a missing null check on the user object.]`
+        """
+
+        // Check if already present
+        if fm.fileExists(atPath: claudeMdPath.path),
+           let existing = try? String(contentsOf: claudeMdPath, encoding: .utf8) {
+            if existing.contains("[VOICE:") || existing.contains("Voice Mode") {
+                return (true, "Voice tag already in CLAUDE.md")
+            }
+            // Append to existing
+            let updated = existing.trimmingCharacters(in: .whitespacesAndNewlines) + "\n" + voiceBlock + "\n"
+            do {
+                try updated.write(to: claudeMdPath, atomically: true, encoding: .utf8)
+                return (true, "Voice tag appended to CLAUDE.md")
+            } catch {
+                return (false, "Write failed: \(error.localizedDescription)")
+            }
+        }
+
+        // Create new file
+        try? fm.createDirectory(at: claudeMdPath.deletingLastPathComponent(), withIntermediateDirectories: true)
+        do {
+            try voiceBlock.trimmingCharacters(in: .newlines).write(to: claudeMdPath, atomically: true, encoding: .utf8)
+            return (true, "CLAUDE.md created with voice tag")
+        } catch {
+            return (false, "Write failed: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Diagnostics
+
+    static func checkHookConfigured() -> Bool {
+        guard let data = try? Data(contentsOf: Paths.claudeSettings),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let hooks = json["hooks"] as? [String: Any],
+              let stopArray = hooks["Stop"] as? [[String: Any]] else { return false }
+        let hookPath = Paths.ttsHook.path
+        return stopArray.contains { entry in
+            if let innerHooks = entry["hooks"] as? [[String: Any]] {
+                return innerHooks.contains { $0["command"] as? String == hookPath }
+            }
+            return false
+        }
+    }
+
+    static func checkClaudeMdConfigured() -> Bool {
+        let claudeMdPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude").appendingPathComponent("CLAUDE.md")
+        guard let content = try? String(contentsOf: claudeMdPath, encoding: .utf8) else { return false }
+        return content.contains("[VOICE:") || content.contains("Voice Mode")
+    }
+
+    static func testTTS(port: Int, completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "http://localhost:\(port)/v1/models") else {
+            completion(false)
+            return
+        }
+        var request = URLRequest(url: url, timeoutInterval: 3)
+        request.httpMethod = "GET"
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            let ok = (response as? HTTPURLResponse)?.statusCode == 200
+            DispatchQueue.main.async { completion(ok) }
+        }.resume()
+    }
+
+    static func sttHasReceivedRequests() -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: Paths.sttLog) else { return false }
+        defer { handle.closeFile() }
+        let size = handle.seekToEndOfFile()
+        let start: UInt64 = size > 16384 ? size - 16384 : 0
+        handle.seek(toFileOffset: start)
+        let data = handle.readDataToEndOfFile()
+        guard let text = String(data: data, encoding: .utf8) else { return false }
+        return text.contains("POST /v1/audio/transcriptions") || text.contains("Transcribed:")
+    }
+
     // MARK: - View Logs (individual)
 
     static func showLog(name: String, url: URL) {
@@ -168,7 +314,7 @@ class InstructionWindow: NSObject, NSWindowDelegate {
             InstructionWindow.activeWindows.append(self)
 
             let w = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 520, height: 420),
+                contentRect: NSRect(x: 0, y: 0, width: 620, height: 520),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
@@ -191,7 +337,8 @@ class InstructionWindow: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        InstructionWindow.activeWindows.removeAll { $0 === self }
+        let cleanup = { InstructionWindow.activeWindows.removeAll { $0 === self } }
+        if Thread.isMainThread { cleanup() } else { DispatchQueue.main.async(execute: cleanup) }
     }
 }
 

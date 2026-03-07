@@ -25,8 +25,10 @@ The menubar icon gives you:
 - Start/Stop/Restart servers with configurable ports
 - **Voice picker** — choose from 8 Kokoro voices (no server restart needed)
 - **Automation** — Auto-Submit and Auto-Focus (requires Accessibility permission)
-- Claude Hook Setup (settings.json + CLAUDE.md — one button per step)
-- Voquill Setup + download link
+- **Auto-Apply** — one-click setup for Claude hook (settings.json) and voice tag (CLAUDE.md)
+- **Diagnostic checklist** — shows hook, voice tag, and TTS status at a glance
+- **Transcription overlay** — floating window showing live speech-to-text output
+- Voquill Setup + download link (with detection hint if no speech received)
 - Separate STT and TTS logs (STT log includes transcribed text)
 
 After setup, use the menubar buttons for configuration instructions.
@@ -225,6 +227,10 @@ Claude-Whisperer/
     ├── Resources/
     └── build-dmg.sh       # Build the .dmg yourself
 ```
+
+## Contributing
+
+Contributions are welcome! Feel free to open issues or submit pull requests. Whether it's bug fixes, new features, documentation improvements, or voice model suggestions — all contributions are appreciated.
 
 ## Credits
 

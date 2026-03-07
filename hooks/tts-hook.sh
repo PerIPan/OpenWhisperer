@@ -21,6 +21,14 @@ if ! command -v jq &>/dev/null; then
   fi
 fi
 
+# Serialize concurrent hook invocations with a spin lock
+HOOK_LOCK="$APP_SUPPORT/tts_hook.lock"
+for _try in 1 2 3 4 5; do
+  if shlock -p $$ -f "$HOOK_LOCK" 2>/dev/null; then break; fi
+  sleep 0.2
+done
+trap 'rm -f "$HOOK_LOCK"' EXIT
+
 # Kill any previous TTS playback (validate PID before killing)
 if [ -f "$PIDFILE" ] && [ ! -L "$PIDFILE" ]; then
   OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
@@ -28,6 +36,9 @@ if [ -f "$PIDFILE" ] && [ ! -L "$PIDFILE" ]; then
     # Verify it's our process before killing
     OLD_COMM=$(ps -p "$OLD_PID" -o comm= 2>/dev/null)
     if [[ "$OLD_COMM" == *"bash"* ]] || [[ "$OLD_COMM" == *"afplay"* ]]; then
+      # Send SIGINT to afplay children first (cleaner stop than SIGTERM)
+      pkill -INT -P "$OLD_PID" 2>/dev/null
+      sleep 0.15  # brief fade window
       kill "$OLD_PID" 2>/dev/null
       pkill -P "$OLD_PID" 2>/dev/null
     fi
@@ -125,7 +136,10 @@ fi
   rm -f "$PIDFILE" 2>/dev/null
 ) &
 
-# Save background PID so next invocation can interrupt it
+# Save background PID atomically so next invocation can interrupt it
 echo $! > "$PIDFILE"
+
+# Release hook lock now that PID is written (trap will also clean up)
+rm -f "$HOOK_LOCK"
 
 exit 0
