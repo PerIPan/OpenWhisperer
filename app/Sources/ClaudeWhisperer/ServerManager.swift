@@ -215,7 +215,14 @@ class ServerManager: ObservableObject {
         if let proc = process, proc.isRunning {
             proc.terminate()
             DispatchQueue.global(qos: .utility).async {
-                proc.waitUntilExit()
+                // Give process 3s to exit gracefully, then SIGKILL
+                let exited = proc.waitUntilExitWithTimeout(seconds: 3)
+                if !exited, proc.isRunning {
+                    proc.interrupt() // SIGINT
+                    if !proc.waitUntilExitWithTimeout(seconds: 1), proc.isRunning {
+                        kill(proc.processIdentifier, SIGKILL)
+                    }
+                }
             }
         }
         process = nil
@@ -232,6 +239,20 @@ class ServerManager: ObservableObject {
         env["PATH"] = "\(venvBin):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
         env["VIRTUAL_ENV"] = Paths.venv.path
         return env
+    }
+}
+
+// MARK: - Process Helper
+
+extension Process {
+    /// Wait for exit with a timeout. Returns true if process exited within the timeout.
+    func waitUntilExitWithTimeout(seconds: TimeInterval) -> Bool {
+        let sema = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .utility).async {
+            self.waitUntilExit()
+            sema.signal()
+        }
+        return sema.wait(timeout: .now() + seconds) == .success
     }
 }
 
