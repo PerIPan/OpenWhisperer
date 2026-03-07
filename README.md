@@ -14,7 +14,7 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## Install
 
-[**Download ClaudeWhisperer-1.1.0.dmg**](https://github.com/PerIPan/Claude-Whisperer/releases/download/v1.1.0/ClaudeWhisperer-1.1.0.dmg) — drag to Applications and launch.
+[**Download ClaudeWhisperer-1.2.0.dmg**](https://github.com/PerIPan/Claude-Whisperer/releases/download/v1.2.0/ClaudeWhisperer-1.2.0.dmg) — drag to Applications and launch.
 
 On first launch, the app:
 - Creates a Python environment with all dependencies
@@ -204,7 +204,7 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-Requires Xcode Command Line Tools. Produces `Claude Whisperer.app` and `ClaudeWhisperer-1.1.0.dmg` in `app/.build/`.
+Requires Xcode Command Line Tools. Produces `Claude Whisperer.app` and `ClaudeWhisperer-1.2.0.dmg` in `app/.build/`.
 
 ## File Structure
 

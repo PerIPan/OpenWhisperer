@@ -7,7 +7,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$SCRIPT_DIR/.build"
 APP_NAME="Claude Whisperer"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
-DMG_NAME="ClaudeWhisperer-1.1.0"
+DMG_NAME="ClaudeWhisperer-1.2.0"
 
 echo "=== Building Claude Whisperer ==="
 
