@@ -1,6 +1,6 @@
 # Claude Whisperer
 
-Voice mode for [Claude Code](https://claude.ai/claude-code) on Apple Silicon. Talk to Claude, hear Claude talk back — all running locally on your Mac.
+Full interactive Voice mode for [Claude Code](https://claude.ai/claude-code) on Apple Silicon. Talk to Claude, hear Claude talk back — all running locally on your Mac. Auto-Focus & easy setup. Open Source.
 
 <p align="center">
   <img src="screenshot.png" width="320" alt="Claude Whisperer menubar app">
@@ -23,6 +23,7 @@ On first launch, the app:
 
 The menubar icon gives you:
 - Start/Stop/Restart server with configurable port
+- **Language selector** — set STT language to avoid hallucinations in other languages (auto-detect or pick from 17 languages)
 - **Voice picker** — choose from 8 Kokoro voices (no server restart needed)
 - **Automation** — Auto-Submit and Auto-Focus (requires Accessibility permission)
 - **Auto-Apply** — one-click setup for Claude hook (settings.json) and voice tag (CLAUDE.md)
@@ -72,6 +73,7 @@ This is useful when you're speaking into Voquill from another window — the tra
 ### Why Voquill + Local Whisper?
 
 - **Way more accurate** than macOS dictation for code, technical terms, abbreviations
+- **Language selector** — pin Whisper to a specific language to avoid hallucinating text in other languages during silence or background noise
 - **Works system-wide** — global hotkey, types into any app including Claude Code
 - **Glossary** — add your project's API names, libraries, etc. for even better accuracy
 - **100% local** — audio never leaves your Mac
@@ -104,6 +106,8 @@ Here's the full code with detailed explanation...
 | `TTS_MODEL` | `prince-canuma/Kokoro-82M` | tts-hook.sh | TTS model |
 | `SERVER_PORT` | `8000` | unified_server.py | Server port |
 | `WHISPER_MODEL` | `mlx-community/whisper-large-v3-turbo` | unified_server.py | Whisper model |
+
+> **Tip:** Setting a specific language (e.g. English) instead of auto-detect prevents Whisper from hallucinating text in other languages during silence or background noise.
 
 ## Troubleshooting
 

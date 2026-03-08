@@ -7,8 +7,14 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     private var window: NSWindow?
     private var fileHandle: FileHandle?
     private var source: DispatchSourceFileSystemObject?
-    @Published var lines: [String] = []
+    struct Line: Identifiable {
+        let id: Int
+        let text: String
+    }
+
+    @Published var lines: [Line] = []
     @Published var isVisible: Bool = false
+    private var nextLineId = 0
 
     func show() {
         if let w = window, w.isVisible {
@@ -90,8 +96,11 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
 
             if !newLines.isEmpty {
                 DispatchQueue.main.async {
-                    self.lines.append(contentsOf: newLines)
-                    // Keep last 20 lines
+                    let tagged = newLines.map { text -> Line in
+                        self.nextLineId += 1
+                        return Line(id: self.nextLineId, text: text)
+                    }
+                    self.lines.append(contentsOf: tagged)
                     if self.lines.count > 20 {
                         self.lines = Array(self.lines.suffix(20))
                     }
@@ -128,19 +137,19 @@ struct OverlayView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 6) {
-                            ForEach(Array(overlay.lines.enumerated()), id: \.offset) { idx, line in
-                                Text(line)
+                            ForEach(overlay.lines) { line in
+                                Text(line.text)
                                     .font(.custom("Outfit", size: 13))
                                     .textSelection(.enabled)
-                                    .id(idx)
+                                    .id(line.id)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
                     }
                     .onChange(of: overlay.lines.count) { _, _ in
-                        if let last = overlay.lines.indices.last {
-                            proxy.scrollTo(last, anchor: .bottom)
+                        if let last = overlay.lines.last {
+                            proxy.scrollTo(last.id, anchor: .bottom)
                         }
                     }
                 }

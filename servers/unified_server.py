@@ -58,6 +58,7 @@ MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100MB
 _APP_SUPPORT = os.path.expanduser("~/Library/Application Support/ClaudeWhisperer")
 AUTO_SUBMIT_FLAG = os.path.join(_APP_SUPPORT, "auto_submit")
 AUTO_FOCUS_APP = os.path.join(_APP_SUPPORT, "auto_focus_app")
+STT_LANGUAGE_FILE = os.path.join(_APP_SUPPORT, "stt_language")
 TTS_PIDFILE = os.path.join(_APP_SUPPORT, "tts_hook.pid")
 TTS_LOCKFILE = os.path.join(_APP_SUPPORT, "tts_playing.lock")
 
@@ -65,6 +66,16 @@ SUBMIT_TRIGGERS = sorted(
     ["submit", "send it", "go ahead", "send", "enter"],
     key=len, reverse=True,
 )
+
+# Pre-compiled regex patterns for submit triggers (avoid per-request compilation)
+_SUBMIT_PATTERNS = {
+    trigger: re.compile(
+        (r'\s*' + re.escape(trigger) + r'[.!?,]?$') if ' ' in trigger
+        else (r'\s*\b' + re.escape(trigger) + r'[.!?,]?$'),
+        re.IGNORECASE
+    )
+    for trigger in SUBMIT_TRIGGERS
+}
 
 _ALLOWED_FOCUS_APPS = {
     "Code", "Code - Insiders", "Cursor", "Windsurf",
@@ -80,6 +91,15 @@ _enter_lock = asyncio.Lock()
 # STT helpers (auto-submit, auto-focus, barge-in)
 # ---------------------------------------------------------------------------
 
+def _get_default_language():
+    """Read language preference from app config. Returns None for auto-detect."""
+    try:
+        lang = open(STT_LANGUAGE_FILE).read().strip()
+        return lang if lang and lang != "auto" else None
+    except (FileNotFoundError, OSError):
+        return None
+
+
 def _serialize_transcribe(tmp_path, language):
     with _transcribe_lock:
         return mlx_whisper.transcribe(tmp_path, path_or_hf_repo=WHISPER_MODEL, language=language)
@@ -89,22 +109,26 @@ def check_submit_trigger(text):
     lower = text.lower().rstrip(" .,!?")
     for trigger in SUBMIT_TRIGGERS:
         if lower.endswith(trigger):
-            if " " in trigger:
-                pattern = r'\s*' + re.escape(trigger) + r'[.!?,]?$'
-            else:
-                pattern = r'\s*\b' + re.escape(trigger) + r'[.!?,]?$'
-            cleaned = re.sub(pattern, '', text.strip(), flags=re.IGNORECASE)
+            cleaned = _SUBMIT_PATTERNS[trigger].sub('', text.strip())
             return cleaned, True
     return text, False
 
 
+_last_focused_app = None
+
 def focus_target_app():
+    global _last_focused_app
     try:
         if not os.path.exists(AUTO_FOCUS_APP):
+            _last_focused_app = None
             return
         with open(AUTO_FOCUS_APP) as f:
             app_name = f.read().strip()
         if not app_name:
+            _last_focused_app = None
+            return
+        # Skip if already focused on this app
+        if app_name == _last_focused_app:
             return
         if app_name not in _ALLOWED_FOCUS_APPS:
             if not re.match(r'^[A-Za-z0-9 ._-]+$', app_name):
@@ -114,6 +138,7 @@ def focus_target_app():
             ["osascript", "-e", f'tell application "{app_name}" to activate'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
+        _last_focused_app = app_name
     except Exception:
         logger.exception("focus_target_app failed")
 
@@ -186,32 +211,29 @@ async def transcribe(
 ):
     tmp_path = None
     try:
-        chunks = []
-        total = 0
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > MAX_UPLOAD_BYTES:
-                return JSONResponse({"error": "File too large (max 100MB)"}, status_code=413)
-            chunks.append(chunk)
-        data = b"".join(chunks)
-
         ext = ".wav"
         if file.filename:
             _, file_ext = os.path.splitext(file.filename)
             if file_ext:
                 ext = file_ext
 
+        # Stream upload directly to temp file (avoids double-buffering in memory)
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            tmp.write(data)
             tmp_path = tmp.name
+            total = 0
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    return JSONResponse({"error": "File too large (max 100MB)"}, status_code=413)
+                tmp.write(chunk)
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             _transcribe_executor,
-            lambda p=tmp_path, l=language: _serialize_transcribe(p, l or None),
+            lambda p=tmp_path, l=language: _serialize_transcribe(p, l or _get_default_language()),
         )
         text = result.get("text", "")
         if text.strip():

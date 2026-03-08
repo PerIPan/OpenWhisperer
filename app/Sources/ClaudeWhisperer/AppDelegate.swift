@@ -7,6 +7,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let setupManager = SetupManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Clean stale temp/lock/pid files from previous sessions (background, delayed)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
+            _ = ConfigManager.cleanTempFiles()
+        }
+
         // Register bundled Outfit font
         if let fontURL = Bundle.main.url(forResource: "Outfit-VariableFont_wght", withExtension: "ttf") {
             CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
@@ -33,5 +38,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         serverManager.stopAll(synchronous: true)
+        _ = ConfigManager.cleanTempFiles()
     }
 }

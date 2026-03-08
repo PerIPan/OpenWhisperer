@@ -10,6 +10,7 @@ struct MenuBarView: View {
     @State private var customFocusApp = ""
     @State private var saveDebounce: DispatchWorkItem?
     @State private var selectedVoice = "af_heart"
+    @State private var selectedLanguage = "auto"
     @State private var showStoppedBanner = false
     @State private var hookApplied = false
     @State private var claudeMdApplied = false
@@ -28,6 +29,27 @@ struct MenuBarView: View {
         ("am_adam", "Adam (Male)"),
         ("bf_emma", "Emma (British F)"),
         ("bm_george", "George (British M)"),
+    ]
+
+    private static let languages: [(id: String, label: String)] = [
+        ("auto", "Auto-detect"),
+        ("en", "English"),
+        ("es", "Spanish"),
+        ("fr", "French"),
+        ("de", "German"),
+        ("it", "Italian"),
+        ("pt", "Portuguese"),
+        ("nl", "Dutch"),
+        ("ja", "Japanese"),
+        ("ko", "Korean"),
+        ("zh", "Chinese"),
+        ("ar", "Arabic"),
+        ("hi", "Hindi"),
+        ("ru", "Russian"),
+        ("pl", "Polish"),
+        ("tr", "Turkish"),
+        ("uk", "Ukrainian"),
+        ("sv", "Swedish"),
     ]
 
     private static let focusApps = [
@@ -180,6 +202,26 @@ struct MenuBarView: View {
             // Port & Voice
             let isStopped = serverManager.status == .stopped
             PortField(label: "Port", port: $serverManager.port, disabled: !isStopped)
+
+            HStack {
+                Text("Language")
+                    .font(.custom("Outfit", size: 12))
+                    .frame(width: 60, alignment: .leading)
+                Picker("", selection: $selectedLanguage) {
+                    ForEach(Self.languages, id: \.id) { lang in
+                        Text(lang.label).tag(lang.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+            }
+            .onChange(of: selectedLanguage) { _, newValue in
+                if newValue == "auto" {
+                    try? FileManager.default.removeItem(at: Paths.sttLanguage)
+                } else {
+                    try? newValue.write(to: Paths.sttLanguage, atomically: true, encoding: .utf8)
+                }
+            }
 
             HStack {
                 Text("Voice")
@@ -413,6 +455,13 @@ struct MenuBarView: View {
                 let voice = savedVoice.trimmingCharacters(in: .whitespacesAndNewlines)
                 if Self.voices.contains(where: { $0.id == voice }) {
                     selectedVoice = voice
+                }
+            }
+            if let savedLang = try? String(contentsOf: Paths.sttLanguage, encoding: .utf8),
+               !savedLang.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let lang = savedLang.trimmingCharacters(in: .whitespacesAndNewlines)
+                if Self.languages.contains(where: { $0.id == lang }) {
+                    selectedLanguage = lang
                 }
             }
             refreshDiagnostics()

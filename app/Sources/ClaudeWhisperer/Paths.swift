@@ -55,6 +55,9 @@ enum Paths {
     /// Auto-focus app file (unified_server.py reads target app name from this)
     static let autoFocusApp = appSupport.appendingPathComponent("auto_focus_app")
 
+    /// STT language file (unified_server.py reads default language from this)
+    static let sttLanguage = appSupport.appendingPathComponent("stt_language")
+
     /// TTS voice file (tts-hook.sh reads voice name from this)
     static let ttsVoice = appSupport.appendingPathComponent("tts_voice")
 

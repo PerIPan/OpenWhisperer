@@ -141,19 +141,23 @@ class ServerManager: ObservableObject {
 
     // MARK: - Health Checks
 
+    private static let startupCheckInterval: TimeInterval = 5   // faster polling during startup
+    private static let runningCheckInterval: TimeInterval = 15  // relaxed polling once running
+
     private func startHealthChecks() {
         healthCheckTimer?.invalidate()
-        let timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.startupCheckInterval, repeats: true) { [weak self] _ in
             self?.checkHealth()
         }
         RunLoop.main.add(timer, forMode: .common)
         healthCheckTimer = timer
 
+        // Delay initial check — model loading typically takes 10-20s
         let initialCheck = DispatchWorkItem { [weak self] in
             self?.checkHealth()
         }
         pendingInitialCheck = initialCheck
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: initialCheck)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: initialCheck)
     }
 
     private func checkHealth() {
@@ -165,9 +169,19 @@ class ServerManager: ObservableObject {
             DispatchQueue.main.async {
                 guard let self, self.status == .starting || self.status == .running else { return }
                 if ok {
+                    let wasStarting = self.status == .starting
                     self.status = .running
                     if let data, self.sttModel.isEmpty || self.ttsModel.isEmpty {
                         self.parseModels(data)
+                    }
+                    // Switch to relaxed polling once server is confirmed running
+                    if wasStarting {
+                        self.healthCheckTimer?.invalidate()
+                        let timer = Timer.scheduledTimer(withTimeInterval: Self.runningCheckInterval, repeats: true) { [weak self] _ in
+                            self?.checkHealth()
+                        }
+                        RunLoop.main.add(timer, forMode: .common)
+                        self.healthCheckTimer = timer
                     }
                 } else if self.status == .starting,
                           let start = self.startTime,

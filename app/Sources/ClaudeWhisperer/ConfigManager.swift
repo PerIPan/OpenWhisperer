@@ -357,8 +357,8 @@ class InstructionWindow: NSObject, NSWindowDelegate {
             InstructionWindow.activeWindows.append(self)
 
             let w = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 620, height: 520),
-                styleMask: [.titled, .closable],
+                contentRect: NSRect(x: 0, y: 0, width: 820, height: 520),
+                styleMask: [.titled, .closable, .resizable],
                 backing: .buffered,
                 defer: false
             )
