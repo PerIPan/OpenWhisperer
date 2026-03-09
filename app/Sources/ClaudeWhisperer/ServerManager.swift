@@ -68,6 +68,7 @@ class ServerManager: ObservableObject {
     func restartAll() {
         pendingRestart?.cancel()
         status = .stopped
+        _ = ConfigManager.cleanTempFiles()
 
         let proc = process
         process = nil

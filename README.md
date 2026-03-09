@@ -14,7 +14,7 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## Install
 
-[**Download ClaudeWhisperer-1.2.0.dmg**](https://github.com/PerIPan/Claude-Whisperer/releases/download/v1.2.0/ClaudeWhisperer-1.2.0.dmg) — drag to Applications and launch.
+[**Download ClaudeWhisperer-1.2.1.dmg**](https://github.com/PerIPan/Claude-Whisperer/releases/download/v1.2.1/ClaudeWhisperer-1.2.1.dmg) — drag to Applications and launch.
 
 On first launch, the app:
 - Creates a Python environment with all dependencies
@@ -69,7 +69,7 @@ Enable **Auto-Submit** to submit messages by voice. Say one of these trigger wor
 
 Example: *"fix the login bug, submit"* → types "fix the login bug" and presses Cmd+Enter.
 
-**Barge-in:** When Auto-Submit triggers, any currently playing TTS audio is automatically interrupted so Claude can start working on your new request immediately.
+**Barge-in:** Any currently playing TTS audio is automatically interrupted when you start recording (press Ctrl) or when Auto-Submit triggers, so you can speak without waiting for Claude to finish talking.
 
 #### Auto-Focus
 
@@ -205,7 +205,7 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-Requires Xcode Command Line Tools. Produces `Claude Whisperer.app` and `ClaudeWhisperer-1.2.0.dmg` in `app/.build/`.
+Requires Xcode Command Line Tools. Produces `Claude Whisperer.app` and `ClaudeWhisperer-1.2.1.dmg` in `app/.build/`.
 
 ## File Structure
 

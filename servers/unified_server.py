@@ -239,20 +239,23 @@ async def transcribe(
             except FileNotFoundError:
                 pass
 
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, focus_target_app)
+    try:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, focus_target_app)
 
-    should_submit = False
-    if os.path.exists(AUTO_SUBMIT_FLAG):
-        text, should_submit = check_submit_trigger(text)
+        should_submit = False
+        if os.path.exists(AUTO_SUBMIT_FLAG):
+            text, should_submit = check_submit_trigger(text)
 
-    if should_submit:
-        global _pending_enter_task
-        async with _enter_lock:
-            if _pending_enter_task and not _pending_enter_task.done():
-                _pending_enter_task.cancel()
-            await loop.run_in_executor(None, kill_tts)
-            _pending_enter_task = asyncio.create_task(_delayed_enter())
+        if should_submit:
+            global _pending_enter_task
+            async with _enter_lock:
+                if _pending_enter_task and not _pending_enter_task.done():
+                    _pending_enter_task.cancel()
+                await loop.run_in_executor(None, kill_tts)
+                _pending_enter_task = asyncio.create_task(_delayed_enter())
+    except Exception:
+        logger.exception("Post-transcription processing failed")
 
     if response_format == "text":
         return PlainTextResponse(text)

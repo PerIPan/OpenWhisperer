@@ -10,6 +10,7 @@ struct ClaudeWhispererApp: App {
                 .environmentObject(appDelegate.serverManager)
                 .environmentObject(appDelegate.setupManager)
                 .environmentObject(appDelegate.dictationManager)
+                .environmentObject(appDelegate.accessibilityManager)
                 .onAppear {
                     appDelegate.dictationManager.updatePort(appDelegate.serverManager.port)
                     appDelegate.setupDictation()

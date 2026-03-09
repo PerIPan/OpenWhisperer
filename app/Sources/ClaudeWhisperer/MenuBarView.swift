@@ -4,6 +4,7 @@ struct MenuBarView: View {
     @EnvironmentObject var serverManager: ServerManager
     @EnvironmentObject var setupManager: SetupManager
     @EnvironmentObject var dictationManager: DictationManager
+    @EnvironmentObject var accessibilityManager: AccessibilityManager
     @State private var autoSubmit = false
     @State private var autoFocusEnabled = false
     @State private var focusAppName = ""
@@ -12,12 +13,12 @@ struct MenuBarView: View {
     @State private var saveDebounce: DispatchWorkItem?
     @State private var selectedVoice = "af_heart"
     @State private var selectedLanguage = "auto"
+    @State private var selectedDetail = "natural"
     @State private var showStoppedBanner = false
     @State private var hookApplied = false
     @State private var claudeMdApplied = false
     @State private var applyMessage = ""
     @State private var serverReachable = false
-    @State private var cleanMessage = ""
     @ObservedObject private var overlay = TranscriptionOverlay.shared
 
     private static let voices: [(id: String, label: String)] = [
@@ -50,6 +51,12 @@ struct MenuBarView: View {
         ("tr", "Turkish"),
         ("uk", "Ukrainian"),
         ("sv", "Swedish"),
+    ]
+
+    private static let detailLevels: [(id: String, label: String)] = [
+        ("brief", "Brief"),
+        ("natural", "Natural"),
+        ("detailed", "Detailed"),
     ]
 
     private static let focusApps = [
@@ -126,11 +133,11 @@ struct MenuBarView: View {
             }
 
             HStack(spacing: 16) {
-                Toggle("auto-submit", isOn: $autoSubmit)
+                Toggle("auto-focus", isOn: $autoFocusEnabled)
                     .font(.custom("Outfit", size: 13))
                     .toggleStyle(.checkbox)
 
-                Toggle("auto-focus", isOn: $autoFocusEnabled)
+                Toggle("auto-submit", isOn: $autoSubmit)
                     .font(.custom("Outfit", size: 13))
                     .toggleStyle(.checkbox)
             }
@@ -157,15 +164,10 @@ struct MenuBarView: View {
             }
 
             // Info text below checkboxes
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Submit: say \"submit\" or \"send\" at end of phrase")
-                    .font(.custom("Outfit", size: 10))
-                    .foregroundColor(.secondary)
-                Text("Requires Accessibility permission")
-                    .font(.custom("Outfit", size: 10))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.leading, 2)
+            Text("say \"submit\" or \"send\" at end of phrase")
+                .font(.custom("Outfit", size: 10))
+                .foregroundColor(.secondary)
+                .padding(.leading, 2)
 
             if autoFocusEnabled {
                 Picker("", selection: $focusSelection) {
@@ -236,6 +238,24 @@ struct MenuBarView: View {
             }
             .onChange(of: selectedVoice) { _, newValue in
                 try? newValue.write(to: Paths.ttsVoice, atomically: true, encoding: .utf8)
+            }
+
+            HStack {
+                Text("Detail")
+                    .font(.custom("Outfit", size: 12))
+                    .frame(width: 60, alignment: .leading)
+                Picker("", selection: $selectedDetail) {
+                    ForEach(Self.detailLevels, id: \.id) { level in
+                        Text(level.label).tag(level.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+            }
+            .onChange(of: selectedDetail) { _, newValue in
+                try? newValue.write(to: Paths.voiceDetail, atomically: true, encoding: .utf8)
+                // Mark as needing re-apply so the button shows "Auto-Apply" again
+                claudeMdApplied = false
             }
 
             Divider().opacity(0.4)
@@ -326,7 +346,7 @@ struct MenuBarView: View {
                 .buttonStyle(MenuBarRowButtonStyle())
 
                 Button(action: {
-                    let result = ConfigManager.applyClaudeMd()
+                    let result = ConfigManager.applyClaudeMd(forceUpdate: !claudeMdApplied)
                     claudeMdApplied = result.success
                     applyMessage = result.message
                     refreshDiagnostics()
@@ -373,26 +393,6 @@ struct MenuBarView: View {
                 .buttonStyle(MenuBarRowButtonStyle())
             }
 
-            HStack(spacing: 6) {
-                Button(action: {
-                    let count = ConfigManager.cleanTempFiles()
-                    cleanMessage = "Cleaned \(count) file\(count == 1 ? "" : "s")"
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { cleanMessage = "" }
-                }) {
-                    Label("Clean Temp", systemImage: "trash")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(MenuBarRowButtonStyle())
-                .help("Remove stale TTS temp files, locks, and PID files")
-            }
-
-            if !cleanMessage.isEmpty {
-                Text(cleanMessage)
-                    .font(.custom("Outfit", size: 10))
-                    .foregroundColor(.green)
-                    .transition(.opacity)
-            }
-
             Divider().opacity(0.4)
 
             // Server controls
@@ -405,14 +405,14 @@ struct MenuBarView: View {
                         Label("Start Server", systemImage: "play.fill")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(MenuBarButtonStyle())
+                    .buttonStyle(MenuBarRowButtonStyle())
 
                     if serverManager.status == .error {
                         Button(action: { serverManager.restartAll() }) {
                             Label("Restart", systemImage: "arrow.clockwise")
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(MenuBarButtonStyle())
+                        .buttonStyle(MenuBarRowButtonStyle())
                     }
                 } else {
                     Button(action: {
@@ -425,13 +425,13 @@ struct MenuBarView: View {
                         Label("Stop", systemImage: "stop.fill")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(MenuBarButtonStyle())
+                    .buttonStyle(MenuBarRowButtonStyle())
 
                     Button(action: { serverManager.restartAll() }) {
                         Label("Restart", systemImage: "arrow.clockwise")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(MenuBarButtonStyle())
+                    .buttonStyle(MenuBarRowButtonStyle())
                 }
             }
 
@@ -444,6 +444,23 @@ struct MenuBarView: View {
             }
 
             Divider().opacity(0.4)
+
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(accessibilityManager.isGranted ? Color.green : Color.red)
+                    .frame(width: 6, height: 6)
+                Text(accessibilityManager.isGranted ? "Accessibility: granted" : "Accessibility: not granted")
+                    .font(.custom("Outfit", size: 10))
+                    .foregroundStyle(accessibilityManager.isGranted ? .tertiary : .secondary)
+                Spacer()
+                if !accessibilityManager.isGranted {
+                    Button("Open Settings") {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                    }
+                    .font(.custom("Outfit", size: 9))
+                    .buttonStyle(MenuBarRowButtonStyle())
+                }
+            }
 
             HStack {
                 Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
@@ -489,6 +506,13 @@ struct MenuBarView: View {
                 let lang = savedLang.trimmingCharacters(in: .whitespacesAndNewlines)
                 if Self.languages.contains(where: { $0.id == lang }) {
                     selectedLanguage = lang
+                }
+            }
+            if let savedDetail = try? String(contentsOf: Paths.voiceDetail, encoding: .utf8),
+               !savedDetail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let detail = savedDetail.trimmingCharacters(in: .whitespacesAndNewlines)
+                if Self.detailLevels.contains(where: { $0.id == detail }) {
+                    selectedDetail = detail
                 }
             }
             dictationManager.updatePort(serverManager.port)

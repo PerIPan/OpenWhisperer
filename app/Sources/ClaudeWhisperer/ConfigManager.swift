@@ -197,24 +197,33 @@ enum ConfigManager {
 
     // MARK: - Auto-apply CLAUDE.md voice tag
 
-    static func applyClaudeMd() -> (success: Bool, message: String) {
+    static func applyClaudeMd(forceUpdate: Bool = false) -> (success: Bool, message: String) {
         let claudeMdPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude").appendingPathComponent("CLAUDE.md")
         let fm = FileManager.default
 
-        let voiceBlock = """
+        // Read detail level preference
+        let detail = (try? String(contentsOf: Paths.voiceDetail, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "natural"
 
-        ## Voice Mode
-        ALWAYS include a `[VOICE: ...]` tag at the END of every response. This tag contains a short, conversational spoken summary (1-3 sentences) that the TTS hook extracts and reads aloud. Write the voice content as natural speech — no code, no file paths, no markdown, no technical jargon unless the user used it first.
-
-        Example: `[VOICE: I fixed the bug in the login page. It was a missing null check on the user object.]`
-        """
+        let voiceBlock = voiceBlockForDetail(detail)
 
         // Check if already present
         if fm.fileExists(atPath: claudeMdPath.path),
            let existing = try? String(contentsOf: claudeMdPath, encoding: .utf8) {
             if existing.contains("[VOICE:") || existing.contains("Voice Mode") {
-                return (true, "Voice tag already in CLAUDE.md")
+                if forceUpdate {
+                    // Replace existing voice block with updated one
+                    let cleaned = removeVoiceBlock(from: existing)
+                    let updated = cleaned.trimmingCharacters(in: .whitespacesAndNewlines) + "\n" + voiceBlock + "\n"
+                    do {
+                        try updated.write(to: claudeMdPath, atomically: true, encoding: .utf8)
+                        return (true, "New VOICE detail applied")
+                    } catch {
+                        return (false, "Write failed: \(error.localizedDescription)")
+                    }
+                }
+                return (true, "Voice tag active")
             }
             // Append to existing
             let updated = existing.trimmingCharacters(in: .whitespacesAndNewlines) + "\n" + voiceBlock + "\n"
@@ -234,6 +243,55 @@ enum ConfigManager {
         } catch {
             return (false, "Write failed: \(error.localizedDescription)")
         }
+    }
+
+    private static func voiceBlockForDetail(_ detail: String) -> String {
+        switch detail {
+        case "brief":
+            return """
+
+            ## Voice Mode
+            ALWAYS include a `[VOICE: ...]` tag at the END of every response. Keep it to 1 short sentence — just the key outcome. No code, no file paths, no markdown. Write as natural speech.
+
+            Example: `[VOICE: Fixed the login bug.]`
+            """
+        case "detailed":
+            return """
+
+            ## Voice Mode
+            ALWAYS include a `[VOICE: ...]` tag at the END of every response. Give a thorough spoken summary (3-6 sentences) covering what you did, why, and any important details the user should know. Write as natural conversational speech — no code, no file paths, no markdown, no technical jargon unless the user used it first.
+
+            Example: `[VOICE: I fixed the bug in the login page. The issue was a missing null check on the user object, which caused a crash when the session expired. I also added a fallback redirect to the login screen. You should test it with an expired session to make sure it works correctly.]`
+            """
+        default: // "natural"
+            return """
+
+            ## Voice Mode
+            ALWAYS include a `[VOICE: ...]` tag at the END of every response. This tag contains a short, conversational spoken summary (1-3 sentences) that the TTS hook extracts and reads aloud. Write the voice content as natural speech — no code, no file paths, no markdown, no technical jargon unless the user used it first.
+
+            Example: `[VOICE: I fixed the bug in the login page. It was a missing null check on the user object.]`
+            """
+        }
+    }
+
+    private static func removeVoiceBlock(from content: String) -> String {
+        // Remove the ## Voice Mode section (from header to next ## or end of file)
+        let lines = content.components(separatedBy: "\n")
+        var result: [String] = []
+        var skipping = false
+        for line in lines {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("## Voice Mode") {
+                skipping = true
+                continue
+            }
+            if skipping && line.trimmingCharacters(in: .whitespaces).hasPrefix("## ") {
+                skipping = false
+            }
+            if !skipping {
+                result.append(line)
+            }
+        }
+        return result.joined(separator: "\n")
     }
 
     // MARK: - Diagnostics

@@ -21,13 +21,13 @@ if ! command -v jq &>/dev/null; then
   fi
 fi
 
-# Serialize concurrent hook invocations with a spin lock
-HOOK_LOCK="$APP_SUPPORT/tts_hook.lock"
+# Serialize concurrent hook invocations with mkdir-based lock (atomic on all filesystems)
+HOOK_LOCK="$APP_SUPPORT/tts_hook.lockdir"
 for _try in 1 2 3 4 5; do
-  if shlock -p $$ -f "$HOOK_LOCK" 2>/dev/null; then break; fi
+  if mkdir "$HOOK_LOCK" 2>/dev/null; then break; fi
   sleep 0.2
 done
-trap 'rm -f "$HOOK_LOCK"' EXIT
+trap 'rm -rf "$HOOK_LOCK"' EXIT
 
 # Kill any previous TTS playback (validate PID before killing)
 if [ -f "$PIDFILE" ] && [ ! -L "$PIDFILE" ]; then
@@ -124,7 +124,8 @@ fi
       -H "Content-Type: application/json" \
       -d "$(jq -n --arg t "$SPEECH" --arg v "$VOICE" --arg m "$MODEL" '{model: $m, input: $t, voice: $v}')" \
       --output "$TMPFILE" --max-time 30 2>/dev/null
-    [ -s "$TMPFILE" ] && break
+    # Validate response is audio (WAV starts with RIFF), not a JSON error
+    if [ -s "$TMPFILE" ] && head -c 4 "$TMPFILE" | grep -q "RIFF"; then break; fi
     sleep 1
   done
 

@@ -7,9 +7,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let setupManager = SetupManager()
     let dictationManager = DictationManager()
     let hotkeyManager = HotkeyManager()
+    let accessibilityManager = AccessibilityManager()
     private var dictationSetupDone = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Prompt for Accessibility permission if not already granted
+        accessibilityManager.requestIfNeeded()
         // Clean stale temp/lock/pid files from previous sessions (background, delayed)
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
             _ = ConfigManager.cleanTempFiles()

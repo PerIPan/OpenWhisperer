@@ -61,6 +61,9 @@ enum Paths {
     /// TTS voice file (tts-hook.sh reads voice name from this)
     static let ttsVoice = appSupport.appendingPathComponent("tts_voice")
 
+    /// Voice detail level file (controls VOICE tag verbosity in CLAUDE.md)
+    static let voiceDetail = appSupport.appendingPathComponent("voice_detail")
+
     /// Claude Code settings
     static let claudeSettings: URL = {
         FileManager.default.homeDirectoryForCurrentUser

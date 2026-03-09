@@ -74,7 +74,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         hostingView.sizingOptions = [.minSize, .intrinsicContentSize, .preferredContentSize]
 
         let w = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 160),
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 130),
             styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false
@@ -87,7 +87,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.backgroundColor = .clear
         w.isOpaque = false
         w.hasShadow = true
-        w.minSize = NSSize(width: 200, height: 80)
+        w.minSize = NSSize(width: 160, height: 70)
 
         // Round corners
         if let contentView = w.contentView {
@@ -99,7 +99,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
 
         // Position bottom-right of screen
         if let screen = NSScreen.main {
-            let x = screen.visibleFrame.maxX - 360
+            let x = screen.visibleFrame.maxX - 300
             let y = screen.visibleFrame.minY + 20
             w.setFrameOrigin(NSPoint(x: x, y: y))
         }
@@ -200,11 +200,24 @@ struct OverlayView: View {
         let recorder = overlay.currentRecorder
 
         VStack(alignment: .leading, spacing: 0) {
+            // Close button
+            HStack {
+                Spacer()
+                Button(action: { overlay.hide() }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+                .padding(.trailing, 6)
+            }
+            .frame(height: 14)
+
             // Waveform always visible — shows status label + bars
             WaveformBar(recorder: recorder)
-                .frame(height: 44)
+                .frame(height: 36)
                 .padding(.horizontal, 8)
-                .padding(.top, 6)
 
             Divider().padding(.horizontal, 8).padding(.vertical, 4)
 
@@ -257,18 +270,24 @@ struct WaveformBar: View {
                 }
             }
 
-            // Waveform always visible — flat bars when idle, active when recording, dimmed when transcribing
+            // Waveform — bars fill from the right so they're visible even in small windows
             GeometryReader { geo in
-                HStack(alignment: .center, spacing: 2) {
-                    ForEach(0..<recorder.levelHistory.count, id: \.self) { i in
+                let barWidth: CGFloat = 3
+                let spacing: CGFloat = 2
+                let maxBars = Int(geo.size.width / (barWidth + spacing))
+                let visibleCount = min(maxBars, recorder.levelHistory.count)
+                let startIndex = recorder.levelHistory.count - visibleCount
+
+                HStack(alignment: .center, spacing: spacing) {
+                    ForEach(startIndex..<recorder.levelHistory.count, id: \.self) { i in
                         let level = CGFloat(recorder.levelHistory[i])
                         let barHeight = max(2, level * geo.size.height * 0.9)
                         RoundedRectangle(cornerRadius: 1.5)
                             .fill(Color.orange.opacity(level * 0.5 + 0.5))
-                            .frame(width: 3, height: barHeight)
+                            .frame(width: barWidth, height: barHeight)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                 .opacity(recorder.state == .uploading ? 0.4 : recorder.state == .idle ? 0.3 : 1.0)
             }
         }
