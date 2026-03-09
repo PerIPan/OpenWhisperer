@@ -4,8 +4,6 @@ Full interactive Voice mode for [Claude Code](https://claude.ai/claude-code) on 
 
 <p align="center">
   <img src="screenshot.png" width="320" alt="Claude Whisperer menubar app">
-  <br>
-  <img src="screenshot2.png" width="480" alt="Claude Whisperer transcription overlay">
 </p>
 
 ## What It Does
@@ -47,6 +45,10 @@ Built-in speech-to-text using your local Whisper server. Press **Ctrl** to start
 2. Speak your message
 3. Press **Ctrl** again — audio is sent to local Whisper for transcription
 4. Transcribed text is inserted into the focused app via Accessibility (native apps) or clipboard paste (all others)
+
+<p align="center">
+  <img src="screenshot2.png" width="480" alt="Claude Whisperer transcription overlay">
+</p>
 
 ### Requirements
 
