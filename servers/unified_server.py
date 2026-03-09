@@ -114,21 +114,13 @@ def check_submit_trigger(text):
     return text, False
 
 
-_last_focused_app = None
-
 def focus_target_app():
-    global _last_focused_app
     try:
         if not os.path.exists(AUTO_FOCUS_APP):
-            _last_focused_app = None
             return
         with open(AUTO_FOCUS_APP) as f:
             app_name = f.read().strip()
         if not app_name:
-            _last_focused_app = None
-            return
-        # Skip if already focused on this app
-        if app_name == _last_focused_app:
             return
         if app_name not in _ALLOWED_FOCUS_APPS:
             if not re.match(r'^[A-Za-z0-9 ._-]+$', app_name):
@@ -138,7 +130,6 @@ def focus_target_app():
             ["osascript", "-e", f'tell application "{app_name}" to activate'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
-        _last_focused_app = app_name
     except Exception:
         logger.exception("focus_target_app failed")
 

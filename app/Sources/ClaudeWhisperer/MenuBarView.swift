@@ -3,6 +3,7 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var serverManager: ServerManager
     @EnvironmentObject var setupManager: SetupManager
+    @EnvironmentObject var dictationManager: DictationManager
     @State private var autoSubmit = false
     @State private var autoFocusEnabled = false
     @State private var focusAppName = ""
@@ -16,9 +17,6 @@ struct MenuBarView: View {
     @State private var claudeMdApplied = false
     @State private var applyMessage = ""
     @State private var serverReachable = false
-    @State private var hasTranscriptions = false
-    @State private var voquillInstalled = false
-    @State private var voquillConfigured = false
     @State private var cleanMessage = ""
     @ObservedObject private var overlay = TranscriptionOverlay.shared
 
@@ -101,7 +99,8 @@ struct MenuBarView: View {
                         .foregroundColor(.red)
                     Button("Retry Setup") {
                         setupManager.resetAndRerun { success in
-                            if success { serverManager.startAll() }
+                            guard success else { return }
+                            DispatchQueue.main.async { serverManager.startAll() }
                         }
                     }
                     .buttonStyle(MenuBarButtonStyle())
@@ -347,47 +346,46 @@ struct MenuBarView: View {
                 DiagnosticRow(label: "Hook configured", ok: hookApplied)
                 DiagnosticRow(label: "Voice tag active", ok: claudeMdApplied)
                 DiagnosticRow(label: "Server reachable", ok: serverReachable)
-                DiagnosticRow(label: "Voquill", ok: voquillConfigured, notInstalled: !voquillInstalled)
             }
             .padding(.leading, 2)
 
             Divider().opacity(0.4)
 
-            // Voquill
-            SectionHeader(title: "Voquill", icon: "mic")
+            // Push-to-Talk
+            SectionHeader(title: "Push-to-Talk", icon: "mic.fill")
 
-            if !voquillInstalled {
-                HStack(spacing: 6) {
-                    Button(action: { ConfigManager.showVoquillDownload() }) {
-                        Label("Get Voquill", systemImage: "arrow.down.circle")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(MenuBarRowButtonStyle())
+            if !dictationManager.recorder.micPermission {
+                Button(action: { dictationManager.recorder.openMicSettings() }) {
+                    Label("Grant Microphone Access", systemImage: "mic.slash")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Text("Not installed")
+                .buttonStyle(MenuBarRowButtonStyle())
+                Text("Required for built-in dictation")
                     .font(.custom("Outfit", size: 10))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.orange)
                     .padding(.leading, 2)
             } else {
                 HStack(spacing: 6) {
-                    Button(action: { ConfigManager.openVoquill() }) {
-                        Label("Open Voquill", systemImage: "arrow.up.forward.app")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(MenuBarRowButtonStyle())
-
-                    Button(action: { ConfigManager.showVoquillInstructions(sttPort: serverManager.port) }) {
-                        Label("Setup Guide", systemImage: "questionmark.circle")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(MenuBarRowButtonStyle())
-                }
-
-                if serverManager.status == .running && !hasTranscriptions && !voquillConfigured {
-                    Text("Not configured — open Voquill and set endpoint to localhost:\(serverManager.port)")
+                    Circle()
+                        .fill(dictationManager.recorderState == .recording ? Color.red :
+                              dictationManager.recorderState == .uploading ? Color.orange : Color.green)
+                        .frame(width: 8, height: 8)
+                    Text(dictationManager.recorderState == .recording ? "Recording..." :
+                         dictationManager.recorderState == .uploading ? "Transcribing..." : "Standby")
+                        .font(.custom("Outfit", size: 12))
+                    Spacer()
+                    Text("Ctrl to toggle")
                         .font(.custom("Outfit", size: 10))
-                        .foregroundColor(.orange)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 2)
+
+                if let err = dictationManager.error {
+                    Text(err)
+                        .font(.custom("Outfit", size: 10))
+                        .foregroundColor(.red)
                         .padding(.leading, 2)
+                        .lineLimit(2)
                 }
             }
 
@@ -403,6 +401,14 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(MenuBarRowButtonStyle())
 
+                Button(action: { ConfigManager.showLog(name: "Events", url: Paths.appSupport.appendingPathComponent("paste_debug.log")) }) {
+                    Label("Events Log", systemImage: "list.bullet.rectangle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(MenuBarRowButtonStyle())
+            }
+
+            HStack(spacing: 6) {
                 Button(action: {
                     let count = ConfigManager.cleanTempFiles()
                     cleanMessage = "Cleaned \(count) file\(count == 1 ? "" : "s")"
@@ -483,6 +489,7 @@ struct MenuBarView: View {
                     selectedLanguage = lang
                 }
             }
+            dictationManager.updatePort(serverManager.port)
             refreshDiagnostics()
         }
     }
@@ -490,17 +497,8 @@ struct MenuBarView: View {
     private func refreshDiagnostics() {
         hookApplied = ConfigManager.checkHookConfigured()
         claudeMdApplied = ConfigManager.checkClaudeMdConfigured()
-        hasTranscriptions = ConfigManager.sttHasReceivedRequests()
-        voquillInstalled = ConfigManager.isVoquillInstalled()
-        // Run sqlite3 check off main thread to avoid UI freeze
-        let port = serverManager.port
-        let installed = voquillInstalled
-        DispatchQueue.global(qos: .utility).async {
-            let configured = installed && ConfigManager.isVoquillConfigured(port: port)
-            DispatchQueue.main.async { voquillConfigured = configured }
-        }
         ConfigManager.testTTS(port: serverManager.port) { ok in
-            serverReachable = ok
+            DispatchQueue.main.async { serverReachable = ok }
         }
     }
 

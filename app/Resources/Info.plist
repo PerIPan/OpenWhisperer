@@ -24,5 +24,9 @@
     <string>AppIcon</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Push-to-talk dictation requires microphone access to transcribe your speech using local Whisper.</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Claude Whisperer needs Accessibility access to type transcribed text into other apps.</string>
 </dict>
 </plist>

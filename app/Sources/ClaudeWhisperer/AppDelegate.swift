@@ -5,6 +5,9 @@ import CoreText
 class AppDelegate: NSObject, NSApplicationDelegate {
     let serverManager = ServerManager()
     let setupManager = SetupManager()
+    let dictationManager = DictationManager()
+    let hotkeyManager = HotkeyManager()
+    private var dictationSetupDone = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Clean stale temp/lock/pid files from previous sessions (background, delayed)
@@ -19,6 +22,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Hide dock icon (menubar-only app)
         NSApp.setActivationPolicy(.accessory)
+
+        // Start hotkey listener immediately so Ctrl works without opening the menubar first
+        setupDictation()
 
         if setupManager.isSetupComplete {
             serverManager.startAll()
@@ -36,7 +42,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func setupDictation() {
+        // Bug 4: guard against duplicate calls from onAppear
+        guard !dictationSetupDone else { return }
+        dictationSetupDone = true
+
+        // Capture the frontmost app PID at the moment Ctrl is pressed down,
+        // before recording UI or any window can steal focus away.
+        hotkeyManager.onCtrlDown = { [weak self] in
+            self?.dictationManager.captureTargetApp()
+        }
+        hotkeyManager.onToggle = { [weak self] in
+            self?.dictationManager.toggle()
+        }
+        hotkeyManager.start()
+
+        TranscriptionOverlay.shared.dictationManager = dictationManager
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        hotkeyManager.stop()
         serverManager.stopAll(synchronous: true)
         _ = ConfigManager.cleanTempFiles()
     }

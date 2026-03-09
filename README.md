@@ -1,6 +1,6 @@
 # Claude Whisperer
 
-Full interactive Voice mode for [Claude Code](https://claude.ai/claude-code) on Apple Silicon. Talk to Claude, hear Claude talk back — all running locally on your Mac. Auto-Focus & easy setup. Open Source.
+Full interactive Voice mode for [Claude Code](https://claude.ai/claude-code) on Apple Silicon. Talk to Claude, hear Claude talk back — all running locally on your Mac. Built-in push-to-talk dictation, Auto-Focus & easy setup. Open Source.
 
 <p align="center">
   <img src="screenshot.png" width="320" alt="Claude Whisperer menubar app">
@@ -8,7 +8,7 @@ Full interactive Voice mode for [Claude Code](https://claude.ai/claude-code) on 
 
 ## What It Does
 
-You use Claude Code normally. After every response, Claude's answer is automatically spoken aloud through your Mac's speakers using a local TTS model. For speech input, pair with [Voquill](https://github.com/josiahsrc/voquill) to dictate instead of type.
+You use Claude Code normally. After every response, Claude's answer is automatically spoken aloud through your Mac's speakers using a local TTS model. For speech input, press **Ctrl** to record and release to transcribe — text is typed directly into your focused app.
 
 Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
@@ -23,32 +23,35 @@ On first launch, the app:
 
 The menubar icon gives you:
 - Start/Stop/Restart server with configurable port
+- **Push-to-Talk** — hold Ctrl to record, release to transcribe and type into focused app
 - **Language selector** — set STT language to avoid hallucinations in other languages (auto-detect or pick from 17 languages)
 - **Voice picker** — choose from 8 Kokoro voices (no server restart needed)
 - **Automation** — Auto-Submit and Auto-Focus (requires Accessibility permission)
 - **Auto-Apply** — one-click setup for Claude hook (settings.json) and voice tag (CLAUDE.md)
 - **Diagnostic checklist** — shows hook, voice tag, and TTS status at a glance
-- **Transcription overlay** — floating window showing live speech-to-text output
-- **Voquill detection** — auto-detects if Voquill is installed and configured for local Whisper
+- **Transcription overlay** — floating window showing live waveform and recent transcriptions
+- **Events log** — diagnostic log for troubleshooting paste and transcription issues
 - Unified server log (STT + TTS on single port, includes transcribed text)
 
 After setup, use the menubar buttons for configuration instructions.
 
-## Speech Input with Voquill
+## Push-to-Talk Dictation
 
-To talk *to* Claude (not just hear it), use [Voquill](https://github.com/josiahsrc/voquill) — a free, open-source macOS dictation app. Configure it to use your local Whisper server for much better accuracy than macOS dictation.
+Built-in speech-to-text using your local Whisper server. Press **Ctrl** to start recording, press again to stop — transcribed text is typed directly into whatever app you have focused.
 
-### Voquill Setup
+### How It Works
 
-1. Download [Voquill](https://github.com/josiahsrc/voquill) from GitHub releases
-2. Open Voquill → **Settings** → **Providers**
-3. Add or edit an **OpenAI Compatible** provider
-4. Base URL: `http://localhost:8000`
-5. Model: `whisper`
-6. API key: `whisper`
-7. Go to **Settings** → **General**, set Transcription to your new provider
+1. Press **Ctrl** — recording starts (red indicator in menubar and overlay)
+2. Speak your message
+3. Press **Ctrl** again — audio is sent to local Whisper for transcription
+4. Transcribed text is inserted into the focused app via Accessibility (native apps) or clipboard paste (all others)
 
-**Test it:** Speak into Voquill. You should see `POST /v1/audio/transcriptions` in the server terminal.
+### Requirements
+
+- **Microphone permission** — macOS will prompt on first use
+- **Accessibility permission** — required for typing text into other apps. Grant in System Settings → Privacy & Security → Accessibility
+
+> **Note:** After rebuilding from source, you must remove and re-add the app in Accessibility settings (macOS caches the code signature).
 
 ### Automation
 
@@ -68,19 +71,9 @@ Example: *"fix the login bug, submit"* → types "fix the login bug" and presses
 
 Enable **Auto-Focus** to automatically bring a specific app to the front when you finish speaking. Pick from the dropdown (VS Code, Code Insiders, Cursor, Windsurf, Terminal, iTerm2, Warp, Alacritty, Ghostty) or select **Custom** to type any app name.
 
-This is useful when you're speaking into Voquill from another window — the transcribed text will be typed into the focused target app.
-
-### Why Voquill + Local Whisper?
-
-- **Way more accurate** than macOS dictation for code, technical terms, abbreviations
-- **Language selector** — pin Whisper to a specific language to avoid hallucinating text in other languages during silence or background noise
-- **Works system-wide** — global hotkey, types into any app including Claude Code
-- **Glossary** — add your project's API names, libraries, etc. for even better accuracy
-- **100% local** — audio never leaves your Mac
-
 ### Fallback: macOS Dictation
 
-If you don't want to install Voquill, press **fn fn** to use built-in macOS dictation. Less accurate for technical terms, but works instantly with zero setup.
+If you prefer not to grant Accessibility permission, press **fn fn** to use built-in macOS dictation. Less accurate for technical terms, but works instantly with zero setup.
 
 ## How the VOICE Tag Works
 
@@ -116,11 +109,10 @@ Here's the full code with detailed explanation...
 2. Test TTS directly: `echo "hello" | ./scripts/speak.sh`
 3. Check the hook path in `settings.json` is correct and absolute
 
-**Voquill not transcribing:**
-1. Check Whisper server is running: `curl http://localhost:8000/models`
-2. Verify Voquill mode is **OpenAI Compatible API**
-3. Verify endpoint is `http://localhost:8000`
-4. Model: `whisper`, API key: `whisper`
+**Push-to-talk not typing text:**
+1. Check Accessibility permission is granted in System Settings
+2. If rebuilt from source, remove and re-add the app in Accessibility settings
+3. Check Events Log in the menubar for diagnostic details
 
 **422 error from TTS:**
 - Make sure `model` field is included in requests
@@ -240,7 +232,6 @@ Contributions are welcome! Feel free to open issues or submit pull requests. Whe
 - [MLX Audio](https://github.com/Blaizzy/mlx-audio) — TTS and STT on Apple Silicon
 - [Kokoro](https://huggingface.co/prince-canuma/Kokoro-82M) — TTS model
 - [Claude Code](https://claude.ai/claude-code) — Anthropic's CLI
-- [Voquill](https://github.com/josiahsrc/voquill) — Open source dictation for macOS
 
 ## License
 
