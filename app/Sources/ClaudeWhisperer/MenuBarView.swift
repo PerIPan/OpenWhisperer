@@ -393,12 +393,12 @@ struct MenuBarView: View {
                     .transition(.opacity)
             }
 
-            let serverStopped = serverManager.status == .stopped
-            PortField(label: "Port", port: $serverManager.port, disabled: !serverStopped)
-
             Divider().opacity(0.4)
 
             // Server controls
+            let serverStopped = serverManager.status == .stopped
+            PortField(label: "Server Port", port: $serverManager.port, disabled: !serverStopped)
+
             HStack(spacing: 6) {
                 if serverStopped || serverManager.status == .error {
                     Button(action: { serverManager.startAll() }) {
