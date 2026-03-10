@@ -37,6 +37,10 @@ class HotkeyManager {
     /// Used to capture the frontmost app PID before any focus shifts occur.
     var onKeyDown: (() -> Void)?
 
+    /// Called on key release (separate from onToggle).
+    /// Used by hold-to-talk mode to stop recording on release.
+    var onKeyUp: (() -> Void)?
+
     var pttKey: PTTKey = .ctrl {
         didSet {
             if pttKey != oldValue {
@@ -89,6 +93,7 @@ class HotkeyManager {
             } else if !pressed && keyDown {
                 keyDown = false
                 if !wasCombo {
+                    onKeyUp?()
                     onToggle?()
                 }
             }

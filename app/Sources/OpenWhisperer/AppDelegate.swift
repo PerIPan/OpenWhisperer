@@ -56,13 +56,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             hotkeyManager.pttKey = key
         }
 
+        // Load saved interaction mode
+        dictationManager.interactionMode = InteractionMode.load()
+
         // Capture the frontmost app PID at the moment the hotkey is pressed down,
         // before recording UI or any window can steal focus away.
         hotkeyManager.onKeyDown = { [weak self] in
-            self?.dictationManager.captureTargetApp()
+            guard let self else { return }
+            self.dictationManager.captureTargetApp()
+            // Hold-to-talk: start recording on key down
+            if self.dictationManager.interactionMode == .holdToTalk {
+                self.dictationManager.holdToTalkDown()
+            }
+        }
+        hotkeyManager.onKeyUp = { [weak self] in
+            guard let self else { return }
+            // Hold-to-talk: stop recording on key up
+            if self.dictationManager.interactionMode == .holdToTalk {
+                self.dictationManager.holdToTalkUp()
+            }
         }
         hotkeyManager.onToggle = { [weak self] in
-            self?.dictationManager.toggle()
+            guard let self else { return }
+            // Press-to-talk and hands-free use toggle
+            if self.dictationManager.interactionMode != .holdToTalk {
+                self.dictationManager.toggle()
+            }
         }
         hotkeyManager.start()
 

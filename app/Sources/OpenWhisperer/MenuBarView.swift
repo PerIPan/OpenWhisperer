@@ -13,6 +13,8 @@ struct MenuBarView: View {
     @State private var customFocusApp = ""
     @State private var saveDebounce: DispatchWorkItem?
     @State private var selectedPTTKey = "ctrl"
+    @State private var selectedMode: InteractionMode = .pressToTalk
+    @State private var silenceThreshold: String = "3"
     @State private var selectedVoice = "af_heart"
     @State private var selectedLanguage = "en"
     @State private var selectedDetail = "natural"
@@ -281,8 +283,8 @@ struct MenuBarView: View {
 
             Divider().opacity(0.4)
 
-            // Push-to-Talk
-            SectionHeader(title: "Push-to-Talk", icon: "mic.fill")
+            // Voice Input
+            SectionHeader(title: "Voice Input", icon: "mic.fill")
 
             if !dictationManager.recorder.micPermission {
                 Button(action: { dictationManager.recorder.openMicSettings() }) {
@@ -295,22 +297,47 @@ struct MenuBarView: View {
                     .foregroundColor(.orange)
                     .padding(.leading, 2)
             } else {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(dictationManager.recorderState == .recording ? Color.red :
-                              dictationManager.recorderState == .uploading ? Color.orange : Color.green)
-                        .frame(width: 8, height: 8)
-                    Text(dictationManager.recorderState == .recording ? "Recording..." :
-                         dictationManager.recorderState == .uploading ? "Transcribing..." : "Standby")
-                        .font(.custom("Outfit", size: 12))
-                    Spacer()
-                    Picker("", selection: $selectedPTTKey) {
-                        ForEach(PTTKey.allCases, id: \.rawValue) { key in
-                            Text(key.label).tag(key.rawValue)
+                // Mode picker
+                HStack {
+                    Text("Mode")
+                        .font(.custom("Outfit", size: 11))
+                        .frame(width: 50, alignment: .leading)
+                    Picker("", selection: $selectedMode) {
+                        ForEach(InteractionMode.allCases, id: \.rawValue) { mode in
+                            Text(mode.label).tag(mode)
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 70)
+                    .font(.custom("Outfit", size: 11))
+                    .frame(maxWidth: .infinity)
+                }
+                .onChange(of: selectedMode) { _, newValue in
+                    newValue.save()
+                    dictationManager.interactionMode = newValue
+                }
+
+                Text(selectedMode.description)
+                    .font(.custom("Outfit", size: 9))
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 2)
+
+                // Status indicator
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(stateColor)
+                        .frame(width: 8, height: 8)
+                    Text(stateLabel)
+                        .font(.custom("Outfit", size: 12))
+                    Spacer()
+                    if selectedMode != .handsFree {
+                        Picker("", selection: $selectedPTTKey) {
+                            ForEach(PTTKey.allCases, id: \.rawValue) { key in
+                                Text(key.label).tag(key.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 70)
+                    }
                 }
                 .padding(.horizontal, 2)
                 .onChange(of: selectedPTTKey) { _, newValue in
@@ -319,6 +346,50 @@ struct MenuBarView: View {
                         TranscriptionOverlay.shared.pttKeyLabel = key.label
                     }
                     pttKeyChanged = true
+                }
+
+                // Hands-free specific: silence threshold
+                if selectedMode == .handsFree {
+                    HStack {
+                        Text("Silence")
+                            .font(.custom("Outfit", size: 11))
+                            .frame(width: 50, alignment: .leading)
+                        TextField("3", text: $silenceThreshold)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 40)
+                            .onChange(of: silenceThreshold) { _, newValue in
+                                if let seconds = TimeInterval(newValue), seconds >= 1, seconds <= 10 {
+                                    try? newValue.write(to: Paths.silenceThreshold, atomically: true, encoding: .utf8)
+                                    dictationManager.recorder.silenceThresholdSeconds = seconds
+                                }
+                            }
+                        Text("sec")
+                            .font(.custom("Outfit", size: 10))
+                            .foregroundColor(.secondary)
+                    }
+
+                    if dictationManager.isCalibrating {
+                        HStack(spacing: 4) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Calibrating...")
+                                .font(.custom("Outfit", size: 10))
+                                .foregroundColor(.orange)
+                        }
+                        .padding(.leading, 2)
+                    }
+
+                    if dictationManager.ttsPlaying {
+                        HStack(spacing: 4) {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .font(.system(size: 9))
+                                .foregroundColor(.blue)
+                            Text("TTS playing — say \"hold on\" to interrupt")
+                                .font(.custom("Outfit", size: 9))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.leading, 2)
+                    }
                 }
 
                 if pttKeyChanged {
@@ -590,7 +661,32 @@ struct MenuBarView: View {
                 }
             }
             dictationManager.updatePort(serverManager.port)
+            selectedMode = InteractionMode.load()
+            if let savedThreshold = try? String(contentsOf: Paths.silenceThreshold, encoding: .utf8),
+               !savedThreshold.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                silenceThreshold = savedThreshold.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
             refreshDiagnostics()
+        }
+    }
+
+    private var stateColor: Color {
+        switch dictationManager.recorderState {
+        case .recording: return .red
+        case .uploading: return .orange
+        case .listening: return .green
+        case .idle: return dictationManager.ttsPlaying ? .blue : .gray
+        }
+    }
+
+    private var stateLabel: String {
+        if dictationManager.isCalibrating { return "Calibrating..." }
+        if dictationManager.ttsPlaying { return "Playing..." }
+        switch dictationManager.recorderState {
+        case .recording: return "Recording..."
+        case .uploading: return "Transcribing..."
+        case .listening: return "Listening..."
+        case .idle: return "Standby"
         }
     }
 

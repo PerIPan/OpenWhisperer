@@ -345,6 +345,7 @@ struct WaveformBar: View {
         switch recorder.state {
         case .recording: return .green
         case .uploading: return .orange
+        case .listening: return .cyan
         case .idle: return .green
         }
     }
@@ -354,6 +355,7 @@ struct WaveformBar: View {
         switch recorder.state {
         case .recording: return "Recording..."
         case .uploading: return "Transcribing..."
+        case .listening: return "Listening..."
         case .idle: return "Standby"
         }
     }

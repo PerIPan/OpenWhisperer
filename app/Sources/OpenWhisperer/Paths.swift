@@ -59,6 +59,12 @@ enum Paths {
     /// Push-to-talk hotkey preference (ctrl, option, cmd, fn)
     static let pttHotkey = appSupport.appendingPathComponent("ptt_hotkey")
 
+    /// Interaction mode preference (pressToTalk, holdToTalk, handsFree)
+    static let interactionMode = appSupport.appendingPathComponent("interaction_mode")
+
+    /// Silence threshold for hands-free mode (seconds, default 3)
+    static let silenceThreshold = appSupport.appendingPathComponent("silence_threshold")
+
     /// Selected AI platform (claudeCode, codexCLI)
     static let selectedPlatform = appSupport.appendingPathComponent("selected_platform")
 

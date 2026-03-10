@@ -28,5 +28,7 @@
     <string>Push-to-talk dictation requires microphone access to transcribe your speech using local Whisper.</string>
     <key>NSAccessibilityUsageDescription</key>
     <string>Open Whisperer needs Accessibility access to type transcribed text into other apps.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Open Whisperer uses on-device speech recognition for hands-free keyword detection.</string>
 </dict>
 </plist>

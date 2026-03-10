@@ -7,6 +7,8 @@ import Combine
 class AudioRecorder: ObservableObject {
     enum State {
         case idle, recording, uploading
+        /// Hands-free: listening for keyword, mic open but not buffering for STT
+        case listening
     }
 
     // @Published must only be mutated from main thread
@@ -14,6 +16,29 @@ class AudioRecorder: ObservableObject {
     @Published var audioLevel: Float = 0.0
     @Published var levelHistory: [Float] = Array(repeating: 0, count: 50)
     @Published var micPermission: Bool = false
+    /// True when audio level is below silence threshold (hands-free mode)
+    @Published var isSilent: Bool = true
+
+    /// Called when silence exceeds the configured threshold (hands-free mode).
+    /// Fired on the main thread.
+    var onSilenceTimeout: (() -> Void)?
+
+    /// Called with raw audio buffers for keyword detection (any thread).
+    var onRawAudioBuffer: ((AVAudioPCMBuffer) -> Void)?
+
+    /// Ambient noise floor (calibrated on hands-free activation)
+    private(set) var ambientNoiseFloor: Float = 0.01
+    /// Speech threshold multiplier over ambient noise floor
+    var speechThresholdMultiplier: Float = 4.0
+    /// Silence duration threshold in seconds (configurable, default 3)
+    var silenceThresholdSeconds: TimeInterval = 3.0
+    /// Whether silence detection is active (hands-free mode)
+    var silenceDetectionEnabled = false
+
+    private var silenceStart: Date?
+    private var silenceFired = false
+    /// Whether we are currently buffering PCM for STT (false in listening stage)
+    private var bufferingForSTT = false
 
     private var engine: AVAudioEngine?
     private var pcmBuffers: [AVAudioPCMBuffer] = []
@@ -54,12 +79,92 @@ class AudioRecorder: ObservableObject {
         }
     }
 
+    // MARK: - Listening (hands-free keyword stage, mic open but no STT buffering)
+
+    /// Start the audio engine for keyword detection only (no PCM buffering).
+    func startListening() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard micPermission, state == .idle || state == .listening else { return }
+        bufferingForSTT = false
+        if engine == nil {
+            setupEngine()
+        }
+        state = .listening
+    }
+
+    /// Transition from listening to active STT recording (start buffering PCM).
+    func startBuffering() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard state == .listening || state == .idle else { return }
+        bufferingForSTT = true
+        silenceFired = false
+        silenceStart = nil
+        bufferLock.lock()
+        pcmBuffers = []
+        bufferLock.unlock()
+        state = .recording
+    }
+
+    /// Flush current PCM buffers and continue recording (hands-free mode).
+    /// Returns the WAV data for transcription without stopping the engine.
+    func flushAndContinue() -> Data? {
+        dispatchPrecondition(condition: .onQueue(.main))
+        bufferLock.lock()
+        let snapshot = pcmBuffers
+        pcmBuffers = []
+        bufferLock.unlock()
+        bufferingForSTT = false
+        silenceFired = false
+        silenceStart = nil
+        state = .uploading
+        return mergeToWAV(from: snapshot)
+    }
+
+    /// Return to listening state after transcription completes (hands-free).
+    func resumeListening() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        bufferingForSTT = false
+        silenceFired = false
+        silenceStart = nil
+        state = .listening
+    }
+
+    // MARK: - Ambient Noise Calibration
+
+    /// Calibrate ambient noise floor by sampling RMS for a short duration.
+    func calibrateAmbient(duration: TimeInterval = 0.5, completion: @escaping () -> Void) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        var samples: [Float] = []
+        let startTime = Date()
+
+        // Temporarily tap into audio levels
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] t in
+            guard let self else { t.invalidate(); return }
+            samples.append(self.audioLevel)
+            if Date().timeIntervalSince(startTime) >= duration {
+                t.invalidate()
+                let avg = samples.isEmpty ? Float(0.01) : samples.reduce(0, +) / Float(samples.count)
+                self.ambientNoiseFloor = max(avg, 0.005) // floor to avoid zero
+                print("[AudioRecorder] Ambient calibrated: \(self.ambientNoiseFloor)")
+                completion()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
     // MARK: - Recording (must be called from main thread)
 
     func startRecording() {
         dispatchPrecondition(condition: .onQueue(.main))
         guard micPermission, state == .idle else { return }
+        bufferingForSTT = true
         state = .recording
+        setupEngine()
+    }
+
+    /// Sets up the AVAudioEngine with input tap. Reused by startRecording and startListening.
+    private func setupEngine() {
+        guard engine == nil else { return }
 
         let engine = AVAudioEngine()
         self.engine = engine
@@ -81,13 +186,23 @@ class AudioRecorder: ObservableObject {
         inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: hwFormat) { [weak self] buffer, _ in
             guard let self else { return }
 
+            // Feed raw audio to keyword detector (any thread safe)
+            self.onRawAudioBuffer?(buffer)
+
             let rms = self.computeRMS(buffer: buffer)
             DispatchQueue.main.async {
                 self.audioLevel = self.audioLevel * (1 - self.smoothing) + rms * self.smoothing
                 self.levelHistory.removeFirst()
                 self.levelHistory.append(self.audioLevel)
+
+                // Silence detection for hands-free mode
+                if self.silenceDetectionEnabled {
+                    self.updateSilenceState(rms: rms)
+                }
             }
 
+            // Only buffer PCM when actively recording for STT
+            guard self.bufferingForSTT else { return }
             if let converted = self.convert(buffer: buffer) {
                 self.bufferLock.lock()
                 self.pcmBuffers.append(converted)
@@ -146,6 +261,40 @@ class AudioRecorder: ObservableObject {
         pcmBuffers = []
         bufferLock.unlock()
         state = .idle
+    }
+
+    // MARK: - Silence Detection
+
+    /// Called on main thread from audio tap. Tracks silence duration and fires callback.
+    private func updateSilenceState(rms: Float) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        let threshold = ambientNoiseFloor * speechThresholdMultiplier
+        let nowSilent = rms < threshold
+
+        isSilent = nowSilent
+
+        if nowSilent {
+            if silenceStart == nil {
+                silenceStart = Date()
+            }
+            // Only fire silence timeout during active recording (not listening stage)
+            if !silenceFired, bufferingForSTT,
+               let start = silenceStart,
+               Date().timeIntervalSince(start) >= silenceThresholdSeconds {
+                silenceFired = true
+                onSilenceTimeout?()
+            }
+        } else {
+            // Speech detected — reset silence timer
+            silenceStart = nil
+            silenceFired = false
+        }
+    }
+
+    /// Stop the audio engine entirely (used when exiting hands-free or app termination).
+    func stopEngine() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        cleanup()
     }
 
     // MARK: - Audio Processing

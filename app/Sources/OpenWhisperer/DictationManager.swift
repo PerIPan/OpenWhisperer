@@ -5,15 +5,28 @@ import os.log
 
 private let dictLog = OSLog(subsystem: "com.openwhisperer.app", category: "dictation")
 
-/// Orchestrates the record → upload → type cycle for push-to-talk dictation.
+/// Orchestrates the record → upload → type cycle for all interaction modes.
 /// Sends audio to the local Whisper server and types the result into the focused app.
 class DictationManager: ObservableObject {
     let recorder = AudioRecorder()
+    let keywordDetector = KeywordDetector()
 
     @Published var lastTranscription: String = ""
     @Published var error: String?
     /// Mirrors recorder.state as a direct @Published so SwiftUI views reliably update.
     @Published var recorderState: AudioRecorder.State = .idle
+    /// Current interaction mode
+    @Published var interactionMode: InteractionMode = .pressToTalk {
+        didSet {
+            if interactionMode != oldValue {
+                handleModeChange(from: oldValue, to: interactionMode)
+            }
+        }
+    }
+    /// Whether TTS is currently playing (tracked via lock file)
+    @Published var ttsPlaying = false
+    /// Whether hands-free is calibrating ambient noise
+    @Published var isCalibrating = false
 
     private var port: Int = 8000
     private var isTyping = false  // prevent concurrent typeText
@@ -24,6 +37,9 @@ class DictationManager: ObservableObject {
 
     private var recorderSink: AnyCancellable?
     private var uploadWatchdog: DispatchWorkItem?
+    /// Monitors the TTS lock file for barge-in / mic muting
+    private var ttsLockMonitor: DispatchSourceFileSystemObject?
+    private var ttsLockTimer: Timer?
 
     init() {
         recorderSink = recorder.$state
@@ -31,6 +47,33 @@ class DictationManager: ObservableObject {
             .sink { [weak self] newState in
                 self?.recorderState = newState
             }
+
+        // Wire keyword detector
+        keywordDetector.onKeywordDetected = { [weak self] keyword in
+            guard let self else { return }
+            switch keyword {
+            case .initiate:
+                self.handleInitiateKeyword()
+            case .holdOn:
+                self.handleBargeIn()
+            }
+        }
+
+        // Wire audio buffer feed from recorder to keyword detector
+        recorder.onRawAudioBuffer = { [weak self] buffer in
+            self?.keywordDetector.appendAudioBuffer(buffer)
+        }
+
+        // Wire silence detection callback
+        recorder.onSilenceTimeout = { [weak self] in
+            self?.handleSilenceTimeout()
+        }
+
+        // Load silence threshold from preferences
+        if let saved = try? String(contentsOf: Paths.silenceThreshold, encoding: .utf8),
+           let seconds = TimeInterval(saved.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            recorder.silenceThresholdSeconds = seconds
+        }
     }
 
     func updatePort(_ port: Int) {
@@ -52,10 +95,46 @@ class DictationManager: ObservableObject {
         }
     }
 
-    // MARK: - Toggle Recording (must be called from main thread)
+    // MARK: - Mode Change Handling
+
+    private func handleModeChange(from oldMode: InteractionMode, to newMode: InteractionMode) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        os_log(.default, log: dictLog, "Mode changed: %{public}@ → %{public}@", oldMode.rawValue, newMode.rawValue)
+
+        // Tear down old mode
+        switch oldMode {
+        case .handsFree:
+            deactivateHandsFree()
+        case .pressToTalk, .holdToTalk:
+            break
+        }
+
+        // Set up new mode
+        switch newMode {
+        case .handsFree:
+            activateHandsFree()
+        case .pressToTalk, .holdToTalk:
+            // Ensure recorder is idle if switching away from hands-free
+            if recorder.state == .listening || recorder.state == .recording {
+                recorder.stopEngine()
+            }
+        }
+    }
+
+    // MARK: - Press-to-Talk (existing toggle behavior)
 
     func toggle() {
         dispatchPrecondition(condition: .onQueue(.main))
+
+        if interactionMode == .handsFree {
+            // In hands-free: PTT tap = instant submit if recording
+            if recorder.state == .recording {
+                playClick()
+                handsFreeFlushAndTranscribe()
+            }
+            return
+        }
+
         switch recorder.state {
         case .idle:
             guard !isTyping else { return }
@@ -66,42 +145,212 @@ class DictationManager: ObservableObject {
         case .recording:
             playClick()
             finishAndTranscribe()
-        case .uploading:
+        case .uploading, .listening:
             break
         }
     }
 
-    /// Play a subtle click sound on record start/stop (like Voquill's switch sound).
-    private func playClick() {
-        NSSound(named: "Tink")?.play()
+    // MARK: - Hold-to-Talk
+
+    /// Called on hotkey press-down for hold-to-talk mode.
+    func holdToTalkDown() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard interactionMode == .holdToTalk else { return }
+        guard recorder.state == .idle, !isTyping else { return }
+        killTTS()
+        playClick()
+        captureTargetApp()
+        recorder.startRecording()
     }
 
-    /// Barge-in: kill any currently playing TTS audio when recording starts.
-    /// Runs on a background queue to avoid blocking the main thread.
-    private func killTTS() {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let pidFile = Paths.appSupport.appendingPathComponent("tts_hook.pid")
-            let lockFile = Paths.appSupport.appendingPathComponent("tts_playing.lock")
+    /// Called on hotkey release for hold-to-talk mode.
+    func holdToTalkUp() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard interactionMode == .holdToTalk else { return }
+        guard recorder.state == .recording else { return }
+        playClick()
+        finishAndTranscribe()
+    }
 
-            // Kill via PID file (matches tts-hook.sh behaviour)
-            if let pidStr = try? String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
-               let pid = Int32(pidStr), pid > 0 {
-                // Send SIGINT to afplay children, then SIGTERM to parent bash
-                let pkill = Process()
-                pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
-                pkill.arguments = ["-INT", "-P", "\(pid)"]
-                try? pkill.run()
-                pkill.waitUntilExit()
+    // MARK: - Hands-Free Mode
 
-                kill(pid, SIGTERM)
-                try? FileManager.default.removeItem(at: pidFile)
-            }
+    private func activateHandsFree() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        isCalibrating = true
+        recorder.silenceDetectionEnabled = true
 
-            try? FileManager.default.removeItem(at: lockFile)
+        // Start mic for calibration
+        recorder.startListening()
+
+        // Calibrate ambient noise
+        recorder.calibrateAmbient { [weak self] in
+            guard let self else { return }
+            self.isCalibrating = false
+            // Start keyword detection
+            self.keywordDetector.start()
+            // Start TTS lock monitoring
+            self.startTTSLockMonitoring()
+            os_log(.default, log: dictLog, "Hands-free activated, ambient: %.4f", self.recorder.ambientNoiseFloor)
         }
     }
 
-    // MARK: - Finish Recording & Transcribe
+    private func deactivateHandsFree() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        recorder.silenceDetectionEnabled = false
+        keywordDetector.stop()
+        stopTTSLockMonitoring()
+        if recorder.state == .listening || recorder.state == .recording {
+            recorder.stopEngine()
+        }
+        isCalibrating = false
+        os_log(.default, log: dictLog, "Hands-free deactivated")
+    }
+
+    /// "Initiate" keyword detected — transition from listening to recording.
+    private func handleInitiateKeyword() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard interactionMode == .handsFree else { return }
+        guard recorder.state == .listening else { return }
+        os_log(.default, log: dictLog, "Keyword 'initiate' detected, starting STT recording")
+        playClick()
+        captureTargetApp()
+        recorder.startBuffering()
+    }
+
+    /// 3s silence detected — flush buffer and transcribe.
+    private func handleSilenceTimeout() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard interactionMode == .handsFree else { return }
+        guard recorder.state == .recording else { return }
+        os_log(.default, log: dictLog, "Silence timeout, flushing for transcription")
+        playClick()
+        handsFreeFlushAndTranscribe()
+    }
+
+    /// Flush current audio buffer and transcribe (hands-free — engine stays running).
+    private func handsFreeFlushAndTranscribe() {
+        let language = readLanguage()
+        let currentPort = port
+        let pid = targetPID
+
+        guard let wavData = recorder.flushAndContinue() else {
+            recorder.resumeListening()
+            keywordDetector.start()
+            return
+        }
+
+        // Skip very short recordings
+        if wavData.count < 9700 {
+            recorder.resumeListening()
+            keywordDetector.start()
+            return
+        }
+
+        os_log(.default, log: dictLog, "Hands-free WAV: %d bytes", wavData.count)
+
+        let watchdog = DispatchWorkItem { [weak self] in
+            guard let self, self.recorder.state == .uploading else { return }
+            print("[DictationManager] Watchdog: hands-free upload exceeded 35s")
+            self.recorder.resumeListening()
+            self.keywordDetector.start()
+            self.error = "Transcription timed out"
+        }
+        uploadWatchdog = watchdog
+        DispatchQueue.main.asyncAfter(deadline: .now() + 35, execute: watchdog)
+
+        uploadToWhisper(wavData: wavData, language: language, port: currentPort) { [weak self] result in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                self.uploadWatchdog?.cancel()
+                self.uploadWatchdog = nil
+
+                switch result {
+                case .success(let text):
+                    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        os_log(.default, log: dictLog, "HF transcribed: %{public}@", trimmed)
+                        self.lastTranscription = trimmed
+                        self.error = nil
+                        self.isTyping = true
+                        self.insertText(trimmed, intoPID: pid) { [weak self] in
+                            guard let self else { return }
+                            self.isTyping = false
+                            // Resume listening after typing completes
+                            self.recorder.resumeListening()
+                            self.keywordDetector.start()
+                        }
+                        return
+                    }
+                case .failure(let err):
+                    os_log(.default, log: dictLog, "HF upload failed: %{public}@", err.localizedDescription)
+                    self.error = err.localizedDescription
+                }
+
+                // Resume listening on empty result or failure
+                self.recorder.resumeListening()
+                self.keywordDetector.start()
+            }
+        }
+    }
+
+    // MARK: - Barge-in
+
+    /// "Hold on" detected during TTS — kill TTS and start recording.
+    private func handleBargeIn() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard interactionMode == .handsFree, ttsPlaying else { return }
+        os_log(.default, log: dictLog, "Barge-in: 'hold on' detected, killing TTS")
+        killTTS()
+        playClick()
+        captureTargetApp()
+        // Transition directly to recording
+        recorder.startBuffering()
+    }
+
+    // MARK: - TTS Lock File Monitoring
+
+    private func startTTSLockMonitoring() {
+        // Poll for lock file every 0.5s (simpler and more reliable than DispatchSource)
+        ttsLockTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let lockPath = Paths.appSupport.appendingPathComponent("tts_playing.lock").path
+            let playing = FileManager.default.fileExists(atPath: lockPath)
+            if playing != self.ttsPlaying {
+                self.ttsPlaying = playing
+                self.handleTTSStateChange(playing: playing)
+            }
+        }
+    }
+
+    private func stopTTSLockMonitoring() {
+        ttsLockTimer?.invalidate()
+        ttsLockTimer = nil
+        ttsPlaying = false
+    }
+
+    private func handleTTSStateChange(playing: Bool) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard interactionMode == .handsFree else { return }
+
+        if playing {
+            // TTS started — stop STT buffering, keep keyword detection for barge-in
+            os_log(.default, log: dictLog, "TTS started — muting STT, listening for barge-in")
+            if recorder.state == .recording {
+                // Discard any buffered audio during TTS transition
+                recorder.resumeListening()
+            }
+            // Keyword detector stays active for "hold on" barge-in
+        } else {
+            // TTS finished — resume listening for "initiate"
+            os_log(.default, log: dictLog, "TTS ended — resuming keyword listening")
+            if recorder.state != .uploading {
+                recorder.resumeListening()
+                keywordDetector.start()
+            }
+        }
+    }
+
+    // MARK: - Press-to-Talk Finish Recording & Transcribe
 
     private func finishAndTranscribe() {
         recorder.stopRecording()
@@ -167,6 +416,36 @@ class DictationManager: ObservableObject {
                     }
                 }
             }
+        }
+    }
+
+    /// Play a subtle click sound on record start/stop (like Voquill's switch sound).
+    private func playClick() {
+        NSSound(named: "Tink")?.play()
+    }
+
+    /// Barge-in: kill any currently playing TTS audio when recording starts.
+    /// Runs on a background queue to avoid blocking the main thread.
+    func killTTS() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let pidFile = Paths.appSupport.appendingPathComponent("tts_hook.pid")
+            let lockFile = Paths.appSupport.appendingPathComponent("tts_playing.lock")
+
+            // Kill via PID file (matches tts-hook.sh behaviour)
+            if let pidStr = try? String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+               let pid = Int32(pidStr), pid > 0 {
+                // Send SIGINT to afplay children, then SIGTERM to parent bash
+                let pkill = Process()
+                pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+                pkill.arguments = ["-INT", "-P", "\(pid)"]
+                try? pkill.run()
+                pkill.waitUntilExit()
+
+                kill(pid, SIGTERM)
+                try? FileManager.default.removeItem(at: pidFile)
+            }
+
+            try? FileManager.default.removeItem(at: lockFile)
         }
     }
 
