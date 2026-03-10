@@ -35,7 +35,7 @@ class SetupManager: ObservableObject {
             // Step 1: Create venv with bundled uv
             guard runCommand(
                 Paths.uvBinary.path,
-                args: ["venv", Paths.venv.path, "--python", "3.13"],
+                args: ["venv", Paths.venv.path, "--python", "3.13", "--clear"],
                 step: "Creating Python environment..."
             ) else {
                 updateState(.failed("Failed to create Python venv"), progress: 0)

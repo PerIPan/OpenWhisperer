@@ -126,7 +126,7 @@ fi
     VOICE="${TTS_VOICE:-af_heart}"
   fi
   MODEL="${TTS_MODEL:-prince-canuma/Kokoro-82M}"
-  TMPFILE=$(mktemp "$TTS_TMPDIR/tts_XXXXXX.wav")
+  TMPFILE=$(mktemp "$TTS_TMPDIR/tts_XXXXXX.wav") || { rm -f "$LOCKFILE"; exit 1; }
 
   # Retry TTS up to 3 times
   for attempt in 1 2 3; do
@@ -140,7 +140,7 @@ fi
   done
 
   if [ -s "$TMPFILE" ]; then
-    afplay "$TMPFILE" 2>/dev/null
+    afplay -v 4 "$TMPFILE" 2>/dev/null
   fi
   rm -f "$LOCKFILE"
   rm -f "$TMPFILE" 2>/dev/null

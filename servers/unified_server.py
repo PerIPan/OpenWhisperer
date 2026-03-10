@@ -176,8 +176,8 @@ def kill_tts():
         logger.exception("kill_tts failed")
 
 
-def press_cmd_enter():
-    """Send Cmd+Enter via CGEvent (needs Accessibility, not System Events)."""
+def press_enter():
+    """Send plain Enter via CGEvent (needs Accessibility)."""
     try:
         _cg = ctypes.cdll.LoadLibrary(ctypes.util.find_library("CoreGraphics"))
         _cg.CGEventCreateKeyboardEvent.restype = ctypes.c_void_p
@@ -187,25 +187,26 @@ def press_cmd_enter():
         _cg.CFRelease.argtypes = [ctypes.c_void_p]
 
         kCGSessionEventTap = 1
-        kCGEventFlagMaskCommand = 0x00100000
         kVK_Return = 0x24  # 36
 
         key_down = _cg.CGEventCreateKeyboardEvent(None, kVK_Return, True)
         key_up = _cg.CGEventCreateKeyboardEvent(None, kVK_Return, False)
-        _cg.CGEventSetFlags(key_down, kCGEventFlagMaskCommand)
-        _cg.CGEventSetFlags(key_up, kCGEventFlagMaskCommand)
+        # Explicitly clear all modifier flags so held keys (Ctrl, Cmd, etc.)
+        # don't bleed into the Enter event
+        _cg.CGEventSetFlags(key_down, 0)
+        _cg.CGEventSetFlags(key_up, 0)
         _cg.CGEventPost(kCGSessionEventTap, key_down)
         _cg.CGEventPost(kCGSessionEventTap, key_up)
         _cg.CFRelease(key_down)
         _cg.CFRelease(key_up)
     except Exception:
-        logger.exception("press_cmd_enter failed")
+        logger.exception("press_enter failed")
 
 
 async def _delayed_enter():
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(1.0)
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, press_cmd_enter)
+    await loop.run_in_executor(None, press_enter)
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +267,8 @@ async def transcribe(
 
         should_submit = False
         if os.path.exists(AUTO_SUBMIT_FLAG):
-            text, should_submit = check_submit_trigger(text)
+            text, _ = check_submit_trigger(text)
+            should_submit = True
 
         if should_submit:
             global _pending_enter_task
