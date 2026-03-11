@@ -28,8 +28,7 @@
     </filter>
   </defs>
 
-  <!-- App icon background (macOS dark) -->
-  <rect width="1024" height="1024" rx="220" ry="220" fill="#1E1E24"/>
+  <!-- No background — transparent -->
 
   <!-- Left: organic voice waveform (green/cyan) -->
   <g transform="translate(70, 512)">
