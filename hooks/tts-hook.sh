@@ -47,12 +47,13 @@ if [ -f "$PIDFILE" ] && [ ! -L "$PIDFILE" ]; then
   if [[ "$OLD_PID" =~ ^[0-9]+$ ]] && kill -0 "$OLD_PID" 2>/dev/null; then
     # Verify it's our process before killing
     OLD_COMM=$(ps -p "$OLD_PID" -o comm= 2>/dev/null)
-    if [[ "$OLD_COMM" == *"bash"* ]] || [[ "$OLD_COMM" == *"afplay"* ]]; then
+    if [[ "$OLD_COMM" == *"bash"* ]] || [[ "$OLD_COMM" == *"afplay"* ]] || [[ "$OLD_COMM" == *"python"* ]]; then
       # Send SIGINT to afplay children first (cleaner stop than SIGTERM)
       pkill -INT -P "$OLD_PID" 2>/dev/null
       kill "$OLD_PID" 2>/dev/null
       pkill -P "$OLD_PID" 2>/dev/null
     fi
+    pkill -f tts_stream_player 2>/dev/null
   fi
   # Clean up orphaned temp files from previous runs (scoped to our dir)
   find "$TTS_TMPDIR" -name "tts_*" -mmin +1 -delete 2>/dev/null
@@ -109,62 +110,75 @@ case "$TTS_URL" in
     ;;
 esac
 
-# Run entire TTS pipeline in background (non-blocking)
-(
-  # Read voice from app config, fall back to env var, then default
-  VOICE_FILE="$APP_SUPPORT/tts_voice"
-  if [ -f "$VOICE_FILE" ] && [ ! -L "$VOICE_FILE" ]; then
-    SAVED_VOICE=$(cat "$VOICE_FILE" 2>/dev/null | tr -d '[:space:]')
-    VOICE="${SAVED_VOICE:-${TTS_VOICE:-af_heart}}"
-  else
-    VOICE="${TTS_VOICE:-af_heart}"
-  fi
-  MODEL="${TTS_MODEL:-prince-canuma/Kokoro-82M}"
-  TMPFILE=$(mktemp "$TTS_TMPDIR/tts_XXXXXXXXXXXX") || { rm -f "$LOCKFILE"; exit 1; }
+# --- Streaming player (preferred) with afplay fallback ---
+VENV_PY="$APP_SUPPORT/venv/bin/python"
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLAYER="$(dirname "$HOOK_DIR")/scripts/tts_stream_player.py"
+STREAM_URL="${TTS_URL%/audio/speech}/audio/stream"
+CAP_OK="$APP_SUPPORT/.tts_stream_ok"
+CAP_BAD="$APP_SUPPORT/.tts_stream_unavailable"
 
-  # Retry TTS up to 3 times
-  TTS_OK=false
-  CURL_RC=0
-  for attempt in 1 2 3; do
-    curl -s -X POST "$TTS_URL" \
-      -H "Content-Type: application/json" \
-      -d "$(jq -n --arg t "$SPEECH" --arg v "$VOICE" --arg m "$MODEL" '{model: $m, input: $t, voice: $v}')" \
-      --output "$TMPFILE" --max-time 30 2>/dev/null
-    CURL_RC=$?
-    # Require curl success AND a valid WAV header (RIFF) — not a JSON error or truncated body.
-    # Validate WAV header using dd (avoids forking head|grep pipeline) (#11)
-    if [ "$CURL_RC" -eq 0 ] && [ -s "$TMPFILE" ] && [[ "$(dd if="$TMPFILE" bs=4 count=1 2>/dev/null)" == "RIFF" ]]; then
-      TTS_OK=true
-      break
+# One-time cached capability probe: can the venv python import the audio stack?
+if [ ! -f "$CAP_OK" ] && [ ! -f "$CAP_BAD" ]; then
+  if [ -x "$VENV_PY" ] && "$VENV_PY" -c "import sounddevice, numpy" >/dev/null 2>&1; then
+    touch "$CAP_OK"
+  else
+    touch "$CAP_BAD"
+  fi
+fi
+
+# Resolve voice + volume (shared by both paths)
+VOICE_FILE="$APP_SUPPORT/tts_voice"
+if [ -f "$VOICE_FILE" ] && [ ! -L "$VOICE_FILE" ]; then
+  VOICE="$(cat "$VOICE_FILE" 2>/dev/null | tr -d '[:space:]')"; VOICE="${VOICE:-${TTS_VOICE:-af_heart}}"
+else
+  VOICE="${TTS_VOICE:-af_heart}"
+fi
+MODEL="${TTS_MODEL:-prince-canuma/Kokoro-82M}"
+VOLUME_FILE="$APP_SUPPORT/tts_volume"
+if [ -f "$VOLUME_FILE" ] && [ ! -L "$VOLUME_FILE" ]; then
+  VOLUME="$(cat "$VOLUME_FILE" 2>/dev/null | tr -d '[:space:]')"; VOLUME="${VOLUME:-${TTS_VOLUME:-1}}"
+else
+  VOLUME="${TTS_VOLUME:-1}"
+fi
+
+if [ -f "$CAP_OK" ] && [ -f "$PLAYER" ] && [ -x "$VENV_PY" ]; then
+  # Streaming path — the player owns the lock + PID files and plays gaplessly.
+  PAYLOAD="$(jq -n --arg t "$SPEECH" --arg v "$VOICE" --arg m "$MODEL" '{model: $m, input: $t, voice: $v}')"
+  printf '%s' "$PAYLOAD" | "$VENV_PY" "$PLAYER" \
+    --url "$STREAM_URL" --volume "$VOLUME" \
+    --lockfile "$LOCKFILE" --pidfile "$PIDFILE" >/dev/null 2>&1 &
+  echo $! > "$PIDFILE"
+else
+  # --- Fallback: original curl + afplay path ---
+  (
+    TMPFILE=$(mktemp "$TTS_TMPDIR/tts_XXXXXXXXXXXX") || { rm -f "$LOCKFILE"; exit 1; }
+    TTS_OK=false
+    CURL_RC=0
+    for attempt in 1 2 3; do
+      curl -s -X POST "$TTS_URL" \
+        -H "Content-Type: application/json" \
+        -d "$(jq -n --arg t "$SPEECH" --arg v "$VOICE" --arg m "$MODEL" '{model: $m, input: $t, voice: $v}')" \
+        --output "$TMPFILE" --max-time 30 2>/dev/null
+      CURL_RC=$?
+      if [ "$CURL_RC" -eq 0 ] && [ -s "$TMPFILE" ] && [[ "$(dd if="$TMPFILE" bs=4 count=1 2>/dev/null)" == "RIFF" ]]; then
+        TTS_OK=true
+        break
+      fi
+      sleep 1
+    done
+    if [ "$TTS_OK" = "false" ]; then
+      logger -t tts-hook "TTS request failed after 3 attempts (last curl rc=$CURL_RC, url=$TTS_URL)"
     fi
-    sleep 1
-  done
-
-  # Log a diagnostic if every attempt failed — otherwise the user just gets silence (T2.4)
-  if [ "$TTS_OK" = "false" ]; then
-    logger -t tts-hook "TTS request failed after 3 attempts (last curl rc=$CURL_RC, url=$TTS_URL)"
-  fi
-
-  # Read volume from app config, fall back to env var, then default
-  VOLUME_FILE="$APP_SUPPORT/tts_volume"
-  if [ -f "$VOLUME_FILE" ] && [ ! -L "$VOLUME_FILE" ]; then
-    SAVED_VOLUME=$(cat "$VOLUME_FILE" 2>/dev/null | tr -d '[:space:]')
-    VOLUME="${SAVED_VOLUME:-${TTS_VOLUME:-1}}"
-  else
-    VOLUME="${TTS_VOLUME:-1}"
-  fi
-
-  # Only play validated audio (TTS_OK) so a truncated/RIFF-ish partial body never reaches afplay (T2.4)
-  if [ "$TTS_OK" = "true" ] && [ -s "$TMPFILE" ]; then
-    afplay -v "$VOLUME" "$TMPFILE" 2>/dev/null
-  fi
-  rm -f "$LOCKFILE"
-  rm -f "$TMPFILE" 2>/dev/null
-  rm -f "$PIDFILE" 2>/dev/null
-) &
-
-# Save background PID atomically so next invocation can interrupt it
-echo $! > "$PIDFILE"
+    if [ "$TTS_OK" = "true" ] && [ -s "$TMPFILE" ]; then
+      afplay -v "$VOLUME" "$TMPFILE" 2>/dev/null
+    fi
+    rm -f "$LOCKFILE"
+    rm -f "$TMPFILE" 2>/dev/null
+    rm -f "$PIDFILE" 2>/dev/null
+  ) &
+  echo $! > "$PIDFILE"
+fi
 
 # Release hook lock now that PID is written (trap will also clean up)
 rmdir "$HOOK_LOCK" 2>/dev/null
