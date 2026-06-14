@@ -42,12 +42,15 @@ cp "$SCRIPT_DIR/Resources/Outfit-VariableFont_wght.ttf" "$APP_BUNDLE/Contents/Re
 cp "$PROJECT_DIR/hooks/tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/hooks/codex-tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/servers/unified_server.py" "$APP_BUNDLE/Contents/Resources/servers/"
+cp "$PROJECT_DIR/servers/tts_stream.py" "$APP_BUNDLE/Contents/Resources/servers/"
 cp "$PROJECT_DIR/scripts/speak.sh" "$APP_BUNDLE/Contents/Resources/scripts/"
+cp "$PROJECT_DIR/scripts/tts_stream_player.py" "$APP_BUNDLE/Contents/Resources/scripts/"
 
 # Make scripts executable
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/tts-hook.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/codex-tts-hook.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/scripts/speak.sh"
+chmod +x "$APP_BUNDLE/Contents/Resources/scripts/tts_stream_player.py"
 
 # Step 4: Bundle uv binary (detect architecture)
 echo "Bundling uv..."

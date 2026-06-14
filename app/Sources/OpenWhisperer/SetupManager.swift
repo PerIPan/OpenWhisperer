@@ -156,6 +156,9 @@ class SetupManager: ObservableObject {
     func resetAndRerun(completion: @escaping (Bool) -> Void) {
         guard !isSetupRunning else { return }
         try? FileManager.default.removeItem(at: Paths.setupComplete)
+        // Re-probe TTS streaming capability after a reset/reinstall
+        try? FileManager.default.removeItem(at: Paths.appSupport.appendingPathComponent(".tts_stream_ok"))
+        try? FileManager.default.removeItem(at: Paths.appSupport.appendingPathComponent(".tts_stream_unavailable"))
         runFirstLaunchSetup(completion: completion)
     }
 
