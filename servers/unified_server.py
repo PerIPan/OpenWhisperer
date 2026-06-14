@@ -5,6 +5,7 @@ import ctypes
 import ctypes.util
 import logging
 import os
+import queue
 import re
 import signal
 import subprocess
@@ -24,6 +25,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
 # Import the mlx_audio server app (includes TTS + /v1/models + WebSocket STT)
 from mlx_audio.server import app, model_provider, setup_cors, SpeechRequest
+
+from tts_stream import TTS_SAMPLE_RATE, TTS_QUEUE_MAX, SENTINEL, produce
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("unified_server")
@@ -379,6 +382,59 @@ async def tts_speech(payload: SpeechRequest):
         media_type=f"audio/{payload.response_format}",
         headers={
             "Content-Disposition": f"attachment; filename=speech.{payload.response_format}"
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Streaming TTS endpoint — synthesize per-segment under the GPU lock and stream
+# raw float32 PCM as each segment completes (low time-to-first-audio). The legacy
+# /v1/audio/speech (WAV) endpoint above is kept for compatibility / fallback.
+# ---------------------------------------------------------------------------
+@app.post("/v1/audio/stream")
+async def tts_stream(payload: SpeechRequest):
+    loop = asyncio.get_running_loop()
+    try:
+        model = await loop.run_in_executor(
+            _tts_executor, lambda p=payload: model_provider.load_model(p.model)
+        )
+    except Exception:
+        logger.exception("TTS model load failed")
+        return JSONResponse({"error": "TTS model load failed"}, status_code=500)
+
+    q: queue.Queue = queue.Queue(maxsize=TTS_QUEUE_MAX)
+    cancel_event = threading.Event()
+
+    def _run():
+        gen = model.generate(
+            payload.input, voice=payload.voice, speed=payload.speed,
+            gender=payload.gender, pitch=payload.pitch, lang_code=payload.lang_code,
+            ref_audio=payload.ref_audio, ref_text=payload.ref_text,
+            temperature=payload.temperature, top_p=payload.top_p, top_k=payload.top_k,
+            repetition_penalty=payload.repetition_penalty,
+        )
+        produce(gen, q, cancel_event, _mlx_gpu_lock)
+
+    _tts_executor.submit(_run)
+
+    async def _drain():
+        try:
+            while True:
+                item = await loop.run_in_executor(None, q.get)
+                if item is SENTINEL:
+                    break
+                yield item
+        finally:
+            cancel_event.set()  # client disconnect or completion → stop the producer
+
+    return StreamingResponse(
+        _drain(),
+        media_type="application/octet-stream",
+        headers={
+            "X-Sample-Rate": str(TTS_SAMPLE_RATE),
+            "X-Channels": "1",
+            "X-Sample-Format": "f32le",
+            "Cache-Control": "no-store",
         },
     )
 
