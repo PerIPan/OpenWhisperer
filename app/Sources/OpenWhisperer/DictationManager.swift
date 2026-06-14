@@ -35,6 +35,12 @@ class DictationManager: ObservableObject {
     /// The PID of the app that was frontmost when the user pressed the hotkey.
     /// Captured on the main thread at press-time, before any focus shifts.
     private var targetPID: pid_t = 0
+    /// The last "real" (regular, Dock-bearing) app the user activated. Used as the
+    /// target when dictation is triggered while ANY menubar-owned UI is frontmost —
+    /// our own popover or another menubar utility/agent (all .accessory) — so text
+    /// still lands in the app the user was actually working in.
+    private var lastRegularAppPID: pid_t = 0
+    private var activationObserver: NSObjectProtocol?
     /// The PID of the app the user was in before auto-focus switched away.
     /// Used by "with return" to re-activate the origin app after text insertion.
     private var originPID: pid_t = 0
@@ -89,6 +95,30 @@ class DictationManager: ObservableObject {
            let seconds = TimeInterval(saved.trimmingCharacters(in: .whitespacesAndNewlines)) {
             recorder.silenceThresholdSeconds = seconds
         }
+
+        // Seed + continuously track the last regular (non-menubar) app, so dictation
+        // triggered while any menubar UI is frontmost still targets the real app.
+        if let front = NSWorkspace.shared.frontmostApplication,
+           front.activationPolicy == .regular,
+           front.bundleIdentifier != Bundle.main.bundleIdentifier {
+            lastRegularAppPID = front.processIdentifier
+        }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self,
+                  let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.activationPolicy == .regular,
+                  app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+            self.lastRegularAppPID = app.processIdentifier
+        }
+    }
+
+    deinit {
+        if let activationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
+        }
     }
 
     func updatePort(_ port: Int) {
@@ -102,12 +132,20 @@ class DictationManager: ObservableObject {
     /// Must be called on the main thread.
     func captureTargetApp() {
         dispatchPrecondition(condition: .onQueue(.main))
-        // Skip our own app — if we somehow are frontmost, keep the previous target
+        // Prefer the current frontmost app when it's a real (regular) app and not us.
         if let front = NSWorkspace.shared.frontmostApplication,
+           front.activationPolicy == .regular,
            front.bundleIdentifier != Bundle.main.bundleIdentifier {
             targetPID = front.processIdentifier
+            lastRegularAppPID = targetPID
             os_log(.default, log: dictLog, "Captured target PID %d (%{public}@)", targetPID, front.localizedName ?? "?")
+        } else if lastRegularAppPID != 0 {
+            // Frontmost is a menubar UI (our popover / another utility / an agent) —
+            // fall back to the last real app the user was working in.
+            targetPID = lastRegularAppPID
+            os_log(.default, log: dictLog, "Frontmost not a regular app; using last regular PID %d", targetPID)
         }
+        // else: keep the previous targetPID
     }
 
     // MARK: - Mode Change Handling
