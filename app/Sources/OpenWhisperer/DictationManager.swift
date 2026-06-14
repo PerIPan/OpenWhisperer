@@ -506,7 +506,9 @@ class DictationManager: ObservableObject {
             // Kill via PID file (matches tts-hook.sh behaviour)
             if let pidStr = try? String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
                let pid = Int32(pidStr), pid > 0 {
-                // Send SIGINT to afplay children, then SIGTERM to parent bash
+                // Fallback (afplay) path: SIGINT afplay children of the bash wrapper.
+                // Streaming path: the python player has no children, so this pkill is a
+                // no-op there — the SIGTERM below to the recorded PID stops the player.
                 let pkill = Process()
                 pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
                 pkill.arguments = ["-INT", "-P", "\(pid)"]

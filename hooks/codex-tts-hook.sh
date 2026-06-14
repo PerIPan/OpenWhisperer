@@ -79,7 +79,7 @@ TEXT=$(echo "$INPUT" | jq -r '.["last-assistant-message"] // .last_assistant_mes
 [ -z "$TEXT" ] && exit 0
 
 # Extract [VOICE: ...] tag if present
-SPEECH=$(echo "$TEXT" | sed -n -E 's/.*\[VOICE: (.*)\].*/\1/p' | tail -1)
+SPEECH=$(echo "$TEXT" | sed -n -E 's/.*\[VOICE: ([^]]*)\].*/\1/p' | tail -1)
 
 # Fallback: clean up raw text if no VOICE tag
 if [ -z "$SPEECH" ]; then
