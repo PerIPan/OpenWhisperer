@@ -180,7 +180,7 @@ def kill_tts():
                         capture_output=True, text=True, timeout=2,
                     )
                     comm = result.stdout.strip()
-                    if comm and ("afplay" in comm or "tts" in comm or "bash" in comm):
+                    if comm and ("afplay" in comm or "tts" in comm or "bash" in comm or "python" in comm):
                         os.kill(pid, signal.SIGTERM)
                 except (subprocess.TimeoutExpired, ProcessLookupError, PermissionError):
                     pass
@@ -193,6 +193,10 @@ def kill_tts():
         )
         subprocess.run(
             ["pkill", "-U", str(os.getuid()), "-f", "afplay.*tts_"],
+            capture_output=True, timeout=2,
+        )
+        subprocess.run(
+            ["pkill", "-U", str(os.getuid()), "-f", "tts_stream_player"],
             capture_output=True, timeout=2,
         )
 
