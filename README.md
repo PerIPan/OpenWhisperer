@@ -25,6 +25,13 @@ You use Claude Code or Codex CLI normally. After every response, the AI's answer
 
 Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
+## What's New in 1.4.0
+
+- **Streaming text-to-speech** — speech now starts after the first sentence is synthesized instead of waiting for the whole response, so the AI starts talking back noticeably sooner. Playback is gapless, and "hold on" barge-in stops it near-instantly. Automatically falls back to the classic method if streaming is unavailable.
+- **Setup works in more environments** — Python from pyenv, conda, MacPorts, or Intel Homebrew is now found correctly (setup previously could fail with "no Python found").
+- **Codex TTS respects your volume** — the Codex CLI hook now honors the in-app volume setting instead of a fixed level.
+- **Stability & security hardening** — fixed a transcription-overlay teardown crash, mode-switch edge cases that could mis-route dictated text, a faster/cleaner app quit, clearer audio-engine error messages, and tighter permissions on config files.
+
 ## Install
 
 [**Download OpenWhisperer-1.4.0.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.4.0/OpenWhisperer-1.4.0.dmg) — drag to Applications and launch.
