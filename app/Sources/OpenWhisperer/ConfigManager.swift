@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import OpenWhispererKit
 
 // MARK: - Platform
 
@@ -409,6 +410,7 @@ enum ConfigManager {
     /// Patterns that identify any Open Whisperer TTS hook command
     private static let hookPatterns = [
         "tts-hook.sh",
+        "voice-context.sh",
         "Open Whisperer",
         "OpenWhisperer",
         "mlx-openai-whisper",
@@ -455,6 +457,17 @@ enum ConfigManager {
         stopArray.append(stopEntry)
 
         hooks["Stop"] = stopArray
+
+        // Register the UserPromptSubmit voice-turn hook (idempotent: drop our old entries first).
+        var upsArray = hooks["UserPromptSubmit"] as? [[String: Any]] ?? []
+        upsArray.removeAll { entry in
+            guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
+            return inner.contains { (($0["command"] as? String).map(isOurHook) ?? false) }
+        }
+        let upsHook: [String: Any] = ["type": "command", "command": Paths.voiceContextHook.path]
+        upsArray.append(["hooks": [upsHook]])
+        hooks["UserPromptSubmit"] = upsArray
+
         settings["hooks"] = hooks
 
         // Write back (convert to 2-space indent to match Claude Code style)
@@ -591,6 +604,23 @@ enum ConfigManager {
             result.removeLast()
         }
         return result.joined(separator: "\n")
+    }
+
+    // MARK: - Migration
+
+    /// One-shot cleanup for existing installs: strip the legacy `## Voice Mode`
+    /// block from the user's CLAUDE.md and Codex instructions.md.
+    static func migrateRemoveVoiceTags() {
+        let targets = [
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/CLAUDE.md"),
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/instructions.md"),
+        ]
+        for url in targets {
+            guard let existing = try? String(contentsOf: url, encoding: .utf8),
+                  existing.contains("[VOICE:") || existing.contains("## Voice Mode") else { continue }
+            let cleaned = VoiceMigration.stripVoiceBlock(from: existing).trimmingCharacters(in: .whitespacesAndNewlines)
+            try? (cleaned + "\n").write(to: url, atomically: true, encoding: .utf8)
+        }
     }
 
     // MARK: - Diagnostics

@@ -28,6 +28,12 @@ enum Paths {
     /// Bundled hook script
     static let ttsHook = resources.appendingPathComponent("hooks").appendingPathComponent("tts-hook.sh")
 
+    /// Bundled UserPromptSubmit hook (Claude Code voice-turn detection)
+    static let voiceContextHook = resources.appendingPathComponent("hooks").appendingPathComponent("voice-context.sh")
+
+    /// Bundled first-paragraph extractor used by the Stop hooks
+    static let firstParagraphScript = resources.appendingPathComponent("hooks").appendingPathComponent("first-paragraph.sh")
+
     /// Bundled speak script
     static let speakScript = resources.appendingPathComponent("scripts").appendingPathComponent("speak.sh")
 

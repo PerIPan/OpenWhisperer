@@ -16,6 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Clean stale temp/lock/pid files from previous sessions (background, delayed)
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
             _ = ConfigManager.cleanTempFiles()
+            ConfigManager.migrateRemoveVoiceTags()
         }
 
         // Register bundled Outfit font
