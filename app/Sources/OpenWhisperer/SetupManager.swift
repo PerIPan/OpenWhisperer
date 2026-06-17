@@ -57,8 +57,12 @@ class SetupManager: ObservableObject {
             }
 
             // Step 2: Install mlx-audio
+            // Pin ==0.4.1: 0.4.4 broke Kokoro TTS (SineGen interpolate round-trip is not
+            // length-preserving → sine_waves drift ×300 vs the uv/noise mask → broadcast 500
+            // on most text). Upstream Blaizzy/mlx-audio #784/#786; fix PR #785 unmerged.
+            // 0.4.1 predates the regression. Drop the pin once #785 ships.
             updateState(.inProgress("Installing MLX Audio (TTS)..."), progress: 0.2)
-            guard uvPipInstall("mlx-audio", timeout: 600) else {
+            guard uvPipInstall("mlx-audio==0.4.1", timeout: 600) else {
                 updateState(.failed("Failed to install mlx-audio"), progress: 0)
                 DispatchQueue.main.async {
                     self.isSetupRunning = false

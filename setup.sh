@@ -35,8 +35,12 @@ uv venv "$VENV_PATH" --python 3.13
 source "$VENV_PATH/bin/activate"
 
 # Install dependencies
+# Pin mlx-audio==0.4.1: 0.4.4 broke Kokoro TTS — SineGen's interpolate round-trip
+# is not length-preserving, so sine_waves drift one hop (×300) vs the uv/noise mask
+# and synthesis 500s on most text. Upstream bug (Blaizzy/mlx-audio #784/#786, fix PR
+# #785 unmerged). 0.4.1 predates the regression. Remove the pin once #785 ships.
 echo "Installing mlx_audio (TTS + STT)..."
-uv pip install mlx-audio
+uv pip install 'mlx-audio==0.4.1'
 
 echo "Installing mlx_whisper..."
 uv pip install mlx-whisper

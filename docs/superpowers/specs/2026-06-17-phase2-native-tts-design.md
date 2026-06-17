@@ -107,6 +107,23 @@ The Python TTS stack proved **fragile** in exactly the ways native removes:
   round-trip that isn't length-preserving (`round(round(L/s)·s) ≠ L`), while `_f02uv` skips
   interpolation — so `sine_waves` (e.g. 75900) and `uv`/`noise_amp` (75600) mismatch, and
   `noise_amp * mx.random.normal(sine_waves.shape)` fails to broadcast → HTTP 500 on most real text.
+  - **Confirmed upstream (2026-06-17 GH sweep).** This is a known, in-flight `mlx-audio` bug, not a
+    local quirk: open issues [#784](https://github.com/Blaizzy/mlx-audio/issues/784) and
+    [#786](https://github.com/Blaizzy/mlx-audio/issues/786) report the identical
+    `[broadcast_shapes] Shapes (1,N,1) and (1,N+300,9)` crash on 0.4.4 (works on 0.4.1), same env
+    (Apple Silicon, Kokoro-82M, `af_heart`). The fix is PR
+    [#785](https://github.com/Blaizzy/mlx-audio/pull/785) "Fix SineGen length alignment" (aligns the
+    generated sine length to the F0 length before UV/noise; covers Kokoro **and** Kitten; ships a
+    regression test) — **approved but unmerged**, blocked only on a signed commit; the duplicate PR
+    [#788](https://github.com/Blaizzy/mlx-audio/pull/788) was closed in its favor. As of the sweep,
+    0.4.4 (2026-06-06) is the latest release and `main`'s `SineGen` is byte-for-byte the buggy 0.4.4
+    — **the fix is in no release and not even on `main`**, so waiting for an upstream version won't
+    help.
+  - **The trigger (why 0.4.1 works, 0.4.4 crashes).** The round-trip is the *latent* defect; commit
+    `aaf5ee6` ("Fix Kokoro usage from worker threads", #745, 2026-05-27) made it deterministic by
+    swapping `mx.ceil` → Python `math.ceil` in `interpolate.py`. float64 precision
+    (`296400 × 1/300 = 988.0000000000001` → `math.ceil` → `989`) lands the upsample one frame (×300)
+    too long; 0.4.1's `mx.ceil` rounded back down, so it never fired.
 - **Setup under-declared deps.** The venv was missing `soundfile`, `fastapi`, `uvicorn`, `webrtcvad`,
   `python-multipart`, **and** `misaki` — `unified_server.py` imports them directly but
   `mlx-audio`/the setup never installed them. (Fixed this session in `SetupManager.swift` + `setup.sh`
@@ -133,9 +150,15 @@ diagnostic kept on disk but gitignored (`app/Tools/STTDiag`, standalone package 
 
 **Open / not done:**
 - **TTS synthesis** — the Python `mlx-audio` 0.4.4 Kokoro vocoder bug (`SineGen._f02sine` length
-  mismatch → broadcast error → HTTP 500). Not fixed. Options: pin mlx-audio to a working version,
-  patch the vendored `_f02sine` to crop to `f0` length (`sines[:, :L, :]`; hacky, wiped on reinstall),
-  or do this Phase-2 native port (the real fix).
+  mismatch → broadcast error → HTTP 500; confirmed upstream — see the evidence section's #784/#786/#785
+  detail). **Worked around 2026-06-17: pinned `mlx-audio==0.4.1`.** Applied in `setup.sh` +
+  `SetupManager.swift` (Step 2) and installed into the live venv. Verified end-to-end with a before/after
+  probe: on 0.4.4 even `"Hello there."` 500'd `(1,36600,1) vs (1,36900,9)`; on 0.4.1 the same input, a
+  33s paragraph, and a direct `SineGen(upsample_scale=300)` case all synthesize, and setup's smoke-test
+  import chain passes. This unblocks TTS but keeps Python in the loop — the native port (below) remains
+  the durable fix that also removes the whole version-drift failure class. Drop the pin once upstream PR
+  #785 ships. (Caveat: the reinstall wiped the kokoro.py voice-cache perf patch — re-apply it as a
+  runtime monkeypatch in `unified_server.py`, not a venv edit, since venv edits don't survive reinstall.)
 - **Voice output end-to-end** — the `[VOICE:]` instruction half works (`CLAUDE.md`; Codex = `AGENTS.md`),
   and the **Stop hook is configured repo-locally** (`.claude/settings.local.json`, gitignored →
   `hooks/tts-hook.sh`), but it needs a **session restart** to load AND working synthesis before any
