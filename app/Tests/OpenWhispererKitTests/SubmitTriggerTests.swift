@@ -8,6 +8,7 @@ struct KitTestRunner {
         var failures: [String] = []
         failures += submitTriggerFailures()
         failures += pcmConversionFailures()
+        failures += voiceSignalFailures()
 
         if failures.isEmpty {
             print("✅ OpenWhispererKit: all checks passed")
