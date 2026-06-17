@@ -8,22 +8,10 @@ enum Paths {
         return base.appendingPathComponent("OpenWhisperer")
     }()
 
-    /// Python venv location
-    static let venv = appSupport.appendingPathComponent("venv")
-
-    /// Python binary inside venv
-    static let python = venv.appendingPathComponent("bin").appendingPathComponent("python")
-
     /// App Resources directory (safe unwrap)
     private static let resources: URL = {
         Bundle.main.resourceURL ?? Bundle.main.bundleURL.appendingPathComponent("Contents/Resources")
     }()
-
-    /// uv binary (bundled in app Resources)
-    static let uvBinary = resources.appendingPathComponent("uv")
-
-    /// Unified server script (TTS + STT in one process)
-    static let unifiedServer = resources.appendingPathComponent("servers").appendingPathComponent("unified_server.py")
 
     /// Bundled hook script
     static let ttsHook = resources.appendingPathComponent("hooks").appendingPathComponent("tts-hook.sh")
@@ -40,10 +28,7 @@ enum Paths {
     /// Setup marker file
     static let setupComplete = appSupport.appendingPathComponent(".setup-complete")
 
-    /// Server PID file (single unified server)
-    static let serverPidFile = appSupport.appendingPathComponent("server.pid")
-
-    /// Log file (single unified server)
+    /// Log file (native TTS server)
     static let serverLog = appSupport.appendingPathComponent("server.log")
     static let setupLog = appSupport.appendingPathComponent("setup.log")
 
