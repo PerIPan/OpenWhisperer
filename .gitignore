@@ -28,3 +28,6 @@ CACHEDIR.TAG
 *.xcworkspace
 docs/plans/hands-free-mode-plan.md
 ROADMAP.md
+
+# Claude Code local (machine-specific) settings
+.claude/settings.local.json
