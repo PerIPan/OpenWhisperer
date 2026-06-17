@@ -108,3 +108,41 @@ pin) longer while reassessing.
 
 - Hardware floor (MLX Apple-Silicon-only vs FluidAudio CoreML wider), weights-shipping, and the in-process
   engine integration are **Phase 2b**, decided only if this spike passes. See the parent doc.
+
+## Spike Results & Verdict (2026-06-17)
+
+Built and run as throwaway tooling under the gitignored `app/Tools/G2PParity/`. **Both feasibility gates passed.**
+
+- **Gate A — MisakiSwift builds & emits phonemes.** Resolves via SwiftPM; API is
+  `EnglishG2P(british: false).phonemize(text:)`, emitting the *same* 49-symbol alphabet as Python misaki
+  (`"Hello world!" → həlˈO wˈɜɹld!` on both). Runtime needs MLX's Metal lib, which the plain CLI build under
+  Command Line Tools does not produce — worked around by colocating the venv's prebuilt `mlx.metallib` next to
+  the binary (mlx-swift searches for a colocated `mlx.metallib` first).
+- **Gate B — phoneme injection into Kokoro.** `KokoroPipeline.generate_from_tokens("<phoneme string>",
+  voice: "af_heart")` synthesizes a raw phoneme string directly (cast Kokoro's float16 → float32 for
+  `soundfile`). Produced audibly distinct A/B clips.
+
+**Parity over a 91-line corpus (stress + real), exact / normalized:**
+
+| bucket | exact% | normalized% | read |
+|---|---|---|---|
+| real (pass-bar set) | 90% | 96% | meets the bar |
+| acronym | 90% | 90% | fine |
+| heteronym | 84% | 88% | minor losses — past-tense `read`, `content` stress |
+| number / money | 40% | 46% | **the one real regression** — drops `$5.99`, `2.5`, `%`, a digit of `2026` |
+| oov / names | 50% | 50% | **MisakiSwift wins** — Python misaki here emits `❓` (no espeak fallback); MisakiSwift's BART pronounces them |
+
+**Key insight:** most non-number divergences are MisakiSwift being *better* — the Python misaki in our venv has
+no OOV fallback, so native g2p is an **upgrade over the current Python TTS** on unusual words, not just parity.
+
+**Verdict: GO.** Native g2p meets the pragmatic bar — ≥90% on real text, not-worse on common cases, better on
+OOV. Rare OOV-tail differences are acceptable per the gate.
+
+**Phase 2b follow-ups surfaced by the spike:**
+1. **Number/money normalization shim** (approved) — expand numbers → words before MisakiSwift
+   (e.g. `$5.99` → "five dollars and ninety nine cents"), sidestepping its weak number handler. Closes the
+   one regression.
+2. **MLX metallib build/runtime constraint.** The MLX-Swift path (MisakiSwift + `kokoro-ios`) needs either
+   full **Xcode** (the `metal` compiler) at build time, or a prebuilt `mlx.metallib` colocated/bundled at
+   runtime. The app must **bundle the metallib** into `OpenWhisperer.app`, and `build-dmg.sh` (plain
+   `swift build` under Command Line Tools) needs updating accordingly.
