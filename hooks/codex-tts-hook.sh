@@ -39,6 +39,25 @@ trap 'rm -rf "$HOOK_LOCK"' EXIT
 # If lock not acquired after retries, another hook is running — skip
 if [ "$LOCK_ACQUIRED" = "false" ]; then exit 0; fi
 
+# Codex notify: JSON payload comes as the last CLI argument
+INPUT="${!#}"
+if [ -z "$INPUT" ] || [ "$INPUT" = "$0" ]; then INPUT=$(cat); fi
+[ -z "$INPUT" ] && exit 0
+TYPE=$(echo "$INPUT" | jq -r '.type // empty' 2>/dev/null)
+if [ "$TYPE" != "agent-turn-complete" ] && [ -n "$TYPE" ]; then exit 0; fi
+
+# --- Voice-turn gate: only speak dictated turns. Codex has no per-prompt session id,
+#     so gate on the app's voice_turn signal (presence + freshness) and clear it. ---
+VOICE_TURN="$APP_SUPPORT/voice_turn"
+VOICE_FRESHNESS=300
+[ -f "$VOICE_TURN" ] || exit 0
+VT_TS=$(sed -n '2p' "$VOICE_TURN" 2>/dev/null)
+NOW=$(date +%s)
+if [ -n "$VT_TS" ] && [ "$((NOW - VT_TS))" -gt "$VOICE_FRESHNESS" ]; then
+  rm -f "$VOICE_TURN"; exit 0
+fi
+rm -f "$VOICE_TURN"   # claim: this turn is spoken, future typed turns are not
+
 # Kill any previous TTS playback (validate PID before killing)
 if [ -f "$PIDFILE" ] && [ ! -L "$PIDFILE" ]; then
   OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
@@ -56,51 +75,11 @@ if [ -f "$PIDFILE" ] && [ ! -L "$PIDFILE" ]; then
   rm -f "$PIDFILE"
 fi
 
-# Codex notify: JSON payload comes as the last CLI argument
-INPUT="${!#}"
-
-# If no argument, try stdin as fallback
-if [ -z "$INPUT" ] || [ "$INPUT" = "$0" ]; then
-  INPUT=$(cat)
-fi
-
-[ -z "$INPUT" ] && exit 0
-
-# Parse the Codex notify payload
-TYPE=$(echo "$INPUT" | jq -r '.type // empty' 2>/dev/null)
-
-# Only process agent-turn-complete events
-if [ "$TYPE" != "agent-turn-complete" ] && [ -n "$TYPE" ]; then
-  exit 0
-fi
-
 # Codex uses "last-assistant-message" (hyphenated key)
 TEXT=$(echo "$INPUT" | jq -r '.["last-assistant-message"] // .last_assistant_message // empty' 2>/dev/null)
 [ -z "$TEXT" ] && exit 0
-
-# Extract [VOICE: ...] tag if present
-SPEECH=$(echo "$TEXT" | sed -n -E 's/.*\[VOICE: ([^]]*)\].*/\1/p' | tail -1)
-
-# Fallback: clean up raw text if no VOICE tag
-if [ -z "$SPEECH" ]; then
-  SPEECH=$(echo "$TEXT" | \
-    sed 's/```[^`]*```//g' | \
-    sed 's/`[^`]*`//g' | \
-    sed 's/\*\*//g; s/\*//g' | \
-    sed -E 's/^#+ *//g' | \
-    sed 's/|[^|]*|//g' | \
-    sed -E 's/^- +//g; s/^[0-9]+\. //g' | \
-    sed -E 's/\[([^]]*)\]\([^)]*\)/\1/g' | \
-    sed -E 's|https?://[^ ]*||g' | \
-    sed 's/  */ /g' | \
-    tr '\n' ' ' | \
-    sed 's/  */ /g; s/^ *//; s/ *$//')
-  if [ ${#SPEECH} -gt 600 ]; then
-    SPEECH="${SPEECH:0:700}"
-    SPEECH=$(echo "$SPEECH" | sed 's/\([.!?]\)[^.!?]*$/\1/')
-  fi
-fi
-
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+SPEECH=$(printf '%s' "$TEXT" | "$HOOK_DIR/first-paragraph.sh")
 [ -z "$SPEECH" ] && exit 0
 
 # Lock AFTER validation — only when we know we'll play audio
