@@ -115,11 +115,29 @@ class SetupManager: ObservableObject {
                 return
             }
 
-            // Step 6: Smoke test — verify critical imports work
+            // Step 5b: Install the deps unified_server.py imports DIRECTLY. mlx-audio does
+            // not guarantee these transitively, so without them the TTS server crashes on
+            // startup (ModuleNotFoundError: soundfile / fastapi / uvicorn / webrtcvad, and
+            // FastAPI Form uploads need python-multipart). setuptools<81 is installed above
+            // because webrtcvad's import uses the deprecated pkg_resources.
+            updateState(.inProgress("Installing server dependencies..."), progress: 0.78)
+            for dep in ["soundfile", "fastapi", "uvicorn", "python-multipart", "webrtcvad", "misaki[en]"] {
+                guard uvPipInstall(dep, timeout: 300) else {
+                    updateState(.failed("Failed to install \(dep)"), progress: 0)
+                    DispatchQueue.main.async {
+                        self.isSetupRunning = false
+                        completion(false)
+                    }
+                    return
+                }
+            }
+
+            // Step 6: Smoke test — import exactly what the TTS server needs so a missing
+            // server dependency can't slip through (the old test only checked 3 modules).
             updateState(.inProgress("Verifying installation..."), progress: 0.85)
             guard runCommand(
                 Paths.python.path,
-                args: ["-c", "import mlx_whisper; import mlx_audio; import spacy; print('OK')"],
+                args: ["-c", "import soundfile, mlx_whisper, uvicorn, fastapi, webrtcvad, spacy, misaki.en; from mlx_audio.server import app; print('OK')"],
                 step: "Import smoke test...",
                 // Cold first imports (spaCy pipeline + MLX Metal warmup) can exceed 30s.
                 timeout: 180

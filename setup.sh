@@ -47,6 +47,11 @@ uv pip install en_core_web_sm@https://github.com/explosion/spacy-models/releases
 echo "Installing setuptools (required by webrtcvad)..."
 uv pip install "setuptools<81"
 
+# unified_server.py imports these DIRECTLY; mlx-audio does not guarantee them
+# transitively, so the server crashes on startup without them.
+echo "Installing server dependencies (soundfile, FastAPI/uvicorn, webrtcvad, misaki)..."
+uv pip install soundfile fastapi uvicorn python-multipart webrtcvad "misaki[en]"
+
 # Make scripts executable
 chmod +x "$SCRIPT_DIR/hooks/tts-hook.sh"
 chmod +x "$SCRIPT_DIR/servers/start-servers.sh"
