@@ -1,0 +1,22 @@
+import Foundation
+
+/// Plain-executable test runner for OpenWhispererKit (CLT has no XCTest/Testing module).
+/// Aggregates every check-group's failures and exits non-zero if any fail.
+@main
+struct KitTestRunner {
+    static func main() {
+        var failures: [String] = []
+        failures += submitTriggerFailures()
+        failures += pcmConversionFailures()
+
+        if failures.isEmpty {
+            print("✅ OpenWhispererKit: all checks passed")
+        } else {
+            for f in failures {
+                FileHandle.standardError.write(Data(("❌ " + f + "\n").utf8))
+            }
+            FileHandle.standardError.write(Data("\n\(failures.count) check(s) failed\n".utf8))
+            exit(1)
+        }
+    }
+}

@@ -29,6 +29,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Start hotkey listener immediately so Ctrl works without opening the menubar first
         setupDictation()
 
+        // Kick off the one-time WhisperKit model download + load so the first dictation
+        // isn't blocked on it. Independent of the Python server (which now serves TTS only).
+        dictationManager.prepareSTT()
+
         if setupManager.isSetupComplete {
             serverManager.startAll()
         } else {

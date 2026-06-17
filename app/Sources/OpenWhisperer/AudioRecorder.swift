@@ -2,11 +2,12 @@ import AVFoundation
 import AppKit
 import Combine
 import os.log
+import OpenWhispererKit
 
 private let audioLog = OSLog(subsystem: "com.openwhisperer.app", category: "audio")
 
 /// Records microphone audio, provides real-time RMS levels for waveform,
-/// and exports 16kHz 16-bit mono WAV data for Whisper transcription.
+/// and exports 16 kHz mono Float32 PCM for in-process Whisper (WhisperKit) transcription.
 class AudioRecorder: ObservableObject {
     enum State {
         case idle, recording, uploading
@@ -126,9 +127,10 @@ class AudioRecorder: ObservableObject {
         state = .recording
     }
 
-    /// Flush current PCM buffers and continue recording (hands-free mode).
-    /// Returns the WAV data for transcription without stopping the engine.
-    func flushAndContinue() -> Data? {
+    /// Flush current PCM buffers as normalized Float32 (16 kHz mono) and continue
+    /// recording (hands-free). In-process equivalent of `flushAndContinue()` for the
+    /// native WhisperKit path — feeds the model directly without a WAV round-trip.
+    func flushAndContinueFloat() -> [Float]? {
         dispatchPrecondition(condition: .onQueue(.main))
         bufferLock.lock()
         let snapshot = pcmBuffers
@@ -138,7 +140,7 @@ class AudioRecorder: ObservableObject {
         silenceFired = false
         silenceStart = nil
         state = .uploading
-        return mergeToWAV(from: snapshot)
+        return Self.mergeToFloat(from: snapshot)
     }
 
     /// Return to listening state after transcription completes (hands-free).
@@ -268,14 +270,15 @@ class AudioRecorder: ObservableObject {
         levelHistory = Array(repeating: 0, count: 50)
     }
 
-    /// Merge accumulated PCM buffers into WAV data. Safe to call from any thread.
-    func exportWAV() -> Data? {
-        // Snapshot buffers under lock, then merge outside to avoid blocking audio tap
+    /// Merge accumulated PCM buffers into normalized Float32 samples (16 kHz mono).
+    /// Snapshots under lock, then converts outside to avoid blocking the audio tap.
+    /// Safe to call from any thread.
+    func exportPCMFloat() -> [Float]? {
         bufferLock.lock()
         let snapshot = pcmBuffers
         pcmBuffers = []
         bufferLock.unlock()
-        return mergeToWAV(from: snapshot)
+        return Self.mergeToFloat(from: snapshot)
     }
 
     func reset() {
@@ -391,77 +394,21 @@ class AudioRecorder: ObservableObject {
         return outputBuffer.frameLength > 0 ? outputBuffer : nil
     }
 
-    // MARK: - WAV Export
+    // MARK: - PCM Export
 
-    private func mergeToWAV(from buffers: [AVAudioPCMBuffer]) -> Data? {
+    /// Concatenate Int16 PCM buffers and normalize to Float32 in [-1, 1) via the
+    /// unit-tested `PCMConversion`. Returns nil if there are no samples.
+    private static func mergeToFloat(from buffers: [AVAudioPCMBuffer]) -> [Float]? {
         guard !buffers.isEmpty else { return nil }
-
-        let totalFrames = buffers.reduce(0) { $0 + Int($1.frameLength) }
-        guard totalFrames > 0 else { return nil }
-
-        let bytesPerSample = 2
-        let numChannels = 1
-        var dataSize = totalFrames * bytesPerSample * numChannels
-
-        // Guard against UInt32 overflow (~24min at 16kHz mono 16-bit) (Mi-4)
-        if dataSize > Int(UInt32.max) - 36 {
-            // WAV too large — truncating to UInt32 max
-            dataSize = Int(UInt32.max) - 36
-        }
-
-        // Pre-allocate to avoid O(n log n) reallocation cost (#20)
-        var wav = Data(capacity: 44 + dataSize)
-
-        wav.append(contentsOf: [UInt8]("RIFF".utf8))
-        wav.append(uint32LE: UInt32(36 + dataSize))
-        wav.append(contentsOf: [UInt8]("WAVE".utf8))
-
-        wav.append(contentsOf: [UInt8]("fmt ".utf8))
-        wav.append(uint32LE: 16)
-        wav.append(uint16LE: 1)
-        wav.append(uint16LE: UInt16(numChannels))
-        wav.append(uint32LE: UInt32(targetSampleRate))
-        wav.append(uint32LE: UInt32(targetSampleRate) * UInt32(numChannels * bytesPerSample))
-        wav.append(uint16LE: UInt16(numChannels * bytesPerSample))
-        wav.append(uint16LE: UInt16(bytesPerSample * 8))
-
-        wav.append(contentsOf: [UInt8]("data".utf8))
-        wav.append(uint32LE: UInt32(dataSize))
-
-        var written = 0
+        var int16s: [Int16] = []
+        int16s.reserveCapacity(buffers.reduce(0) { $0 + Int($1.frameLength) })
         for buffer in buffers {
-            guard let int16Data = buffer.int16ChannelData else { continue }
+            guard let data = buffer.int16ChannelData else { continue }
             let count = Int(buffer.frameLength)
             guard count > 0 else { continue }
-            let byteCount = count * bytesPerSample
-            // Stop at declared dataSize to keep header consistent (#6)
-            let remaining = dataSize - written
-            guard remaining > 0 else { break }
-            let toWrite = min(byteCount, remaining)
-            let ptr = UnsafeBufferPointer(start: int16Data[0], count: count)
-            guard let base = ptr.baseAddress else { continue }
-            wav.append(UnsafeBufferPointer(start: UnsafeRawPointer(base).assumingMemoryBound(to: UInt8.self),
-                                            count: toWrite))
-            written += toWrite
+            int16s.append(contentsOf: UnsafeBufferPointer(start: data[0], count: count))
         }
-
-        return wav
-    }
-}
-
-// MARK: - Data helpers for WAV header
-
-private extension Data {
-    mutating func append(uint16LE value: UInt16) {
-        var v = value.littleEndian
-        withUnsafePointer(to: &v) { ptr in
-            append(UnsafeBufferPointer(start: ptr, count: 1))
-        }
-    }
-    mutating func append(uint32LE value: UInt32) {
-        var v = value.littleEndian
-        withUnsafePointer(to: &v) { ptr in
-            append(UnsafeBufferPointer(start: ptr, count: 1))
-        }
+        guard !int16s.isEmpty else { return nil }
+        return PCMConversion.normalizeInt16(int16s)
     }
 }

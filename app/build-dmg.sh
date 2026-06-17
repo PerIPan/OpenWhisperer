@@ -33,6 +33,15 @@ mkdir -p "$APP_BUNDLE/Contents/Resources/scripts"
 # Copy binary
 cp "$BINARY" "$APP_BUNDLE/Contents/MacOS/OpenWhisperer"
 
+# Copy SwiftPM resource bundles (e.g. swift-transformers Hub, swift-crypto) so
+# `Bundle.module` resolves them at runtime. WhisperKit pulls these in; without them
+# the packaged .app crashes on first model load. They are looked up via
+# Bundle.main.resourceURL (= Contents/Resources). Statically-linked Swift code means
+# no dylibs to copy — only these bundles.
+for bundle in "$SCRIPT_DIR/.build/release/"*.bundle; do
+    [ -e "$bundle" ] && cp -R "$bundle" "$APP_BUNDLE/Contents/Resources/"
+done
+
 # Copy Info.plist, icon, and fonts
 cp "$SCRIPT_DIR/Resources/Info.plist" "$APP_BUNDLE/Contents/"
 cp "$SCRIPT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"

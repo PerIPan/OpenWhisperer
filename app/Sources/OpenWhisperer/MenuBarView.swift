@@ -229,7 +229,6 @@ struct MenuBarView: View {
                     selectedVolume = match.id
                 }
             }
-            dictationManager.updatePort(serverManager.port)
             selectedMode = InteractionMode.load()
             if let savedStr = try? String(contentsOf: Paths.silenceThreshold, encoding: .utf8),
                let saved = Int(savedStr.trimmingCharacters(in: .whitespacesAndNewlines)) {
@@ -296,10 +295,12 @@ struct MenuBarView: View {
         OWCard {
             VStack(spacing: 0) {
                 ModernStatusRow(
-                    label: "Whisper Speech-to-Text",
-                    subtitle: serverManager.sttModel,
-                    port: "\(serverManager.port)",
-                    status: serverManager.status
+                    label: "Whisper STT (on-device)",
+                    subtitle: dictationManager.sttModelReady
+                        ? "large-v3-turbo"
+                        : (dictationManager.sttStatus ?? "Loading…"),
+                    port: "local",
+                    status: dictationManager.sttModelReady ? .running : .starting
                 )
                 OWInternalDivider()
                 ModernStatusRow(

@@ -12,11 +12,7 @@ struct OpenWhispererApp: App {
                 .environmentObject(appDelegate.dictationManager)
                 .environmentObject(appDelegate.accessibilityManager)
                 .onAppear {
-                    appDelegate.dictationManager.updatePort(appDelegate.serverManager.port)
                     appDelegate.setupDictation()
-                }
-                .onChange(of: appDelegate.serverManager.port) { _, newPort in
-                    appDelegate.dictationManager.updatePort(newPort)
                 }
         }
         .menuBarExtraStyle(.window)

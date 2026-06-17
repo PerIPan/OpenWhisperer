@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import Combine
 import os.log
+import OpenWhispererKit
 
 private let dictLog = OSLog(subsystem: "com.openwhisperer.app", category: "dictation")
 
@@ -10,6 +11,8 @@ private let dictLog = OSLog(subsystem: "com.openwhisperer.app", category: "dicta
 class DictationManager: ObservableObject {
     let recorder = AudioRecorder()
     let keywordDetector = KeywordDetector()
+    /// In-process Whisper STT (WhisperKit). Replaces the HTTP call to the Python server.
+    let transcriber = SpeechTranscriber()
 
     @Published var lastTranscription: String = ""
     @Published var error: String?
@@ -28,9 +31,15 @@ class DictationManager: ObservableObject {
     @Published var ttsPlaying = false
     /// Whether hands-free is calibrating ambient noise
     @Published var isCalibrating = false
+    /// Non-nil while the speech model is downloading/loading (status string for the UI).
+    @Published var sttStatus: String?
+    /// True once the WhisperKit model is loaded and ready to transcribe.
+    @Published var sttModelReady = false
 
-    private var port: Int = 8000
     private var isTyping = false  // prevent concurrent typeText
+
+    /// Minimum sample count to bother transcribing (~0.3s at 16kHz mono).
+    private static let minSampleCount = 4800
 
     /// The PID of the app that was frontmost when the user pressed the hotkey.
     /// Captured on the main thread at press-time, before any focus shifts.
@@ -48,7 +57,11 @@ class DictationManager: ObservableObject {
     private var recorderSink: AnyCancellable?
     private var engineErrorSink: AnyCancellable?
     private var uploadWatchdog: DispatchWorkItem?
-    private var activeUploadTask: URLSessionDataTask?
+    /// The in-flight transcription. Cancelled on mode switch / timeout; a cancelled
+    /// task's result is dropped via the `Task.isCancelled` guard so it can never type
+    /// into the wrong app (the T1.2/T1.4 invariant). Note: cancelling does NOT interrupt
+    /// WhisperKit mid-inference — the guard, not the cancel, preserves correctness.
+    private var activeTranscribeTask: Task<Void, Never>?
     /// True while a barge-in recording is active — prevents handleTTSStateChange from resetting to keyword mode
     private var bargedIn = false
     /// Monitors the TTS lock file for barge-in / mic muting
@@ -121,8 +134,26 @@ class DictationManager: ObservableObject {
         }
     }
 
-    func updatePort(_ port: Int) {
-        self.port = port
+    /// Kick off the one-time WhisperKit model download + load. Call at launch so the
+    /// first dictation isn't blocked on a multi-minute download. Idempotent.
+    func prepareSTT() {
+        guard !sttModelReady else { return }
+        sttStatus = "Loading speech model…"
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await self.transcriber.prepare()
+                await MainActor.run {
+                    self.sttModelReady = true
+                    self.sttStatus = nil
+                }
+            } catch {
+                await MainActor.run {
+                    self.sttStatus = "Speech model failed to load"
+                    self.error = error.localizedDescription
+                }
+            }
+        }
     }
 
     // MARK: - Capture Target App (call on main thread at hotkey PRESS, not release)
@@ -171,9 +202,9 @@ class DictationManager: ObservableObject {
             if recorder.state == .listening || recorder.state == .recording || recorder.state == .uploading {
                 uploadWatchdog?.cancel()
                 uploadWatchdog = nil
-                // Cancel any in-flight upload so its completion can't type into the wrong app (T1.2)
-                activeUploadTask?.cancel()
-                activeUploadTask = nil
+                // Drop any in-flight transcription so its result can't type into the wrong app (T1.2)
+                activeTranscribeTask?.cancel()
+                activeTranscribeTask = nil
                 recorder.stopEngine()
             }
         }
@@ -257,9 +288,9 @@ class DictationManager: ObservableObject {
         dispatchPrecondition(condition: .onQueue(.main))
         uploadWatchdog?.cancel()
         uploadWatchdog = nil
-        // Cancel any in-flight upload so its completion can't type into the wrong app (T1.2)
-        activeUploadTask?.cancel()
-        activeUploadTask = nil
+        // Drop any in-flight transcription so its result can't type into the wrong app (T1.2)
+        activeTranscribeTask?.cancel()
+        activeTranscribeTask = nil
         recorder.silenceDetectionEnabled = false
         keywordDetector.stop()
         stopTTSLockMonitoring()
@@ -298,31 +329,30 @@ class DictationManager: ObservableObject {
     /// Flush current audio buffer and transcribe (hands-free — engine stays running).
     private func handsFreeFlushAndTranscribe() {
         let language = readLanguage()
-        let currentPort = port
         let pid = targetPID
 
-        guard let wavData = recorder.flushAndContinue() else {
+        guard let samples = recorder.flushAndContinueFloat() else {
             recorder.resumeListening()
             keywordDetector.start()
             return
         }
 
-        // Skip very short recordings
-        if wavData.count < 9700 {
+        // Skip very short recordings (~0.3s at 16kHz)
+        if samples.count < Self.minSampleCount {
             recorder.resumeListening()
             keywordDetector.start()
             return
         }
 
-        os_log(.default, log: dictLog, "Hands-free WAV: %d bytes", wavData.count)
+        os_log(.default, log: dictLog, "Hands-free samples: %d", samples.count)
 
         uploadWatchdog?.cancel()
         let watchdog = DispatchWorkItem { [weak self] in
             guard let self, self.recorder.state == .uploading else { return }
-            os_log(.default, log: dictLog, "Watchdog: hands-free upload exceeded 35s")
+            os_log(.default, log: dictLog, "Watchdog: hands-free transcription exceeded 35s")
             self.bargedIn = false
-            self.activeUploadTask?.cancel()
-            self.activeUploadTask = nil
+            self.activeTranscribeTask?.cancel()
+            self.activeTranscribeTask = nil
             self.isTyping = false
             self.recorder.resumeListening()
             self.keywordDetector.start()
@@ -331,46 +361,57 @@ class DictationManager: ObservableObject {
         uploadWatchdog = watchdog
         DispatchQueue.main.asyncAfter(deadline: .now() + 35, execute: watchdog)
 
-        activeUploadTask = uploadToWhisper(wavData: wavData, language: language, port: currentPort, handsFree: true) { [weak self] result in
+        activeTranscribeTask = Task { [weak self] in
             guard let self else { return }
-            DispatchQueue.main.async {
-                self.activeUploadTask = nil
-                self.uploadWatchdog?.cancel()
-                self.uploadWatchdog = nil
-
-                switch result {
-                case .success(let text):
-                    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        os_log(.default, log: dictLog, "HF transcribed: %{public}@", trimmed)
-                        self.lastTranscription = trimmed
-                        self.error = nil
-                        self.isTyping = true
-                        self.insertText(trimmed, intoPID: pid, forceSubmit: true) { [weak self] in
-                            guard let self else { return }
-                            self.isTyping = false
-                            // Only resume hands-free listening if still in hands-free mode (T1.4):
-                            // the user may have switched to PTT/hold while this upload was in flight.
-                            guard self.interactionMode == .handsFree else { return }
-                            self.recorder.resumeListening()
-                            self.keywordDetector.start()
-                        }
-                        return
-                    }
-                case .failure(let err):
-                    os_log(.default, log: dictLog, "HF upload failed: %{public}@", err.localizedDescription)
-                    // Don't surface a user-initiated cancellation (mode switch) as an error (review)
-                    if (err as NSError).code != NSURLErrorCancelled {
-                        self.error = err.localizedDescription
-                    }
-                }
-
-                // Resume listening on empty result or failure — only if still hands-free (T1.4)
-                guard self.interactionMode == .handsFree else { return }
-                self.recorder.resumeListening()
-                self.keywordDetector.start()
+            let result: Result<String, Error>
+            do {
+                let text = try await self.transcriber.transcribe(samples: samples, language: language)
+                result = .success(text)
+            } catch {
+                result = .failure(error)
+            }
+            if Task.isCancelled { return }  // dropped by mode switch / watchdog (T1.4)
+            await MainActor.run { [weak self] in
+                self?.handleHandsFreeResult(result, pid: pid)
             }
         }
+    }
+
+    /// Main-thread completion for a hands-free transcription. Strips the trailing submit
+    /// phrase (as the server used to), types the text, and always presses Enter
+    /// (hands-free auto-submits). Resumes listening only if still hands-free (T1.4).
+    private func handleHandsFreeResult(_ result: Result<String, Error>, pid: pid_t) {
+        activeTranscribeTask = nil
+        uploadWatchdog?.cancel()
+        uploadWatchdog = nil
+
+        switch result {
+        case .success(let text):
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let (cleaned, _) = SubmitTrigger.process(trimmed)
+            if !cleaned.isEmpty {
+                os_log(.default, log: dictLog, "HF transcribed: %{public}@", cleaned)
+                lastTranscription = cleaned
+                error = nil
+                isTyping = true
+                insertText(cleaned, intoPID: pid, forceSubmit: true) { [weak self] in
+                    guard let self else { return }
+                    self.isTyping = false
+                    guard self.interactionMode == .handsFree else { return }
+                    self.recorder.resumeListening()
+                    self.keywordDetector.start()
+                }
+                return
+            }
+        case .failure(let err):
+            os_log(.default, log: dictLog, "HF transcription failed: %{public}@", err.localizedDescription)
+            error = err.localizedDescription
+        }
+
+        // Empty result or failure — resume listening only if still hands-free (T1.4)
+        guard interactionMode == .handsFree else { return }
+        recorder.resumeListening()
+        keywordDetector.start()
     }
 
     // MARK: - Barge-in
@@ -447,19 +488,18 @@ class DictationManager: ObservableObject {
     // MARK: - Press-to-Talk Finish Recording & Transcribe
 
     private func finishAndTranscribe() {
-        recorder.stopRecording()
+        recorder.stopRecording()  // → .uploading; engine stopped, buffers complete
 
         let language = readLanguage()
-        let currentPort = port
         let pid = targetPID  // capture on main thread right now
 
         // Cancel any previous watchdog before creating a new one (C-5)
         uploadWatchdog?.cancel()
         let watchdog = DispatchWorkItem { [weak self] in
             guard let self, self.recorder.state == .uploading else { return }
-            os_log(.default, log: dictLog, "Watchdog: upload exceeded 35s, forcing reset")
-            self.activeUploadTask?.cancel()
-            self.activeUploadTask = nil
+            os_log(.default, log: dictLog, "Watchdog: transcription exceeded 35s, forcing reset")
+            self.activeTranscribeTask?.cancel()
+            self.activeTranscribeTask = nil
             self.isTyping = false  // Clear isTyping so dictation isn't bricked (C-1)
             self.recorder.reset()
             self.error = "Transcription timed out"
@@ -467,65 +507,65 @@ class DictationManager: ObservableObject {
         uploadWatchdog = watchdog
         DispatchQueue.main.asyncAfter(deadline: .now() + 35, execute: watchdog)
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        guard let samples = recorder.exportPCMFloat() else {
+            uploadWatchdog?.cancel()
+            uploadWatchdog = nil
+            recorder.reset()
+            return
+        }
+
+        // Skip very short recordings (~0.3s at 16kHz)
+        if samples.count < Self.minSampleCount {
+            uploadWatchdog?.cancel()
+            uploadWatchdog = nil
+            recorder.reset()
+            return
+        }
+
+        os_log(.default, log: dictLog, "PTT samples: %d, transcribing", samples.count)
+
+        activeTranscribeTask = Task { [weak self] in
             guard let self else { return }
-            guard let wavData = self.recorder.exportWAV() else {
-                DispatchQueue.main.async {
-                    self.uploadWatchdog?.cancel()
-                    self.uploadWatchdog = nil
-                    self.recorder.reset()
-                }
-                return
+            let result: Result<String, Error>
+            do {
+                let text = try await self.transcriber.transcribe(samples: samples, language: language)
+                result = .success(text)
+            } catch {
+                result = .failure(error)
             }
+            if Task.isCancelled { return }  // dropped by mode switch / watchdog (T1.2)
+            await MainActor.run { [weak self] in
+                self?.handlePushToTalkResult(result, pid: pid)
+            }
+        }
+    }
 
-            os_log(.default, log: dictLog, "WAV data: %d bytes, uploading to port %d", wavData.count, currentPort)
+    /// Main-thread completion for a push-to-talk transcription. When the auto-submit
+    /// flag is set, strip the trailing trigger phrase (as the server used to) and let
+    /// `insertText` press Enter — it already does so whenever the flag exists, so there
+    /// is exactly one Enter and no double-submit.
+    private func handlePushToTalkResult(_ result: Result<String, Error>, pid: pid_t) {
+        activeTranscribeTask = nil
+        uploadWatchdog?.cancel()
+        uploadWatchdog = nil
+        recorder.reset()
 
-            // Skip very short recordings (< 0.3s at 16kHz 16-bit mono)
-            if wavData.count < 9700 {
-                DispatchQueue.main.async {
-                    self.uploadWatchdog?.cancel()
-                    self.uploadWatchdog = nil
-                    self.recorder.reset()
-                }
-                return
+        switch result {
+        case .success(let text):
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            let autoSubmit = FileManager.default.fileExists(atPath: Paths.autoSubmitFlag.path)
+            let finalText = autoSubmit ? SubmitTrigger.process(trimmed).cleaned : trimmed
+            os_log(.default, log: dictLog, "Transcribed: %{public}@, inserting into PID %d", finalText, pid)
+            lastTranscription = finalText
+            error = nil
+            isTyping = true
+            insertText(finalText, intoPID: pid) { [weak self] in
+                self?.isTyping = false
             }
-
-            let task = self.uploadToWhisper(wavData: wavData, language: language, port: currentPort) { [weak self] result in
-                guard let self else { return }
-                DispatchQueue.main.async {
-                    self.activeUploadTask = nil
-                    self.uploadWatchdog?.cancel()
-                    self.uploadWatchdog = nil
-                    self.recorder.reset()
-                    os_log(.default, log: dictLog, "Upload completed, state reset to idle")
-                    switch result {
-                    case .success(let text):
-                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !trimmed.isEmpty else { return }
-                        os_log(.default, log: dictLog, "Transcribed: %{public}@, inserting into PID %d", trimmed, pid)
-                        self.lastTranscription = trimmed
-                        self.error = nil
-                        self.isTyping = true
-                        self.insertText(trimmed, intoPID: pid) { [weak self] in
-                            self?.isTyping = false
-                        }
-                    case .failure(let err):
-                        os_log(.default, log: dictLog, "Upload failed: %{public}@", err.localizedDescription)
-                        // Don't surface a user-initiated cancellation (mode switch) as an error (review)
-                        if (err as NSError).code != NSURLErrorCancelled {
-                            self.error = err.localizedDescription
-                        }
-                    }
-                }
-            }
-            // Store the task on main so the watchdog / mode-switch can cancel a hung PTT upload (T1.3).
-            // Guard on state so a fast completion (which resets to .idle and nils the task) can't be
-            // clobbered by a late assignment of an already-finished task (review).
-            DispatchQueue.main.async {
-                if self.recorder.state == .uploading {
-                    self.activeUploadTask = task
-                }
-            }
+        case .failure(let err):
+            os_log(.default, log: dictLog, "Transcription failed: %{public}@", err.localizedDescription)
+            error = err.localizedDescription
         }
     }
 
@@ -559,87 +599,6 @@ class DictationManager: ObservableObject {
 
             try? FileManager.default.removeItem(at: lockFile)
         }
-    }
-
-    // MARK: - Upload to Whisper
-
-    @discardableResult
-    private func uploadToWhisper(
-        wavData: Data,
-        language: String?,
-        port: Int,
-        handsFree: Bool = false,
-        completion: @escaping (Result<String, Error>) -> Void
-    ) -> URLSessionDataTask? {
-        guard let url = URL(string: "http://localhost:\(port)/v1/audio/transcriptions") else {
-            completion(.failure(NSError(domain: "DictationManager", code: -1,
-                                       userInfo: [NSLocalizedDescriptionKey: "Invalid server URL"])))
-            return nil
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-
-        let boundary = "Boundary-\(UUID().uuidString)"
-        request.setValue(
-            "multipart/form-data; boundary=\(boundary)",
-            forHTTPHeaderField: "Content-Type"
-        )
-
-        var body = Data()
-        body.appendField(name: "model", value: "whisper", boundary: boundary)
-
-        if let lang = language, !lang.isEmpty, lang != "auto" {
-            body.appendField(name: "language", value: lang, boundary: boundary)
-        }
-
-        if handsFree {
-            body.appendField(name: "hands_free", value: "true", boundary: boundary)
-        }
-        body.appendField(name: "response_format", value: "json", boundary: boundary)
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append(
-            "Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n"
-                .data(using: .utf8)!
-        )
-        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(wavData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        request.httpBody = body
-
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-            os_log(.default, log: dictLog, "Upload response: HTTP %d, data=%db, error=%{public}@",
-                   statusCode, data?.count ?? 0, error?.localizedDescription ?? "nil")
-
-            if let error {
-                completion(.failure(error))
-                return
-            }
-            guard
-                let data,
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let text = json["text"] as? String
-            else {
-                completion(
-                    .failure(
-                        NSError(
-                            domain: "DictationManager",
-                            code: statusCode,
-                            userInfo: [
-                                NSLocalizedDescriptionKey:
-                                    "Whisper returned invalid response (HTTP \(statusCode))"
-                            ]
-                        )
-                    )
-                )
-                return
-            }
-            completion(.success(text))
-        }
-        task.resume()
-        return task
     }
 
     // MARK: - Insert Text (main thread orchestrator)
@@ -951,15 +910,5 @@ class DictationManager: ObservableObject {
         guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
         let lang = content.trimmingCharacters(in: .whitespacesAndNewlines)
         return lang.isEmpty || lang == "auto" ? nil : lang
-    }
-}
-
-// MARK: - Multipart helpers
-
-private extension Data {
-    mutating func appendField(name: String, value: String, boundary: String) {
-        append("--\(boundary)\r\n".data(using: .utf8)!)
-        append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
-        append("\(value)\r\n".data(using: .utf8)!)
     }
 }
