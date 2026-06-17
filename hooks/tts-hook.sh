@@ -23,14 +23,31 @@ if ! command -v jq &>/dev/null; then
   fi
 fi
 
+INPUT=$(cat)
+
+# Prevent loops
+if [ "$(printf '%s' "$INPUT" | jq -r '.stop_hook_active')" = "true" ]; then
+  exit 0
+fi
+
+# --- Voice-turn gate (runs BEFORE we kill prior playback, so a typed/non-voice
+#     turn never interrupts an in-progress voice reply) ---
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
+[ -z "$SESSION_ID" ] && exit 0
+PENDING_DIR="$APP_SUPPORT/speak_pending"
+SAFE_ID=$(printf '%s' "$SESSION_ID" | tr -c 'A-Za-z0-9_.-' '_')
+PENDING="$PENDING_DIR/$SAFE_ID"
+# Sweep markers orphaned by sessions that died between prompt and response.
+find "$PENDING_DIR" -type f -mmin +5 -delete 2>/dev/null
+# Only speak if THIS session was marked a voice turn by the UPS hook.
+[ -f "$PENDING" ] || exit 0
+rm -f "$PENDING"
+
 # Serialize concurrent hook invocations with mkdir-based lock (atomic on all filesystems)
 HOOK_LOCK="$APP_SUPPORT/tts_hook.lockdir"
-# Clean stale lock from crashed previous run (older than 30s)
 if [ -d "$HOOK_LOCK" ]; then
   LOCK_AGE=$(( $(date +%s) - $(stat -f %m "$HOOK_LOCK" 2>/dev/null || echo 0) ))
-  if [ "$LOCK_AGE" -gt 30 ]; then
-    rm -rf "$HOOK_LOCK"
-  fi
+  if [ "$LOCK_AGE" -gt 30 ]; then rm -rf "$HOOK_LOCK"; fi
 fi
 LOCK_ACQUIRED=false
 for _try in 1 2 3; do
@@ -38,64 +55,29 @@ for _try in 1 2 3; do
   sleep 0.1
 done
 trap 'rm -rf "$HOOK_LOCK"' EXIT
-# If lock not acquired after retries, another hook is running — skip
 if [ "$LOCK_ACQUIRED" = "false" ]; then exit 0; fi
 
 # Kill any previous TTS playback (validate PID before killing)
 if [ -f "$PIDFILE" ] && [ ! -L "$PIDFILE" ]; then
   OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
   if [[ "$OLD_PID" =~ ^[0-9]+$ ]] && kill -0 "$OLD_PID" 2>/dev/null; then
-    # Verify it's our process before killing
     OLD_COMM=$(ps -p "$OLD_PID" -o comm= 2>/dev/null)
     if [[ "$OLD_COMM" == *"bash"* ]] || [[ "$OLD_COMM" == *"afplay"* ]] || [[ "$OLD_COMM" == *"python"* ]]; then
-      # Send SIGINT to afplay children first (cleaner stop than SIGTERM)
       pkill -INT -P "$OLD_PID" 2>/dev/null
       kill "$OLD_PID" 2>/dev/null
       pkill -P "$OLD_PID" 2>/dev/null
     fi
     pkill -f tts_stream_player 2>/dev/null
   fi
-  # Clean up orphaned temp files from previous runs (scoped to our dir)
   find "$TTS_TMPDIR" -name "tts_*" -mmin +1 -delete 2>/dev/null
   rm -f "$PIDFILE"
 fi
 
-INPUT=$(cat)
-
-# Prevent loops
-if [ "$(echo "$INPUT" | jq -r '.stop_hook_active')" = "true" ]; then
-  exit 0
-fi
-
-TEXT=$(echo "$INPUT" | jq -r '.last_assistant_message // empty')
+# Extract the FIRST PARAGRAPH of the response (markdown-stripped) as the spoken text.
+TEXT=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // empty')
 [ -z "$TEXT" ] && exit 0
-
-# Extract [VOICE: ...] tag if present (Claude generates the spoken summary)
-# Use tail -1 to grab the LAST [VOICE:] tag (avoids matching literal mentions of the tag)
-# Use [^]]* (non-greedy via character class exclusion) to avoid grabbing nested brackets (#14)
-SPEECH=$(echo "$TEXT" | sed -n -E 's/.*\[VOICE: ([^]]*)\].*/\1/p' | tail -1)
-
-# Fallback: clean up raw text if no VOICE tag
-if [ -z "$SPEECH" ]; then
-  SPEECH=$(echo "$TEXT" | \
-    sed 's/```[^`]*```//g' | \
-    sed 's/`[^`]*`//g' | \
-    sed 's/\*\*//g; s/\*//g' | \
-    sed -E 's/^#+ *//g' | \
-    sed 's/|[^|]*|//g' | \
-    sed -E 's/^- +//g; s/^[0-9]+\. //g' | \
-    sed -E 's/\[([^]]*)\]\([^)]*\)/\1/g' | \
-    sed -E 's|https?://[^ ]*||g' | \
-    sed 's/  */ /g' | \
-    tr '\n' ' ' | \
-    sed 's/  */ /g; s/^ *//; s/ *$//')
-  # Truncate fallback at sentence boundary around 600 chars
-  if [ ${#SPEECH} -gt 600 ]; then
-    SPEECH="${SPEECH:0:700}"
-    SPEECH=$(echo "$SPEECH" | sed 's/\([.!?]\)[^.!?]*$/\1/')
-  fi
-fi
-
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+SPEECH=$(printf '%s' "$TEXT" | "$HOOK_DIR/first-paragraph.sh")
 [ -z "$SPEECH" ] && exit 0
 
 # Lock AFTER validation — only when we know we'll play audio
