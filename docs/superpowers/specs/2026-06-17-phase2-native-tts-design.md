@@ -19,6 +19,13 @@ already moved STT native; the Python server currently survives only for TTS.
 
 ## Recommended stack
 
+> **⚠️ SUPERSEDED (2026-06-17).** After the Phase-2a spike + a FluidAudio engine eval, the recommendation
+> flipped: **Phase 2b uses `FluidInference/FluidAudio` (CoreML) as the acoustic engine**, not the MLX stack
+> below. FluidAudio builds clean (no metallib / full-Xcode), is far better maintained (2279★ vs 28★), runs on
+> the ANE, keeps the same `af_heart` voice, and `synthesizeFromPhonemes` decouples engine from g2p. The MLX
+> table below is kept for history. See **"Engine eval: FluidAudio (CoreML) vs MLX"** in
+> [`2026-06-17-phase2a-g2p-parity-spike-design.md`](2026-06-17-phase2a-g2p-parity-spike-design.md).
+
 | Piece | Recommended | Fallback | License |
 |---|---|---|---|
 | Acoustic model (Kokoro-82M) | **`mlalma/kokoro-ios`** (MLX-Swift, same weights, 24 kHz) | `FluidInference/FluidAudio` (Kokoro on CoreML/ANE) | MIT / Apache-2.0 |

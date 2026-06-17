@@ -146,3 +146,35 @@ OOV. Rare OOV-tail differences are acceptable per the gate.
    full **Xcode** (the `metal` compiler) at build time, or a prebuilt `mlx.metallib` colocated/bundled at
    runtime. The app must **bundle the metallib** into `OpenWhisperer.app`, and `build-dmg.sh` (plain
    `swift build` under Command Line Tools) needs updating accordingly.
+
+## Engine eval: FluidAudio (CoreML) vs MLX — revised recommendation (2026-06-17)
+
+The metallib/maintenance friction above prompted evaluating **FluidInference/FluidAudio** (CoreML) against the
+MLX stack. Throwaway eval in the gitignored `app/Tools/FluidTTSSpike/`.
+
+**Maintenance / popularity (the trigger):**
+- `mlalma/MisakiSwift` **28★**, ~5mo stale; its source `hexgrad/misaki` 465★, ~10mo; `mlalma/kokoro-ios` 265★, ~5mo.
+- `FluidInference/FluidAudio` **2279★, pushed same day**, 800k+ HF model downloads. Pure Swift, Apache-2.0.
+
+**Build ergonomics — decisive win:** FluidAudio builds clean under Command Line Tools (`swift build` ~36s,
+**zero external SwiftPM deps, no metallib, no full-Xcode requirement**, macOS 14 floor) vs the MLX path's
+mlx-swift + 3 deps + a 164 MB metallib needing the `metal` compiler. Models auto-download from HF on first run
+(same as today; bundleable in the DMG).
+
+**g2p quality — roughly a tie** (FluidAudio uses Misaki lexicon + BART G2P too). Both beat Python on OOV, both
+miss the `read` heteronym, both botch numbers (MisakiSwift drops `$5.99`; FluidAudio says "X X"). FluidAudio
+also says "API" → "appy" (MisakiSwift spells it). Neither g2p is clearly better → the **number-normalization
+shim is needed either way**.
+
+**Decoupling insight:** FluidAudio exposes `synthesizeFromPhonemes(_:)` — engine and g2p are **separable**. We
+can run FluidAudio's CoreML Kokoro engine and feed it phonemes from whatever g2p wins (its own + number shim,
+or MisakiSwift, or a tuned pipeline).
+
+**Scope bonus:** FluidAudio also does STT (Parakeet) + VAD — a future option to consolidate the whole audio
+stack (replacing WhisperKit), though Phase-1 STT already works and isn't worth rewriting now.
+
+**Revised recommendation — Phase 2b uses FluidAudio (CoreML) as the acoustic engine.** Its maintenance, build
+simplicity (no metallib/Xcode), ANE efficiency, permissive license, and the *same* `af_heart` voice outweigh
+MisakiSwift + kokoro-ios. Start with FluidAudio's built-in g2p + a number-normalization shim; keep
+`synthesizeFromPhonemes` as the escape hatch and MisakiSwift as the misaki-exact g2p fallback. **This
+supersedes the parent doc's MLX "Recommended stack."**
