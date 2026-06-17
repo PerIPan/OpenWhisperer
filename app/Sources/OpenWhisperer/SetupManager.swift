@@ -88,12 +88,13 @@ class SetupManager: ObservableObject {
                 }
                 return
             }
-            // Install matching en_core_web_sm via spacy download (ensures version compatibility)
-            guard runCommand(
-                Paths.python.path,
-                args: ["-m", "spacy", "download", "en_core_web_sm"],
-                step: "Downloading spaCy language model...",
-                timeout: 120
+            // Install en_core_web_sm via `uv pip` using the wheel URL. We CANNOT use
+            // `python -m spacy download`: that shells out to pip, which a `uv venv` does
+            // not include ("No package installer found"). The pinned wheel matches spaCy
+            // 3.8.x and mirrors setup.sh.
+            guard uvPipInstall(
+                "en_core_web_sm@https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+                timeout: 300
             ) else {
                 updateState(.failed("Failed to install spaCy model"), progress: 0)
                 DispatchQueue.main.async {
@@ -120,7 +121,8 @@ class SetupManager: ObservableObject {
                 Paths.python.path,
                 args: ["-c", "import mlx_whisper; import mlx_audio; import spacy; print('OK')"],
                 step: "Import smoke test...",
-                timeout: 30
+                // Cold first imports (spaCy pipeline + MLX Metal warmup) can exceed 30s.
+                timeout: 180
             ) else {
                 updateState(.failed("Installation verification failed — try Setup > Reset"), progress: 0)
                 DispatchQueue.main.async {

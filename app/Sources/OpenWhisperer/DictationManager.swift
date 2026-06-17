@@ -31,10 +31,13 @@ class DictationManager: ObservableObject {
     @Published var ttsPlaying = false
     /// Whether hands-free is calibrating ambient noise
     @Published var isCalibrating = false
-    /// Non-nil while the speech model is downloading/loading (status string for the UI).
+    /// Non-nil while the speech model is downloading/loading, or holding a failure
+    /// message (status string for the UI — menu bar and standby overlay both read it).
     @Published var sttStatus: String?
     /// True once the WhisperKit model is loaded and ready to transcribe.
     @Published var sttModelReady = false
+    /// True when the speech-model load failed (offers a Retry in the UI).
+    @Published var sttFailed = false
 
     private var isTyping = false  // prevent concurrent typeText
 
@@ -145,15 +148,35 @@ class DictationManager: ObservableObject {
                 _ = try await self.transcriber.prepare()
                 await MainActor.run {
                     self.sttModelReady = true
+                    self.sttFailed = false
                     self.sttStatus = nil
                 }
             } catch {
+                let message = Self.sttFailureMessage(for: error)
                 await MainActor.run {
-                    self.sttStatus = "Speech model failed to load"
+                    self.sttFailed = true
+                    self.sttStatus = message
                     self.error = error.localizedDescription
                 }
             }
         }
+    }
+
+    /// Re-attempt the speech-model load after a failure (wired to a Retry button).
+    func retrySTT() {
+        sttFailed = false
+        sttModelReady = false
+        prepareSTT()
+    }
+
+    /// A short, actionable message for a model-load failure.
+    private static func sttFailureMessage(for error: Error) -> String {
+        let text = error.localizedDescription.lowercased()
+        if text.contains("timed out") || text.contains("download") || text.contains("network")
+            || text.contains("connection") || text.contains("offline") {
+            return "Couldn't reach the speech model — a firewall may be blocking Hugging Face."
+        }
+        return "Speech model failed to load."
     }
 
     // MARK: - Capture Target App (call on main thread at hotkey PRESS, not release)

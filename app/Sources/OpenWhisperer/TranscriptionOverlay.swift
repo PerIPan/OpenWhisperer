@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 /// Borderless window that accepts keyboard input (enables Cmd+C for text selection).
 private class KeyableWindow: NSWindow {
@@ -49,8 +50,22 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
             if let dm = dictationManager {
                 currentRecorder = dm.recorder
             }
+            wireStatus()
         }
     }
+
+    /// Mirrors the speech-model / setup status into the standby overlay so it shows
+    /// "Loading speech model…", a failure message, or a setup failure (e.g. spaCy)
+    /// instead of always claiming "Listening for transcriptions…".
+    @Published var statusText: String?
+    @Published var statusIsError: Bool = false
+
+    /// Setup manager reference so the overlay can mirror setup failures.
+    weak var setupManager: SetupManager? {
+        didSet { wireStatus() }
+    }
+
+    private var statusCancellables = Set<AnyCancellable>()
 
     /// The live recorder reference. Published so the SwiftUI view tree reacts
     /// to recorder swaps without NSHostingView teardown.
@@ -222,6 +237,50 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         fileHandle = nil
         src?.cancel()
     }
+
+    // MARK: - Status mirroring
+
+    /// Subscribe to the managers' published state so the overlay headline stays in sync.
+    private func wireStatus() {
+        statusCancellables.removeAll()
+        // Recompute on the next main-loop tick so the @Published value has settled
+        // (sinks fire on willSet, i.e. before the new value is stored).
+        let recompute: () -> Void = { [weak self] in
+            DispatchQueue.main.async { self?.recomputeStatus() }
+        }
+        if let dm = dictationManager {
+            dm.$sttModelReady.sink { _ in recompute() }.store(in: &statusCancellables)
+            dm.$sttFailed.sink { _ in recompute() }.store(in: &statusCancellables)
+            dm.$sttStatus.sink { _ in recompute() }.store(in: &statusCancellables)
+        }
+        if let sm = setupManager {
+            sm.$state.sink { _ in recompute() }.store(in: &statusCancellables)
+        }
+        recomputeStatus()
+    }
+
+    /// Priority: STT failure (dictation-blocking) > STT still loading > setup failure > ready.
+    private func recomputeStatus() {
+        if let dm = dictationManager {
+            if dm.sttFailed {
+                statusText = dm.sttStatus ?? "Speech model failed to load."
+                statusIsError = true
+                return
+            }
+            if !dm.sttModelReady {
+                statusText = dm.sttStatus ?? "Loading speech model…"
+                statusIsError = false
+                return
+            }
+        }
+        if let sm = setupManager, case .failed(let reason) = sm.state {
+            statusText = reason
+            statusIsError = true
+            return
+        }
+        statusText = nil
+        statusIsError = false
+    }
 }
 
 // MARK: - Overlay View
@@ -270,7 +329,23 @@ struct OverlayView: View {
 
             Divider().padding(.horizontal, 8).padding(.vertical, 4)
 
-            if overlay.lines.isEmpty && recorder.state == .idle {
+            if let status = overlay.statusText {
+                // Model loading / failed, or a setup failure — never claim "Listening".
+                VStack(spacing: 6) {
+                    Label(status, systemImage: overlay.statusIsError ? "exclamationmark.triangle.fill" : "arrow.down.circle")
+                        .font(.custom("Outfit", size: 10))
+                        .foregroundColor(overlay.statusIsError ? .red : .secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if overlay.statusIsError, let dm = overlay.dictationManager, dm.sttFailed {
+                        Button("Retry") { dm.retrySTT() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(8)
+            } else if overlay.lines.isEmpty && recorder.state == .idle {
                 Text("Listening for transcriptions...")
                     .font(.custom("Outfit", size: 10))
                     .foregroundColor(.secondary)

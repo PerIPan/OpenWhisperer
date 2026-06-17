@@ -92,6 +92,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager.start()
 
         TranscriptionOverlay.shared.dictationManager = dictationManager
+        TranscriptionOverlay.shared.setupManager = setupManager
 
         // Show transcription overlay by default on launch
         TranscriptionOverlay.shared.show()

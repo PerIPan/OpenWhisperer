@@ -3,6 +3,9 @@ build/
 app/.build/
 *.dmg
 
+# Local-only diagnostic tools (kept on disk, not committed)
+app/Tools/
+
 # Python venv (project root has a venv from setup.sh)
 bin/
 lib/

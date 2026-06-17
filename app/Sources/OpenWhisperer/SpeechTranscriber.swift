@@ -22,6 +22,18 @@ actor SpeechTranscriber {
     /// `"openai_whisper-large-v3-v20240930_turbo_632MB"`.
     static let modelName = "openai_whisper-large-v3-v20240930_turbo"
 
+    /// WhisperKit's default download base (`~/Documents/huggingface`).
+    private static var hubBase: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
+        return docs.appendingPathComponent("huggingface")
+    }
+
+    /// On-disk cache folder for the CoreML model.
+    private static var cachedModelFolder: URL {
+        hubBase.appendingPathComponent("models/argmaxinc/whisperkit-coreml/\(modelName)")
+    }
+
     private var whisperKit: WhisperKit?
     private var loadTask: Task<WhisperKit, Error>?
 
@@ -34,10 +46,7 @@ actor SpeechTranscriber {
         if let whisperKit { return whisperKit }
         if let loadTask { return try await loadTask.value }
 
-        let task = Task<WhisperKit, Error> {
-            let config = WhisperKitConfig(model: Self.modelName)
-            return try await WhisperKit(config)
-        }
+        let task = Task<WhisperKit, Error> { try await Self.loadWhisperKit() }
         loadTask = task
         do {
             let wk = try await task.value
@@ -48,6 +57,30 @@ actor SpeechTranscriber {
             loadTask = nil
             throw TranscriberError.loadFailed(error.localizedDescription)
         }
+    }
+
+    /// Loads WhisperKit, preferring the on-disk cache so a blocked/slow Hub or Xet CDN
+    /// can't break an already-downloaded model: when the model folder exists we load
+    /// `download: false` with explicit `modelFolder`/`tokenizerFolder`, which avoids the
+    /// network round-trip entirely. Falls back to a normal download when the model isn't
+    /// cached yet (or the cache is incomplete/unloadable).
+    private static func loadWhisperKit() async throws -> WhisperKit {
+        if FileManager.default.fileExists(atPath: cachedModelFolder.path) {
+            do {
+                let config = WhisperKitConfig(
+                    model: modelName,
+                    downloadBase: hubBase,
+                    modelFolder: cachedModelFolder.path,
+                    tokenizerFolder: hubBase,
+                    download: false
+                )
+                return try await WhisperKit(config)
+            } catch {
+                NSLog("SpeechTranscriber: offline load failed (\(error)); retrying with download")
+            }
+        }
+        let config = WhisperKitConfig(model: modelName, downloadBase: hubBase)
+        return try await WhisperKit(config)
     }
 
     /// Transcribe 16 kHz mono normalized Float PCM ([-1, 1)). `language` nil/"auto"
