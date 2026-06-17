@@ -40,3 +40,20 @@ def test_caps_long_paragraph_at_sentence_boundary():
     out = first_para(long)
     assert len(out) <= 600
     assert out.endswith(".")
+
+
+def test_skips_table_rows():
+    assert first_para("| col1 | col2 |\nActual prose here.\n") == "Actual prose here."
+
+
+def test_de_bullets_and_de_numbers():
+    assert first_para("- first bullet item\n") == "first bullet item"
+    assert first_para("1. step one\n") == "step one"
+
+
+def test_strips_italic():
+    assert first_para("This is *important* text.\n") == "This is important text."
+
+
+def test_strips_bare_url():
+    assert first_para("Visit https://example.com today.\n") == "Visit today."
