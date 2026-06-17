@@ -7,6 +7,8 @@ let package = Package(
     dependencies: [
         // Native in-process Whisper STT (CoreML / ANE). MIT. macOS 14+.
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
+        // Native in-process Kokoro TTS (CoreML / ANE). Apache-2.0. macOS 14+. No metallib.
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.4"),
     ],
     targets: [
         // Pure, dependency-free logic that is unit-tested in isolation
@@ -20,6 +22,7 @@ let package = Package(
             dependencies: [
                 "OpenWhispererKit",
                 .product(name: "WhisperKit", package: "WhisperKit"),
+                .product(name: "FluidAudio", package: "FluidAudio"),
             ],
             path: "Sources/OpenWhisperer"
         ),

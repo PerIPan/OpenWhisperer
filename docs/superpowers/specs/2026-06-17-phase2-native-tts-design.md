@@ -19,6 +19,13 @@ already moved STT native; the Python server currently survives only for TTS.
 
 ## Recommended stack
 
+> **⚠️ SUPERSEDED (2026-06-17).** After the Phase-2a spike + a FluidAudio engine eval, the recommendation
+> flipped: **Phase 2b uses `FluidInference/FluidAudio` (CoreML) as the acoustic engine**, not the MLX stack
+> below. FluidAudio builds clean (no metallib / full-Xcode), is far better maintained (2279★ vs 28★), runs on
+> the ANE, keeps the same `af_heart` voice, and `synthesizeFromPhonemes` decouples engine from g2p. The MLX
+> table below is kept for history. See **"Engine eval: FluidAudio (CoreML) vs MLX"** in
+> [`2026-06-17-phase2a-g2p-parity-spike-design.md`](2026-06-17-phase2a-g2p-parity-spike-design.md).
+
 | Piece | Recommended | Fallback | License |
 |---|---|---|---|
 | Acoustic model (Kokoro-82M) | **`mlalma/kokoro-ios`** (MLX-Swift, same weights, 24 kHz) | `FluidInference/FluidAudio` (Kokoro on CoreML/ANE) | MIT / Apache-2.0 |
@@ -85,6 +92,26 @@ TTS longer).
    Snitch note below). Produce audio buffers in-process.
 3. **Phase 3** — `AVAudioPlayerNode` streaming player; in-process barge-in (`playerNode.stop()`); the
    bash-hook IPC decision (keep a tiny embedded localhost server vs. redesign). Out of scope for Phase 2.
+
+> **Phase 3 streaming — status & foundation (captured 2026-06-17, don't lose this).**
+> Phase 3 has **no dedicated spec yet** — only the bullet above. BUT the streaming *behavior* it must restore
+> is fully designed in [`2026-06-14-tts-streaming-design.md`](2026-06-14-tts-streaming-design.md) (peripan's
+> design for the current **Python** streaming). Phase 3 = **port that to native Swift**. Key requirements to
+> carry over from that doc:
+> - **Wire format:** raw float32 PCM, 24 kHz mono over `POST /v1/audio/stream` (headers `X-Sample-Rate: 24000`,
+>   `X-Channels: 1`, `X-Sample-Format: f32le`).
+> - **Producer model:** sentence-by-sentence synthesis → bounded queue (backpressure) → chunked stream, with
+>   per-segment compute release so STT can interleave. NOTE: FluidAudio's KokoroAne has **no built-in chunker**,
+>   so the sentence-producer is ours to write (re-implementing peripan's pattern, driving FluidAudio per segment).
+> - **Barge-in:** "hold on" / a new response stops playback within **~100 ms** and frees the engine (no wasted
+>   synthesis) — finer-grained than Phase 2b's coarse "kill afplay".
+> - **Preserve:** the `tts_playing.lock` "Speaking…" state, volume, auto-submit.
+>
+> **Phase 2b regression to be aware of:** dropping the Python streaming player means Phase 2b temporarily loses
+> streaming + the ~100 ms GPU-releasing barge-in (hook falls back to whole-clip `afplay`). The "Speaking…" lock
+> state survives (the hook's afplay fallback still manages it). Streaming + fine-grained barge-in **return in
+> Phase 3** via the port above. (Open sequencing decision: keep this staging, or pull the streaming player into
+> Phase 2b to avoid the regression.)
 
 ## Constraints / open decisions
 

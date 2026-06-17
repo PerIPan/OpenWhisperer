@@ -27,7 +27,6 @@ echo "Creating app bundle..."
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources/hooks"
-mkdir -p "$APP_BUNDLE/Contents/Resources/servers"
 mkdir -p "$APP_BUNDLE/Contents/Resources/scripts"
 
 # Copy binary
@@ -47,15 +46,12 @@ cp "$SCRIPT_DIR/Resources/Info.plist" "$APP_BUNDLE/Contents/"
 cp "$SCRIPT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 cp "$SCRIPT_DIR/Resources/Outfit-VariableFont_wght.ttf" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 
-# Step 3: Bundle project scripts
+# Step 3: Bundle the TTS hooks (native TTS — no Python scripts to bundle)
 cp "$PROJECT_DIR/hooks/tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/hooks/codex-tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/hooks/voice-context.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/hooks/first-paragraph.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
-cp "$PROJECT_DIR/servers/unified_server.py" "$APP_BUNDLE/Contents/Resources/servers/"
-cp "$PROJECT_DIR/servers/tts_stream.py" "$APP_BUNDLE/Contents/Resources/servers/"
 cp "$PROJECT_DIR/scripts/speak.sh" "$APP_BUNDLE/Contents/Resources/scripts/"
-cp "$PROJECT_DIR/scripts/tts_stream_player.py" "$APP_BUNDLE/Contents/Resources/scripts/"
 
 # Make scripts executable
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/tts-hook.sh"
@@ -63,45 +59,9 @@ chmod +x "$APP_BUNDLE/Contents/Resources/hooks/codex-tts-hook.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/voice-context.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/first-paragraph.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/scripts/speak.sh"
-chmod +x "$APP_BUNDLE/Contents/Resources/scripts/tts_stream_player.py"
 
-# Step 4: Bundle uv binary (detect architecture)
-echo "Bundling uv..."
+# Step 4: Bundle jq binary (detect architecture) — the hooks use jq for JSON
 ARCH=$(uname -m)
-UV_PATH=$(which uv 2>/dev/null || echo "")
-if [ -n "$UV_PATH" ]; then
-    # Verify local uv matches build architecture
-    UV_ARCH=$(file "$UV_PATH" | grep -o 'arm64\|x86_64' | head -1)
-    if [ "$ARCH" = "arm64" ] && [ "$UV_ARCH" = "arm64" ]; then
-        cp "$UV_PATH" "$APP_BUNDLE/Contents/Resources/uv"
-    elif [ "$ARCH" = "x86_64" ] && [ "$UV_ARCH" = "x86_64" ]; then
-        cp "$UV_PATH" "$APP_BUNDLE/Contents/Resources/uv"
-    else
-        echo "Local uv ($UV_ARCH) doesn't match build arch ($ARCH) — downloading..."
-        UV_PATH=""
-    fi
-fi
-if [ -z "$UV_PATH" ]; then
-    if [ "$ARCH" = "arm64" ]; then
-        UV_URL="https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-apple-darwin.tar.gz"
-    else
-        UV_URL="https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-apple-darwin.tar.gz"
-    fi
-    echo "Downloading uv for $ARCH..."
-    UV_TMP=$(mktemp -d)
-    curl -LsS "$UV_URL" -o "$UV_TMP/uv.tar.gz"
-    tar xzf "$UV_TMP/uv.tar.gz" -C "$UV_TMP"
-    UV_EXTRACTED=$(find "$UV_TMP" -name "uv" -type f | head -1)
-    if [ -z "$UV_EXTRACTED" ]; then
-        echo "Error: Could not extract uv binary"
-        exit 1
-    fi
-    cp "$UV_EXTRACTED" "$APP_BUNDLE/Contents/Resources/uv"
-    rm -rf "$UV_TMP"
-fi
-chmod +x "$APP_BUNDLE/Contents/Resources/uv"
-
-# Step 5: Bundle jq binary (detect architecture)
 echo "Bundling jq..."
 JQ_PATH=$(which jq 2>/dev/null || echo "")
 if [ -z "$JQ_PATH" ]; then
