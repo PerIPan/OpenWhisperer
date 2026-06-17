@@ -62,34 +62,6 @@ enum ConfigManager {
         window.show()
     }
 
-    // MARK: - Claude Code: CLAUDE.md
-
-    static func showClaudeMdInstructions() {
-        let window = InstructionWindow(
-            title: "Step 2: CLAUDE.md (Voice Tag)",
-            instructions: """
-            Add this to your project's CLAUDE.md file:
-
-            ## Voice Mode
-            ALWAYS include a [VOICE: ...] tag at the END
-            of every response. This tag contains a short,
-            conversational spoken summary (1-3 sentences)
-            that the TTS hook extracts and reads aloud.
-
-            Write the voice content as natural speech -
-            no code, no file paths, no markdown.
-
-            Example:
-            [VOICE: I fixed the bug in the login page.
-            It was a missing null check on the user object.]
-
-            This tells Claude to add a spoken summary
-            to every response.
-            """
-        )
-        window.show()
-    }
-
     // MARK: - Voquill Detection & Configuration
 
     static func isVoquillInstalled() -> Bool {
@@ -226,32 +198,6 @@ enum ConfigManager {
         window.show()
     }
 
-    static func showCodexAgentsMdInstructions() {
-        let window = InstructionWindow(
-            title: "Step 2: AGENTS.md (Voice Tag)",
-            instructions: """
-            Add this to your project's AGENTS.md file:
-
-            ## Voice Mode
-            ALWAYS include a [VOICE: ...] tag at the END
-            of every response. This tag contains a short,
-            conversational spoken summary (1-3 sentences)
-            that the TTS hook extracts and reads aloud.
-
-            Write the voice content as natural speech -
-            no code, no file paths, no markdown.
-
-            Example:
-            [VOICE: I fixed the bug in the login page.
-            It was a missing null check on the user object.]
-
-            This tells Codex to add a spoken summary
-            to every response.
-            """
-        )
-        window.show()
-    }
-
     // MARK: - Auto-apply hook to Codex config.toml
 
     static func applyHookToCodexConfig() -> (success: Bool, message: String) {
@@ -301,64 +247,11 @@ enum ConfigManager {
         }
     }
 
-    // MARK: - Auto-apply AGENTS.md voice tag (Codex)
-
-    static func applyAgentsMd(forceUpdate: Bool = false) -> (success: Bool, message: String) {
-        // Codex uses ~/.codex/instructions.md for global instructions
-        let agentsMdPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex").appendingPathComponent("instructions.md")
-        let fm = FileManager.default
-
-        let detail = (try? String(contentsOf: Paths.voiceDetail, encoding: .utf8))?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "natural"
-
-        let voiceBlock = voiceBlockForDetail(detail)
-
-        if fm.fileExists(atPath: agentsMdPath.path),
-           let existing = try? String(contentsOf: agentsMdPath, encoding: .utf8) {
-            if existing.contains("[VOICE:") || existing.contains("Voice Mode") {
-                if forceUpdate {
-                    let cleaned = removeVoiceBlock(from: existing)
-                    let updated = cleaned.trimmingCharacters(in: .whitespacesAndNewlines) + "\n" + voiceBlock + "\n"
-                    do {
-                        try updated.write(to: agentsMdPath, atomically: true, encoding: .utf8)
-                        return (true, "New VOICE detail applied")
-                    } catch {
-                        return (false, "Write failed: \(error.localizedDescription)")
-                    }
-                }
-                return (true, "Voice tag active")
-            }
-            let updated = existing.trimmingCharacters(in: .whitespacesAndNewlines) + "\n" + voiceBlock + "\n"
-            do {
-                try updated.write(to: agentsMdPath, atomically: true, encoding: .utf8)
-                return (true, "Voice tag appended to instructions.md")
-            } catch {
-                return (false, "Write failed: \(error.localizedDescription)")
-            }
-        }
-
-        try? fm.createDirectory(at: agentsMdPath.deletingLastPathComponent(), withIntermediateDirectories: true)
-        do {
-            try voiceBlock.trimmingCharacters(in: .newlines).write(to: agentsMdPath, atomically: true, encoding: .utf8)
-            return (true, "instructions.md created with voice tag")
-        } catch {
-            return (false, "Write failed: \(error.localizedDescription)")
-        }
-    }
-
     // MARK: - Codex Diagnostics
 
     static func checkCodexHookConfigured() -> Bool {
         guard let content = try? String(contentsOf: Paths.codexConfig, encoding: .utf8) else { return false }
         return content.contains("codex-tts-hook") || content.contains("OpenWhisperer")
-    }
-
-    static func checkCodexAgentsMdConfigured() -> Bool {
-        let path = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex").appendingPathComponent("instructions.md")
-        guard let content = try? String(contentsOf: path, encoding: .utf8) else { return false }
-        return content.contains("[VOICE:") || content.contains("Voice Mode")
     }
 
     // MARK: - Platform-dispatching wrappers
@@ -370,13 +263,6 @@ enum ConfigManager {
         }
     }
 
-    static func applyVoiceTag(for platform: Platform, forceUpdate: Bool = false) -> (success: Bool, message: String) {
-        switch platform {
-        case .claudeCode: return applyClaudeMd(forceUpdate: forceUpdate)
-        case .codexCLI: return applyAgentsMd(forceUpdate: forceUpdate)
-        }
-    }
-
     static func checkHookConfigured(for platform: Platform) -> Bool {
         switch platform {
         case .claudeCode: return checkHookConfigured()
@@ -384,24 +270,10 @@ enum ConfigManager {
         }
     }
 
-    static func checkVoiceTagConfigured(for platform: Platform) -> Bool {
-        switch platform {
-        case .claudeCode: return checkClaudeMdConfigured()
-        case .codexCLI: return checkCodexAgentsMdConfigured()
-        }
-    }
-
     static func showHookInstructions(for platform: Platform) {
         switch platform {
         case .claudeCode: showClaudeSettingsInstructions()
         case .codexCLI: showCodexConfigInstructions()
-        }
-    }
-
-    static func showVoiceTagInstructions(for platform: Platform) {
-        switch platform {
-        case .claudeCode: showClaudeMdInstructions()
-        case .codexCLI: showCodexAgentsMdInstructions()
         }
     }
 
@@ -495,117 +367,6 @@ enum ConfigManager {
         }
     }
 
-    // MARK: - Auto-apply CLAUDE.md voice tag
-
-    static func applyClaudeMd(forceUpdate: Bool = false) -> (success: Bool, message: String) {
-        let claudeMdPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude").appendingPathComponent("CLAUDE.md")
-        let fm = FileManager.default
-
-        // Read detail level preference
-        let detail = (try? String(contentsOf: Paths.voiceDetail, encoding: .utf8))?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "natural"
-
-        let voiceBlock = voiceBlockForDetail(detail)
-
-        // Check if already present
-        if fm.fileExists(atPath: claudeMdPath.path),
-           let existing = try? String(contentsOf: claudeMdPath, encoding: .utf8) {
-            if existing.contains("[VOICE:") || existing.contains("Voice Mode") {
-                if forceUpdate {
-                    // Replace existing voice block with updated one
-                    let cleaned = removeVoiceBlock(from: existing)
-                    let updated = cleaned.trimmingCharacters(in: .whitespacesAndNewlines) + "\n" + voiceBlock + "\n"
-                    do {
-                        try updated.write(to: claudeMdPath, atomically: true, encoding: .utf8)
-                        return (true, "New VOICE detail applied")
-                    } catch {
-                        return (false, "Write failed: \(error.localizedDescription)")
-                    }
-                }
-                return (true, "Voice tag active")
-            }
-            // Append to existing
-            let updated = existing.trimmingCharacters(in: .whitespacesAndNewlines) + "\n" + voiceBlock + "\n"
-            do {
-                try updated.write(to: claudeMdPath, atomically: true, encoding: .utf8)
-                return (true, "Voice tag appended to CLAUDE.md")
-            } catch {
-                return (false, "Write failed: \(error.localizedDescription)")
-            }
-        }
-
-        // Create new file
-        try? fm.createDirectory(at: claudeMdPath.deletingLastPathComponent(), withIntermediateDirectories: true)
-        do {
-            try voiceBlock.trimmingCharacters(in: .newlines).write(to: claudeMdPath, atomically: true, encoding: .utf8)
-            return (true, "CLAUDE.md created with voice tag")
-        } catch {
-            return (false, "Write failed: \(error.localizedDescription)")
-        }
-    }
-
-    private static func voiceBlockForDetail(_ detail: String) -> String {
-        switch detail {
-        case "brief":
-            return """
-
-            ## Voice Mode
-            ALWAYS include a `[VOICE: ...]` tag at the END of every response. Keep it to 1 short sentence — just the key outcome. No code, no file paths, no markdown. Write as natural speech.
-
-            Example: `[VOICE: Fixed the login bug.]`
-            """
-        case "detailed":
-            return """
-
-            ## Voice Mode
-            ALWAYS include a `[VOICE: ...]` tag at the END of every response. Give a DETAILED spoken summary of 4-6 sentences minimum. Cover: what you changed, why you changed it, how it works, any trade-offs or side effects, and what the user should do next. Be thorough — the user relies on this voice summary to understand your work without reading the full response. Write as natural conversational speech — no code, no file paths, no markdown, no technical jargon unless the user used it first.
-
-            Example: `[VOICE: I restructured the authentication flow to fix the login crash. The root cause was a missing null check on the user object that happened when sessions expired. I added a guard clause that catches the nil case and redirects to the login screen with a friendly error message. I also updated the session timeout to two hours so it happens less often. You should test this by logging in, waiting a bit, then refreshing to make sure the redirect works. One thing to note is the longer timeout means users stay logged in longer, so consider if that fits your security needs.]`
-            """
-        case "brainstorming":
-            return """
-
-            ## Voice Mode
-            ALWAYS include a `[VOICE: ...]` tag at the END of every response. Think out loud like a creative partner brainstorming with the user. Explore ideas freely, consider multiple angles, weigh trade-offs, and surface non-obvious insights. Be conversational and energetic — 3-6 sentences. Speak as natural speech — no code, no file paths, no markdown, no technical jargon unless the user used it first.
-
-            Example: `[VOICE: Okay so here's what I'm thinking. Instead of adding another API endpoint, what if we flip this around and use WebSockets so the client gets updates in real time? That way we avoid polling entirely and the UX feels way snappier. The trade-off is we'd need to handle reconnection logic, but there are solid libraries for that. Actually, this could also open the door for collaborative editing later. Let me sketch out both approaches so you can compare.]`
-            """
-        default: // "natural"
-            return """
-
-            ## Voice Mode
-            ALWAYS include a `[VOICE: ...]` tag at the END of every response. This tag contains a short, conversational spoken summary (1-3 sentences) that the TTS hook extracts and reads aloud. Write the voice content as natural speech — no code, no file paths, no markdown, no technical jargon unless the user used it first.
-
-            Example: `[VOICE: I fixed the bug in the login page. It was a missing null check on the user object.]`
-            """
-        }
-    }
-
-    private static func removeVoiceBlock(from content: String) -> String {
-        // Remove the ## Voice Mode section (from header to next ## or end of file)
-        let lines = content.components(separatedBy: "\n")
-        var result: [String] = []
-        var skipping = false
-        for line in lines {
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("## Voice Mode") {
-                skipping = true
-                continue
-            }
-            if skipping && line.trimmingCharacters(in: .whitespaces).hasPrefix("## ") {
-                skipping = false
-            }
-            if !skipping {
-                result.append(line)
-            }
-        }
-        // Strip trailing blank lines to prevent accumulation on repeated updates
-        while let last = result.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
-            result.removeLast()
-        }
-        return result.joined(separator: "\n")
-    }
-
     // MARK: - Migration
 
     /// One-shot cleanup for existing installs: strip the legacy `## Voice Mode`
@@ -638,13 +399,6 @@ enum ConfigManager {
                 return isOurHook(cmd)
             }
         }
-    }
-
-    static func checkClaudeMdConfigured() -> Bool {
-        let claudeMdPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude").appendingPathComponent("CLAUDE.md")
-        guard let content = try? String(contentsOf: claudeMdPath, encoding: .utf8) else { return false }
-        return content.contains("[VOICE:") || content.contains("Voice Mode")
     }
 
     static func testTTS(port: Int, completion: @escaping (Bool) -> Void) {

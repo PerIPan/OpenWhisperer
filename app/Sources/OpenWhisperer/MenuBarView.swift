@@ -59,7 +59,7 @@ struct MenuBarView: View {
     @State private var pttKeyChanged = false
     @State private var selectedPlatform: Platform = .claudeCode
     @State private var hookApplied = false
-    @State private var claudeMdApplied = false
+    @State private var voiceHookApplied = false
     @State private var superpowersApplied = false
     @State private var applyMessage = ""
     @State private var serverReachable = false
@@ -499,14 +499,9 @@ struct MenuBarView: View {
                     OWMenuPicker(selection: $selectedDetail, options: Self.detailLevels)
                         .frame(maxWidth: .infinity)
                 }
+                .help("Spoken summary length — shapes the voice nudge injected by the hook")
                 .onChange(of: selectedDetail) { _, newValue in
                     try? newValue.write(to: Paths.voiceDetail, atomically: true, encoding: .utf8)
-                    // Auto-apply the new voice block immediately
-                    let result = ConfigManager.applyVoiceTag(for: selectedPlatform, forceUpdate: true)
-                    claudeMdApplied = result.success
-                    applyMessage = result.message
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { applyMessage = "" }
-                    setupExpanded = true
                 }
 
                 OWInternalDivider()
@@ -668,39 +663,6 @@ struct MenuBarView: View {
                         : "writes the notify hook into ~/.codex/config.toml")
                 }
 
-                // Voice Tag row — aligned label + info + apply
-                HStack(spacing: 6) {
-                    HStack(spacing: 4) {
-                        Text("Voice Tag")
-                            .font(OWFont.body(11))
-                        Image(systemName: "info.circle")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(width: 80, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture { ConfigManager.showVoiceTagInstructions(for: selectedPlatform) }
-                    .help("Tap for setup instructions")
-
-                    Button(action: {
-                        let result = ConfigManager.applyVoiceTag(for: selectedPlatform, forceUpdate: !claudeMdApplied)
-                        claudeMdApplied = result.success
-                        applyMessage = result.message
-                        refreshDiagnostics()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { applyMessage = "" }
-                    }) {
-                        Label(
-                            claudeMdApplied ? "Applied" : "Auto-Apply",
-                            systemImage: claudeMdApplied ? "checkmark.circle.fill" : "bolt.fill"
-                        )
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(OWRowButtonStyle(tinted: claudeMdApplied, urgent: !claudeMdApplied))
-                    .help(selectedPlatform == .claudeCode
-                        ? "appends VOICE tag instructions to ~/.claude/CLAUDE.md"
-                        : "appends VOICE tag instructions to ~/.codex/instructions.md")
-                }
-
                 // Superpowers row — Claude Code only
                 if selectedPlatform == .claudeCode {
                     HStack(spacing: 6) {
@@ -746,7 +708,7 @@ struct MenuBarView: View {
                 // Diagnostics
                 VStack(alignment: .leading, spacing: 4) {
                     ModernDiagnosticRow(label: "HOOK configured", ok: hookApplied)
-                    ModernDiagnosticRow(label: "VOICE tag active", ok: claudeMdApplied)
+                    ModernDiagnosticRow(label: "voice hook installed", ok: voiceHookApplied)
                     if selectedPlatform == .claudeCode {
                         ModernDiagnosticRow(label: "superpowers installed", ok: superpowersApplied)
                     }
@@ -930,7 +892,7 @@ struct MenuBarView: View {
 
     private func refreshDiagnostics() {
         hookApplied = ConfigManager.checkHookConfigured(for: selectedPlatform)
-        claudeMdApplied = ConfigManager.checkVoiceTagConfigured(for: selectedPlatform)
+        voiceHookApplied = ConfigManager.checkHookConfigured(for: selectedPlatform)
         superpowersApplied = ConfigManager.checkSuperpowersInstalled()
         ConfigManager.testTTS(port: serverManager.port) { ok in
             DispatchQueue.main.async { serverReachable = ok }
