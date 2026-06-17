@@ -6,8 +6,9 @@ import Foundation
 enum ServeTTSMode {
     static func run() {
         let tts = KokoroTTS()
+        let playback = TTSPlaybackController(tts: tts)
         let port = UInt16(ProcessInfo.processInfo.environment["TTS_PORT"] ?? "") ?? 8000
-        let server = TTSHTTPServer(port: port, tts: tts)
+        let server = TTSHTTPServer(port: port, tts: tts, playback: playback)
 
         // Warm the model in the background so the first request isn't cold.
         Task { try? await tts.prepare() }

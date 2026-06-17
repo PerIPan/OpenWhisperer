@@ -24,6 +24,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
         }
 
+        // Wire in-process TTS playback so dictation barge-in can stop it instantly (Phase 3).
+        dictationManager.ttsController = serverManager.playback
+
         // Hide dock icon (menubar-only app)
         NSApp.setActivationPolicy(.accessory)
 
