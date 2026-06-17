@@ -1,6 +1,9 @@
 import Foundation
 import Combine
 
+/// Hosts the in-process native TTS: a `KokoroTTS` actor (FluidAudio CoreML/ANE) behind a
+/// tiny embedded HTTP server (`TTSHTTPServer`) on :8000. Replaces the out-of-process Python
+/// `unified_server.py`. STT is native in-app (`SpeechTranscriber`) and needs no server.
 class ServerManager: ObservableObject {
     enum ServerStatus: String {
         case stopped = "Stopped"
@@ -11,293 +14,66 @@ class ServerManager: ObservableObject {
 
     @Published var status: ServerStatus = .stopped
     @Published var port: Int = 8000
-    @Published var sttModel: String = ""
-    @Published var ttsModel: String = ""
+    @Published var sttModel: String = "whisper-large-v3-turbo"  // native WhisperKit
+    @Published var ttsModel: String = "Kokoro-82M"              // native FluidAudio
+    @Published var lastError: String = ""
 
-    private var process: Process?
-    private var logHandle: FileHandle?
-    private var healthCheckTimer: Timer?
-    private var pendingRestart: DispatchWorkItem?
-    private var pendingInitialCheck: DispatchWorkItem?
-    private var startTime: Date?
-    private var stopping = false
-
-    private static let startupTimeout: TimeInterval = 300  // 5 min — first run downloads ~1.2GB of models
-    private static let maxLogSize: UInt64 = 10 * 1024 * 1024  // 10MB
+    private let tts = KokoroTTS()
+    private var httpServer: TTSHTTPServer?
+    private var prepareTask: Task<Void, Never>?
 
     var isRunning: Bool { status == .running }
+    var statusLabel: String { status.rawValue }
 
-    var statusLabel: String {
-        switch status {
-        case .running: return "Running"
-        case .starting: return "Starting..."
-        case .error: return "Error"
-        case .stopped: return "Stopped"
-        }
-    }
-
+    /// Start the embedded server and load the TTS model. `.starting` until the model is
+    /// resident, then `.running`; `.error` (with `lastError`) on bind/load failure.
     func startAll() {
         let work = { [self] in
+            guard httpServer == nil else { return }
             Paths.ensureDirectories()
-            startServer()
-            startHealthChecks()
+            status = .starting
+            lastError = ""
+
+            let server = TTSHTTPServer(port: UInt16(port), tts: tts)
+            do {
+                try server.start()
+                httpServer = server
+            } catch {
+                status = .error
+                lastError = "Failed to bind port \(port): \(error.localizedDescription)"
+                NSLog("TTS server failed to start: \(error)")
+                return
+            }
+
+            prepareTask = Task { [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.tts.prepare()
+                    await MainActor.run { self.status = .running }
+                } catch {
+                    await MainActor.run {
+                        self.status = .error
+                        self.lastError = error.localizedDescription
+                    }
+                }
+            }
         }
-        if Thread.isMainThread {
-            work()
-        } else {
-            DispatchQueue.main.async(execute: work)
-        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.async(execute: work) }
     }
 
+    /// Stop the embedded server. In-process, so there is no child process to reap — stop is
+    /// immediate (the `synchronous` flag is retained for call-site compatibility).
     func stopAll(synchronous: Bool = false) {
-        pendingRestart?.cancel()
-        pendingRestart = nil
-
-        healthCheckTimer?.invalidate()
-        healthCheckTimer = nil
-        pendingInitialCheck?.cancel()
-        pendingInitialCheck = nil
-
-        stopping = true
-        stopProcess(&process, pidFile: Paths.serverPidFile, synchronous: synchronous)
+        prepareTask?.cancel()
+        prepareTask = nil
+        httpServer?.stop()
+        httpServer = nil
         status = .stopped
-        sttModel = ""
-        ttsModel = ""
     }
 
     func restartAll() {
-        pendingRestart?.cancel()
-        status = .stopped
-        _ = ConfigManager.cleanTempFiles()
-
-        let proc = process
-        let procPid = proc?.processIdentifier
-        process = nil
-
-        healthCheckTimer?.invalidate()
-        healthCheckTimer = nil
-        pendingInitialCheck?.cancel()
-        pendingInitialCheck = nil
-
-        let pidFile = Paths.serverPidFile
-
-        // Terminate on main thread (Process is not Sendable), then restart
-        let restart = DispatchWorkItem { [weak self] in
-            if let proc, proc.isRunning {
-                proc.terminate()
-                // Wait in background for process to exit
-                DispatchQueue.global(qos: .utility).async {
-                    for _ in 0..<30 {
-                        if !proc.isRunning { break }
-                        Thread.sleep(forTimeInterval: 0.1)
-                    }
-                    if proc.isRunning, let pid = procPid {
-                        kill(pid, SIGKILL)
-                    }
-                    try? FileManager.default.removeItem(at: pidFile)
-                    DispatchQueue.main.async {
-                        self?.startAll()
-                    }
-                }
-            } else {
-                try? FileManager.default.removeItem(at: pidFile)
-                self?.startAll()
-            }
-        }
-        pendingRestart = restart
-        DispatchQueue.main.async(execute: restart)
-    }
-
-    // MARK: - Unified Server
-
-    private func startServer() {
-        // Clear stale process ref if it exited (L-5: prevents orphaned second Process)
-        if let p = process, !p.isRunning { process = nil }
-        guard process == nil else { return }
-
-        status = .starting
-
-        let proc = Process()
-        proc.executableURL = Paths.python
-        proc.arguments = [Paths.unifiedServer.path]
-        proc.currentDirectoryURL = Paths.appSupport
-        var env = makeEnv()
-        env["SERVER_PORT"] = "\(port)"
-        proc.environment = env
-
-        let oldHandle = logHandle
-        logHandle = nil
-        try? oldHandle?.close()
-        Self.rotateLogIfNeeded(at: Paths.serverLog)
-        let logFile = FileHandle.forWritingOrCreate(at: Paths.serverLog)
-        logFile.seekToEndOfFile()
-        logHandle = logFile
-        proc.standardOutput = logFile
-        proc.standardError = logFile
-
-        // Capture the log handle for THIS process so terminationHandler closes the right one
-        let processLogHandle = logFile
-        proc.terminationHandler = { [weak self] _ in
-            try? processLogHandle.close()
-            DispatchQueue.main.async {
-                guard let self else { return }
-                if self.stopping {
-                    self.stopping = false
-                } else {
-                    self.status = .error
-                }
-            }
-        }
-
-        process = proc
-        startTime = Date()
-
-        do {
-            try proc.run()
-            stopping = false
-            writePID(proc.processIdentifier, to: Paths.serverPidFile)
-        } catch {
-            process = nil
-            status = .error
-            NSLog("Failed to start server: \(error)")
-        }
-    }
-
-    // MARK: - Health Checks
-
-    private static let startupCheckInterval: TimeInterval = 5   // faster polling during startup
-    private static let runningCheckInterval: TimeInterval = 15  // relaxed polling once running
-
-    private func startHealthChecks() {
-        healthCheckTimer?.invalidate()
-        let timer = Timer(timeInterval: Self.startupCheckInterval, repeats: true) { [weak self] _ in
-            self?.checkHealth()
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        healthCheckTimer = timer
-
-        // Delay initial check — model loading typically takes 10-20s
-        let initialCheck = DispatchWorkItem { [weak self] in
-            self?.checkHealth()
-        }
-        pendingInitialCheck = initialCheck
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: initialCheck)
-    }
-
-    private func checkHealth() {
-        guard let url = URL(string: "http://localhost:\(port)/v1/models") else { return }
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 2)
-        request.httpMethod = "GET"
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
-            let ok = (response as? HTTPURLResponse)?.statusCode == 200
-            DispatchQueue.main.async {
-                guard let self, self.status == .starting || self.status == .running else { return }
-                if ok {
-                    let wasStarting = self.status == .starting
-                    self.status = .running
-                    if let data, self.sttModel.isEmpty || self.ttsModel.isEmpty {
-                        self.parseModels(data)
-                    }
-                    // Switch to relaxed polling once server is confirmed running
-                    if wasStarting {
-                        self.healthCheckTimer?.invalidate()
-                        let timer = Timer(timeInterval: Self.runningCheckInterval, repeats: true) { [weak self] _ in
-                            self?.checkHealth()
-                        }
-                        RunLoop.main.add(timer, forMode: .common)
-                        self.healthCheckTimer = timer
-                    }
-                } else if self.status == .starting,
-                          let start = self.startTime,
-                          Date().timeIntervalSince(start) > Self.startupTimeout {
-                    self.status = .error
-                }
-            }
-        }.resume()
-    }
-
-    private func parseModels(_ data: Data) {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let models = json["data"] as? [[String: Any]] else { return }
-        for model in models {
-            guard let id = model["id"] as? String else { continue }
-            let short = id.components(separatedBy: "/").last ?? id
-            let type = model["type"] as? String ?? ""
-            if type == "stt" {
-                sttModel = short.replacingOccurrences(of: "whisper-", with: "")
-            } else if type == "tts" {
-                ttsModel = short
-            }
-        }
-    }
-
-    // MARK: - Process Management
-
-    /// Terminates `process` and waits (bounded) for it to exit, escalating to SIGKILL.
-    ///
-    /// The synchronous path runs this inline on the caller — which at app quit is the main
-    /// thread (applicationWillTerminate). Blocking there is intentional and unavoidable: the
-    /// child Python server is NOT auto-reaped when our process exits, so we must guarantee it
-    /// dies before returning. The wait is bounded to ~2s (SIGTERM grace) before SIGKILL to
-    /// avoid a long hang at quit (T2.1).
-    private static func waitForTermination(_ process: Process?, pidFile: URL) {
-        guard let proc = process, proc.isRunning else {
-            try? FileManager.default.removeItem(at: pidFile)
-            return
-        }
-        proc.terminate()  // SIGTERM — uvicorn shuts down promptly
-        for _ in 0..<20 {  // ~2s grace
-            if !proc.isRunning { break }
-            Thread.sleep(forTimeInterval: 0.1)
-        }
-        if proc.isRunning {
-            kill(proc.processIdentifier, SIGKILL)  // guaranteed reap
-        }
-        try? FileManager.default.removeItem(at: pidFile)
-    }
-
-    private func stopProcess(_ process: inout Process?, pidFile: URL, synchronous: Bool = false) {
-        guard let proc = process, proc.isRunning else {
-            process = nil
-            try? FileManager.default.removeItem(at: pidFile)
-            return
-        }
-        process = nil
-        proc.terminate()
-        if synchronous {
-            // Run termination inline (bounded ~2s). At quit this is the main thread by design —
-            // we must reap the child server before the app exits (see waitForTermination, T2.1).
-            Self.waitForTermination(proc, pidFile: pidFile)
-        } else {
-            DispatchQueue.global(qos: .utility).async {
-                Self.waitForTermination(proc, pidFile: pidFile)
-            }
-        }
-    }
-
-    private func writePID(_ pid: Int32, to url: URL) {
-        try? "\(pid)".write(to: url, atomically: true, encoding: .utf8)
-    }
-
-    private static func rotateLogIfNeeded(at url: URL) {
-        let fm = FileManager.default
-        guard let attrs = try? fm.attributesOfItem(atPath: url.path),
-              let size = attrs[.size] as? UInt64,
-              size > maxLogSize else { return }
-        let backup = url.appendingPathExtension("old")
-        try? fm.removeItem(at: backup)
-        try? fm.moveItem(at: url, to: backup)
-    }
-
-    private func makeEnv() -> [String: String] {
-        var env = ProcessInfo.processInfo.environment
-        let venvBin = Paths.venv.appendingPathComponent("bin").path
-        // Prepend venv + brew paths but PRESERVE the user's existing PATH so pyenv/conda/
-        // MacPorts/Intel-Homebrew installs remain discoverable (T1.5).
-        let basePath = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
-        env["PATH"] = "\(venvBin):/opt/homebrew/bin:/usr/local/bin:\(basePath)"
-        env["VIRTUAL_ENV"] = Paths.venv.path
-        return env
+        stopAll()
+        startAll()
     }
 }
 
