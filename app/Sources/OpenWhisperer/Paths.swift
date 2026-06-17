@@ -59,6 +59,14 @@ enum Paths {
     /// Voice detail level file (controls VOICE tag verbosity in CLAUDE.md)
     static let voiceDetail = appSupport.appendingPathComponent("voice_detail")
 
+    /// Voice-turn signal (hash + unix timestamp) written by the app on each
+    /// dictation; read & claimed by the UserPromptSubmit hook (voice-context.sh).
+    static let voiceTurn = appSupport.appendingPathComponent("voice_turn")
+
+    /// Per-session "speak this turn" markers: speak_pending/<session_id>.
+    /// Created by the UPS hook on a voice-turn claim, consumed by the Stop hook.
+    static let speakPendingDir = appSupport.appendingPathComponent("speak_pending")
+
     /// Push-to-talk hotkey preference (ctrl, option, cmd, fn)
     static let pttHotkey = appSupport.appendingPathComponent("ptt_hotkey")
 

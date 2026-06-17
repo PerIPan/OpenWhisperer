@@ -631,6 +631,14 @@ class DictationManager: ObservableObject {
     private func insertText(_ text: String, intoPID pid: pid_t, forceSubmit: Bool = false, completion: @escaping () -> Void) {
         dispatchPrecondition(condition: .onQueue(.main))
 
+        // Record the voice-turn signal so the UserPromptSubmit hook can recognise
+        // THIS dictation as the voice turn (content-correlation). Written BEFORE the
+        // auto-submit Enter so the signal exists when the hook fires.
+        let voiceHash = VoiceSignal.canonicalHash(text)
+        let voiceTS = Int(Date().timeIntervalSince1970)
+        try? VoiceSignal.signalContents(hash: voiceHash, timestamp: voiceTS)
+            .write(to: Paths.voiceTurn, atomically: true, encoding: .utf8)
+
         // Resolve which app to focus: Auto-Focus target overrides captured PID
         let focusPID = resolveAutoFocusPID() ?? pid
         let targetPID = focusPID != 0 ? focusPID : pid
