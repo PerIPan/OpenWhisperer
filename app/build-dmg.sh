@@ -50,6 +50,8 @@ cp "$SCRIPT_DIR/Resources/Outfit-VariableFont_wght.ttf" "$APP_BUNDLE/Contents/Re
 # Step 3: Bundle project scripts
 cp "$PROJECT_DIR/hooks/tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/hooks/codex-tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
+cp "$PROJECT_DIR/hooks/voice-context.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
+cp "$PROJECT_DIR/hooks/first-paragraph.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/servers/unified_server.py" "$APP_BUNDLE/Contents/Resources/servers/"
 cp "$PROJECT_DIR/servers/tts_stream.py" "$APP_BUNDLE/Contents/Resources/servers/"
 cp "$PROJECT_DIR/scripts/speak.sh" "$APP_BUNDLE/Contents/Resources/scripts/"
@@ -58,6 +60,8 @@ cp "$PROJECT_DIR/scripts/tts_stream_player.py" "$APP_BUNDLE/Contents/Resources/s
 # Make scripts executable
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/tts-hook.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/codex-tts-hook.sh"
+chmod +x "$APP_BUNDLE/Contents/Resources/hooks/voice-context.sh"
+chmod +x "$APP_BUNDLE/Contents/Resources/hooks/first-paragraph.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/scripts/speak.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/scripts/tts_stream_player.py"
 
