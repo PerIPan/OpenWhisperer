@@ -6,17 +6,20 @@ import Network
 /// checks need:
 ///   GET  /v1/models        -> 200 minimal models JSON
 ///   POST /v1/audio/speech  -> 200 WAV (FluidAudio Kokoro) | 500 on failure
+///   POST /v1/audio/play    -> 202 Accepted; plays sentence-by-sentence via the in-app player
 ///
 /// One request per connection (`Connection: close`), which is all `curl` (the hook) needs.
 final class TTSHTTPServer {
     private let port: NWEndpoint.Port
     private let tts: KokoroTTS
+    private let playback: TTSPlaybackController
     private let queue = DispatchQueue(label: "tts.http.server")
     private var listener: NWListener?
 
-    init(port: UInt16, tts: KokoroTTS) {
+    init(port: UInt16, tts: KokoroTTS, playback: TTSPlaybackController) {
         self.port = NWEndpoint.Port(rawValue: port)!
         self.tts = tts
+        self.playback = playback
     }
 
     func start() throws {
@@ -100,6 +103,16 @@ final class TTSHTTPServer {
                                  Data(#"{"error":"TTS generation failed"}"#.utf8), contentType: "application/json")
                 }
             }
+
+        case ("POST", "/v1/audio/play"):
+            // Fire-and-forget: hand the text to the in-app player and return immediately. The
+            // player synthesizes sentence-by-sentence and supersedes any current playback.
+            let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any]
+            let input = json?["input"] as? String ?? ""
+            let voice = json?["voice"] as? String ?? "af_heart"
+            Task { [playback] in await playback.play(text: input, voice: voice) }
+            respond(conn, "202 Accepted",
+                    Data(#"{"status":"accepted"}"#.utf8), contentType: "application/json")
 
         default:
             respond(conn, "404 Not Found", Data())

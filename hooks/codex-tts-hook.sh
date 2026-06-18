@@ -1,14 +1,10 @@
 #!/bin/bash
-# Codex CLI notify hook — speaks the last response via mlx_audio TTS
-# Codex passes JSON payload as the last CLI argument with "last-assistant-message"
-# Fully async: TTS generation + playback runs in background
-# New responses interrupt previous playback
+# Codex CLI notify hook — speaks the last response via the in-app native TTS player.
+# Codex passes the JSON payload as the last CLI argument with "last-assistant-message". A dictated
+# turn is marked by the app's voice_turn signal; this hook extracts the first paragraph and POSTs it
+# to the app, which synthesizes sentence-by-sentence and plays in-process (no PID/afplay).
 
 APP_SUPPORT="$HOME/Library/Application Support/OpenWhisperer"
-PIDFILE="$APP_SUPPORT/tts_hook.pid"
-LOCKFILE="$APP_SUPPORT/tts_playing.lock"
-TTS_TMPDIR="${TMPDIR:-/tmp}/claude-tts-$(id -u)"
-mkdir -p "$TTS_TMPDIR"
 
 # Find jq: system PATH first, then bundled in app
 if ! command -v jq &>/dev/null; then
@@ -21,24 +17,6 @@ if ! command -v jq &>/dev/null; then
   fi
 fi
 
-# Serialize concurrent hook invocations with mkdir-based lock (atomic on all filesystems)
-HOOK_LOCK="$APP_SUPPORT/tts_hook.lockdir"
-# Clean stale lock from crashed previous run (older than 30s)
-if [ -d "$HOOK_LOCK" ]; then
-  LOCK_AGE=$(( $(date +%s) - $(stat -f %m "$HOOK_LOCK" 2>/dev/null || echo 0) ))
-  if [ "$LOCK_AGE" -gt 30 ]; then
-    rm -rf "$HOOK_LOCK"
-  fi
-fi
-LOCK_ACQUIRED=false
-for _try in 1 2 3 4 5; do
-  if mkdir "$HOOK_LOCK" 2>/dev/null; then LOCK_ACQUIRED=true; break; fi
-  sleep 0.2
-done
-trap 'rm -rf "$HOOK_LOCK"' EXIT
-# If lock not acquired after retries, another hook is running — skip
-if [ "$LOCK_ACQUIRED" = "false" ]; then exit 0; fi
-
 # Codex notify: JSON payload comes as the last CLI argument
 INPUT="${!#}"
 if [ -z "$INPUT" ] || [ "$INPUT" = "$0" ]; then INPUT=$(cat); fi
@@ -46,8 +24,8 @@ if [ -z "$INPUT" ] || [ "$INPUT" = "$0" ]; then INPUT=$(cat); fi
 TYPE=$(echo "$INPUT" | jq -r '.type // empty' 2>/dev/null)
 if [ "$TYPE" != "agent-turn-complete" ] && [ -n "$TYPE" ]; then exit 0; fi
 
-# --- Voice-turn gate: only speak dictated turns. Codex has no per-prompt session id,
-#     so gate on the app's voice_turn signal (presence + freshness) and clear it. ---
+# --- Voice-turn gate: Codex has no per-prompt session id, so gate on the app's voice_turn signal
+#     (presence + freshness) and clear it so future typed turns are not spoken. ---
 VOICE_TURN="$APP_SUPPORT/voice_turn"
 VOICE_FRESHNESS=300
 [ -f "$VOICE_TURN" ] || exit 0
@@ -58,23 +36,6 @@ if [ -n "$VT_TS" ] && [ "$((NOW - VT_TS))" -gt "$VOICE_FRESHNESS" ]; then
 fi
 rm -f "$VOICE_TURN"   # claim: this turn is spoken, future typed turns are not
 
-# Kill any previous TTS playback (validate PID before killing)
-if [ -f "$PIDFILE" ] && [ ! -L "$PIDFILE" ]; then
-  OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
-  if [[ "$OLD_PID" =~ ^[0-9]+$ ]] && kill -0 "$OLD_PID" 2>/dev/null; then
-    OLD_COMM=$(ps -p "$OLD_PID" -o comm= 2>/dev/null)
-    if [[ "$OLD_COMM" == *"bash"* ]] || [[ "$OLD_COMM" == *"afplay"* ]] || [[ "$OLD_COMM" == *"python"* ]]; then
-      pkill -INT -P "$OLD_PID" 2>/dev/null
-      sleep 0.15
-      kill "$OLD_PID" 2>/dev/null
-      pkill -P "$OLD_PID" 2>/dev/null
-    fi
-    pkill -f tts_stream_player 2>/dev/null
-  fi
-  find "$TTS_TMPDIR" -name "tts_*" -mmin +1 -delete 2>/dev/null
-  rm -f "$PIDFILE"
-fi
-
 # Codex uses "last-assistant-message" (hyphenated key)
 TEXT=$(echo "$INPUT" | jq -r '.["last-assistant-message"] // .last_assistant_message // empty' 2>/dev/null)
 [ -z "$TEXT" ] && exit 0
@@ -82,92 +43,23 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 SPEECH=$(printf '%s' "$TEXT" | "$HOOK_DIR/first-paragraph.sh")
 [ -z "$SPEECH" ] && exit 0
 
-# Lock AFTER validation — only when we know we'll play audio
-touch "$LOCKFILE"
-
-# Fast-fail: check if TTS server is reachable (2s timeout)
-TTS_URL="${TTS_URL:-http://localhost:8000/v1/audio/speech}"
-case "$TTS_URL" in
-  http://localhost:*|http://127.0.0.1:*) ;;
-  *)
-    echo "WARNING: TTS_URL points to non-local host, using default" >&2
-    TTS_URL="http://localhost:8000/v1/audio/speech"
-    ;;
-esac
-
-if ! curl -s --max-time 2 "${TTS_URL%/audio/speech}/models" > /dev/null 2>&1; then
-  rm -f "$LOCKFILE"
-  exit 0
-fi
-
-# --- Streaming player (preferred) with afplay fallback ---
-VENV_PY="$APP_SUPPORT/venv/bin/python"
-HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLAYER="$(dirname "$HOOK_DIR")/scripts/tts_stream_player.py"
-STREAM_URL="${TTS_URL%/audio/speech}/audio/stream"
-CAP_OK="$APP_SUPPORT/.tts_stream_ok"
-CAP_BAD="$APP_SUPPORT/.tts_stream_unavailable"
-
-if [ ! -f "$CAP_OK" ] && [ ! -f "$CAP_BAD" ]; then
-  if [ -x "$VENV_PY" ] && "$VENV_PY" -c "import sounddevice, numpy" >/dev/null 2>&1; then
-    touch "$CAP_OK"
-  else
-    touch "$CAP_BAD"
-  fi
-fi
-
+# Resolve voice (volume is applied app-side now).
 VOICE_FILE="$APP_SUPPORT/tts_voice"
 if [ -f "$VOICE_FILE" ] && [ ! -L "$VOICE_FILE" ]; then
   VOICE="$(cat "$VOICE_FILE" 2>/dev/null | tr -d '[:space:]')"; VOICE="${VOICE:-${TTS_VOICE:-af_heart}}"
 else
   VOICE="${TTS_VOICE:-af_heart}"
 fi
-MODEL="${TTS_MODEL:-prince-canuma/Kokoro-82M}"
-VOLUME_FILE="$APP_SUPPORT/tts_volume"
-if [ -f "$VOLUME_FILE" ] && [ ! -L "$VOLUME_FILE" ]; then
-  VOLUME="$(cat "$VOLUME_FILE" 2>/dev/null | tr -d '[:space:]')"; VOLUME="${VOLUME:-${TTS_VOLUME:-1}}"
-else
-  VOLUME="${TTS_VOLUME:-1}"
-fi
 
-if [ -f "$CAP_OK" ] && [ -f "$PLAYER" ] && [ -x "$VENV_PY" ]; then
-  # Streaming path — the player owns the lock + PID files and plays gaplessly.
-  PAYLOAD="$(jq -n --arg t "$SPEECH" --arg v "$VOICE" --arg m "$MODEL" '{model: $m, input: $t, voice: $v}')"
-  printf '%s' "$PAYLOAD" | "$VENV_PY" "$PLAYER" \
-    --url "$STREAM_URL" --volume "$VOLUME" \
-    --lockfile "$LOCKFILE" --pidfile "$PIDFILE" >/dev/null 2>&1 &
-  echo $! > "$PIDFILE"
-else
-  # --- Fallback: original curl + afplay path ---
-  (
-    TMPFILE=$(mktemp "$TTS_TMPDIR/tts_XXXXXXXXXXXX") || { rm -f "$LOCKFILE"; exit 1; }
-    TTS_OK=false
-    CURL_RC=0
-    for attempt in 1 2 3; do
-      curl -s -X POST "$TTS_URL" \
-        -H "Content-Type: application/json" \
-        -d "$(jq -n --arg t "$SPEECH" --arg v "$VOICE" --arg m "$MODEL" '{model: $m, input: $t, voice: $v}')" \
-        --output "$TMPFILE" --max-time 30 2>/dev/null
-      CURL_RC=$?
-      if [ "$CURL_RC" -eq 0 ] && [ -s "$TMPFILE" ] && head -c 4 "$TMPFILE" | grep -q "RIFF"; then
-        TTS_OK=true
-        break
-      fi
-      sleep 1
-    done
-    if [ "$TTS_OK" = "false" ]; then
-      logger -t codex-tts-hook "TTS request failed after 3 attempts (last curl rc=$CURL_RC, url=$TTS_URL)"
-    fi
-    if [ "$TTS_OK" = "true" ] && [ -s "$TMPFILE" ]; then
-      afplay -v "$VOLUME" "$TMPFILE" 2>/dev/null
-    fi
-    rm -f "$LOCKFILE"
-    rm -f "$TMPFILE" 2>/dev/null
-    rm -f "$PIDFILE" 2>/dev/null
-  ) &
-  echo $! > "$PIDFILE"
-fi
+# POST to the in-app player (loopback only). Fire-and-forget: the app returns 202 immediately,
+# then synthesizes + plays in-process and owns tts_playing.lock.
+PLAY_URL="${TTS_PLAY_URL:-http://localhost:8000/v1/audio/play}"
+case "$PLAY_URL" in
+  http://localhost:*|http://127.0.0.1:*) ;;
+  *) PLAY_URL="http://localhost:8000/v1/audio/play" ;;
+esac
 
-rmdir "$HOOK_LOCK" 2>/dev/null
+PAYLOAD="$(jq -n --arg t "$SPEECH" --arg v "$VOICE" '{input: $t, voice: $v}')"
+curl -s -X POST "$PLAY_URL" -H "Content-Type: application/json" -d "$PAYLOAD" --max-time 5 >/dev/null 2>&1 &
 
 exit 0

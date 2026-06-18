@@ -54,4 +54,14 @@ actor KokoroTTS {
         let spoken = NumberNormalizer.normalize(text)
         return try await manager.synthesize(text: spoken, voice: voice)
     }
+
+    /// Synthesize `text` → raw 24 kHz mono fp32 PCM samples (no WAV wrapper), for in-process
+    /// streaming playback via `AVAudioPlayerNode`. Same numeric pre-pass as `synthesize`.
+    func synthesizeSamples(_ text: String, voice: String = "af_heart") async throws
+        -> (samples: [Float], sampleRate: Int) {
+        if !loaded { try await prepare() }
+        let spoken = NumberNormalizer.normalize(text)
+        let result = try await manager.synthesizeDetailed(text: spoken, voice: voice)
+        return (result.samples, result.sampleRate)
+    }
 }

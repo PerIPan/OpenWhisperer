@@ -13,6 +13,9 @@ class DictationManager: ObservableObject {
     let keywordDetector = KeywordDetector()
     /// In-process Whisper STT (WhisperKit). Replaces the HTTP call to the Python server.
     let transcriber = SpeechTranscriber()
+    /// In-process TTS playback (Phase 3). Injected by `AppDelegate` from `ServerManager`; used by
+    /// `killTTS()` for instant barge-in. Optional so headless/test paths without a server still run.
+    var ttsController: TTSPlaybackController?
 
     @Published var lastTranscription: String = ""
     @Published var error: String?
@@ -597,31 +600,15 @@ class DictationManager: ObservableObject {
         NSSound(named: "Tink")?.play()
     }
 
-    /// Barge-in: kill any currently playing TTS audio when recording starts.
-    /// Runs on a background queue to avoid blocking the main thread.
+    /// Barge-in: stop any currently playing TTS when recording starts. Playback is in-process
+    /// (Phase 3) — a direct actor call stops audio and cancels pending synthesis (freeing the ANE
+    /// for STT). The controller removes `tts_playing.lock`; we also remove it directly so the
+    /// lock-file poll reacts immediately even if the controller is unset.
     func killTTS() {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let pidFile = Paths.appSupport.appendingPathComponent("tts_hook.pid")
-            let lockFile = Paths.appSupport.appendingPathComponent("tts_playing.lock")
-
-            // Kill via PID file (matches tts-hook.sh behaviour)
-            if let pidStr = try? String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
-               let pid = Int32(pidStr), pid > 0 {
-                // Fallback (afplay) path: SIGINT afplay children of the bash wrapper.
-                // Streaming path: the python player has no children, so this pkill is a
-                // no-op there — the SIGTERM below to the recorded PID stops the player.
-                let pkill = Process()
-                pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
-                pkill.arguments = ["-INT", "-P", "\(pid)"]
-                try? pkill.run()
-                pkill.waitUntilExit()
-
-                kill(pid, SIGTERM)
-                try? FileManager.default.removeItem(at: pidFile)
-            }
-
-            try? FileManager.default.removeItem(at: lockFile)
-        }
+        let controller = ttsController
+        Task { await controller?.bargeIn() }
+        try? FileManager.default.removeItem(
+            at: Paths.appSupport.appendingPathComponent("tts_playing.lock"))
     }
 
     // MARK: - Insert Text (main thread orchestrator)

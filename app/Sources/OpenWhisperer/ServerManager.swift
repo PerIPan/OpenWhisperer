@@ -19,8 +19,15 @@ class ServerManager: ObservableObject {
     @Published var lastError: String = ""
 
     private let tts = KokoroTTS()
+    /// In-process TTS playback (Phase 3). Shared with `DictationManager` (via `AppDelegate`) for
+    /// instant barge-in, and with `TTSHTTPServer` to serve `/v1/audio/play`.
+    let playback: TTSPlaybackController
     private var httpServer: TTSHTTPServer?
     private var prepareTask: Task<Void, Never>?
+
+    init() {
+        playback = TTSPlaybackController(tts: tts)
+    }
 
     var isRunning: Bool { status == .running }
     var statusLabel: String { status.rawValue }
@@ -34,7 +41,7 @@ class ServerManager: ObservableObject {
             status = .starting
             lastError = ""
 
-            let server = TTSHTTPServer(port: UInt16(port), tts: tts)
+            let server = TTSHTTPServer(port: UInt16(port), tts: tts, playback: playback)
             do {
                 try server.start()
                 httpServer = server
