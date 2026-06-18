@@ -32,8 +32,9 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 PENDING_DIR="$APP_SUPPORT/speak_pending"
 SAFE_ID=$(printf '%s' "$SESSION_ID" | tr -c 'A-Za-z0-9_.-' '_')
 PENDING="$PENDING_DIR/$SAFE_ID"
-# Sweep markers orphaned by sessions that died between prompt and response.
-find "$PENDING_DIR" -type f -mmin +5 -delete 2>/dev/null
+# Sweep markers orphaned by sessions that died between prompt and response. The 15-minute
+# window lets a long agent turn finish without its own marker being swept mid-turn.
+find "$PENDING_DIR" -type f -mmin +15 -delete 2>/dev/null
 # Only speak if THIS session was marked a voice turn by the UPS hook.
 [ -f "$PENDING" ] || exit 0
 rm -f "$PENDING"
