@@ -80,5 +80,20 @@ func ttsHookGateFailures() -> [String] {
         if !s.curlCalls().contains("v1/audio/play") { fail("sessionIdSanitized: did not POST") }
     }
 
+    // 7) full style → whole reply spoken (all paragraphs), code dropped — not just first paragraph.
+    do {
+        let s = newSandbox()
+        s.writeMarker(session: "s1")
+        s.writeTtsStyle("full")
+        _ = Hook.run("tts-hook.sh",
+                     stdin: input(["session_id": "s1",
+                                   "last_assistant_message": "First spoken part.\n\n```swift\nlet x = 1\n```\n\nSecond spoken part."]),
+                     sandbox: s)
+        let calls = s.curlCalls()
+        if !calls.contains("First spoken part") { fail("fullStyle: missing first paragraph; calls=\(calls.debugDescription)") }
+        if !calls.contains("Second spoken part") { fail("fullStyle: only first paragraph spoken, expected whole reply; calls=\(calls.debugDescription)") }
+        if calls.contains("let x = 1") { fail("fullStyle: code block leaked into speech; calls=\(calls.debugDescription)") }
+    }
+
     return failures
 }

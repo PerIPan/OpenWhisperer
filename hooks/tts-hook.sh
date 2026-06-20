@@ -39,11 +39,20 @@ find "$PENDING_DIR" -type f -mmin +15 -delete 2>/dev/null
 [ -f "$PENDING" ] || exit 0
 rm -f "$PENDING"
 
-# Extract the FIRST PARAGRAPH of the response (markdown-stripped) as the spoken text.
+# Extract the response text and resolve style.
 TEXT=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // empty')
 [ -z "$TEXT" ] && exit 0
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
-SPEECH=$(printf '%s' "$TEXT" | "$HOOK_DIR/speakable-text.sh")
+# Spoken-text style. Precedence: per-project OW_TTS_STYLE env → global tts_style file →
+# legacy voice_detail. 'full' speaks the whole reply; everything else, the first paragraph.
+STYLE="$OW_TTS_STYLE"
+[ -z "$STYLE" ] && STYLE=$(cat "$APP_SUPPORT/tts_style" 2>/dev/null | tr -d '[:space:]')
+[ -z "$STYLE" ] && STYLE=$(cat "$APP_SUPPORT/voice_detail" 2>/dev/null | tr -d '[:space:]')
+if [ "$STYLE" = "full" ]; then
+  SPEECH=$(printf '%s' "$TEXT" | "$HOOK_DIR/speakable-text.sh" --full)
+else
+  SPEECH=$(printf '%s' "$TEXT" | "$HOOK_DIR/speakable-text.sh")
+fi
 [ -z "$SPEECH" ] && exit 0
 
 # Resolve voice. Precedence: per-project OW_TTS_VOICE env → global tts_voice file
