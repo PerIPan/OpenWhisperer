@@ -57,9 +57,9 @@ mkdir -p "$PENDING_DIR"
 SAFE_ID=$(printf '%s' "$SESSION_ID" | tr -c 'A-Za-z0-9_.-' '_')
 : > "$PENDING_DIR/$SAFE_ID"
 
-# Spoken-summary style (length). Precedence: per-project OW_TTS_STYLE env →
-# global tts_style file → legacy voice_detail. Shapes ONLY the nudge wording;
-# the Stop hook always speaks the first paragraph.
+# Spoken-summary style. Precedence: per-project OW_TTS_STYLE env → global
+# tts_style file → legacy voice_detail. Shapes the nudge wording here; the Stop
+# hooks read the same style to choose first-paragraph vs. whole-reply extraction.
 STYLE="$OW_TTS_STYLE"
 [ -z "$STYLE" ] && STYLE=$(cat "$APP_SUPPORT/tts_style" 2>/dev/null | tr -d '[:space:]')
 [ -z "$STYLE" ] && STYLE=$(cat "$APP_SUPPORT/voice_detail" 2>/dev/null | tr -d '[:space:]')
@@ -71,7 +71,7 @@ case "$STYLE" in
   rich)  LEN="a sentence or two of plain spoken summary" ;;
   *)     LEN="one plain spoken sentence" ;;
 esac
-# terse/normal/rich build the summary nudge from LEN; full set NUDGE directly above.
+# terse/normal/rich build the summary nudge from LEN; full sets NUDGE directly above.
 [ -z "$NUDGE" ] && NUDGE="This turn was dictated by voice and your reply will be read aloud. Open with ${LEN} that stands alone as a summary; details can follow."
 
 # additionalContext is visible to the model; suppressOutput keeps it out of the transcript.

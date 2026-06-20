@@ -1,6 +1,6 @@
 import Foundation
 
-/// Splits spoken text (the markdown-stripped first paragraph of a reply) into sentence-sized
+/// Splits spoken text (the markdown-stripped first paragraph, or whole reply in full mode) into sentence-sized
 /// chunks for pipelined TTS synthesis: chunk 1 plays while chunk 2+ are still synthesizing.
 ///
 /// Pure and deterministic with no `NaturalLanguage` dependency, so it builds and unit-tests under
