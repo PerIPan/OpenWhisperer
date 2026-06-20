@@ -64,11 +64,15 @@ STYLE="$OW_TTS_STYLE"
 [ -z "$STYLE" ] && STYLE=$(cat "$APP_SUPPORT/tts_style" 2>/dev/null | tr -d '[:space:]')
 [ -z "$STYLE" ] && STYLE=$(cat "$APP_SUPPORT/voice_detail" 2>/dev/null | tr -d '[:space:]')
 case "$STYLE" in
+  full)
+    NUDGE="This turn was dictated by voice and your entire reply will be read aloud. Write the whole reply as natural spoken prose: short sentences, expand acronyms, avoid AI-isms and filler, and keep code, file paths, and tables out of the spoken flow — describe them in words instead. Do not write a separate summary."
+    ;;
   terse) LEN="one short, plain spoken sentence" ;;
   rich)  LEN="a sentence or two of plain spoken summary" ;;
   *)     LEN="one plain spoken sentence" ;;
 esac
-NUDGE="This turn was dictated by voice and your reply will be read aloud. Open with ${LEN} that stands alone as a summary; details can follow."
+# terse/normal/rich build the summary nudge from LEN; full set NUDGE directly above.
+[ -z "$NUDGE" ] && NUDGE="This turn was dictated by voice and your reply will be read aloud. Open with ${LEN} that stands alone as a summary; details can follow."
 
 # additionalContext is visible to the model; suppressOutput keeps it out of the transcript.
 jq -n --arg ctx "$NUDGE" '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $ctx}, suppressOutput: true}'

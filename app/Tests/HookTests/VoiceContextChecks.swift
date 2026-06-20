@@ -116,5 +116,22 @@ func voiceContextFailures() -> [String] {
         }
     }
 
+    // 10) full style → "speak the whole reply" nudge, not a summary opener.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsStyle("full")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let n = nudge(r.stdout)
+        if n?.contains("entire reply") != true {
+            fail("fullStyle: nudge missing 'entire reply': \(n?.debugDescription ?? "nil")")
+        }
+        if n?.contains("read aloud") != true {
+            fail("fullStyle: nudge missing 'read aloud': \(n?.debugDescription ?? "nil")")
+        }
+        if n?.contains("Open with") == true {
+            fail("fullStyle: nudge should not ask for a summary opener: \(n?.debugDescription ?? "nil")")
+        }
+    }
+
     return failures
 }
