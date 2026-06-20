@@ -42,5 +42,31 @@ func speakableTextFailures() -> [String] {
         failures.append("speakable-text.capsLongParagraph: does not end on a sentence boundary: \(capped.suffix(20).debugDescription)")
     }
 
+    // --- Full mode: all prose paragraphs, uncapped, paragraph breaks kept as newlines. ---
+    func fullText(_ input: String) -> String {
+        Hook.run("speakable-text.sh", args: ["--full"], stdin: input, sandbox: sandbox).stdout
+    }
+    func expectFull(_ input: String, _ expected: String, _ name: String) {
+        let r = fullText(input)
+        if r != expected {
+            failures.append("speakable-text.full.\(name): got \(r.debugDescription), expected \(expected.debugDescription)")
+        }
+    }
+
+    expectFull("First paragraph here.\n\nSecond paragraph here.\n",
+               "First paragraph here.\nSecond paragraph here.", "keepsAllParagraphs")
+    expectFull("Intro line.\n\n```swift\nlet x = 1\n```\n\n| a | b |\n\nClosing line.\n",
+               "Intro line.\nClosing line.", "dropsCodeAndTablesInFull")
+    expectFull("Line one\ncontinues here.\n\nNext para.\n",
+               "Line one continues here.\nNext para.", "joinsIntraParagraphLines")
+
+    // No 600-char cap in full mode.
+    let longFull = String(repeating: "Sentence one is here. ", count: 60)
+        .trimmingCharacters(in: .whitespaces) + "\n"
+    let fullCapped = fullText(longFull)
+    if fullCapped.count <= 600 {
+        failures.append("speakable-text.full.noCap: length \(fullCapped.count) <= 600, expected uncapped")
+    }
+
     return failures
 }

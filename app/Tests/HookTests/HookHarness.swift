@@ -115,10 +115,10 @@ enum Hook {
     }
 
     /// Run a hook script with the sandbox's HOME + PATH, feeding `stdin`, returning exit + stdout.
-    static func run(_ name: String, stdin: String, sandbox: Sandbox, env extra: [String: String] = [:]) -> Result {
+    static func run(_ name: String, args: [String] = [], stdin: String, sandbox: Sandbox, env extra: [String: String] = [:]) -> Result {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/bash")
-        proc.arguments = [hooksDir.appendingPathComponent(name).path]
+        proc.arguments = [hooksDir.appendingPathComponent(name).path] + args
         var env = ["HOME": sandbox.home.path, "PATH": sandbox.path, "LANG": "en_US.UTF-8"]
         for (k, v) in extra { env[k] = v }
         proc.environment = env
