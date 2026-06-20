@@ -132,6 +132,41 @@ must surface a clear "model failed to download" state (reusing the existing
   the hands-on feel-test.
 - `swift run OpenWhispererKitTests` and `swift run HookTests` must stay green.
 
+## Outcome / Decision (2026-06-20)
+
+**Built, feel-tested, and NOT adopted.** The configurable engines were implemented
+end-to-end (PR #6) and tried on-device. Conclusion: the existing defaults —
+**WhisperKit for STT, Kokoro for TTS** — are the right choice, and the
+configurability isn't worth its complexity here. PR #6 was closed unmerged; only its
+one independent improvement (a clearer voice nudge: "only the first paragraph is
+read aloud") was kept and cherry-picked to `main`.
+
+What the feel-test showed:
+- **Nemotron** transcribes English noticeably worse than Whisper (rougher, mangles
+  acronyms / programming jargon). Whisper's clean output (drops "uh/um", handles
+  jargon) is intrinsic to the model — not post-processing we could bolt onto the others.
+- **Parakeet v3** has **no Turkish** (25 European languages only), so it can't be a
+  general default for this user.
+- **Whisper large-v3-turbo** is the all-rounder: best English *and* ~99 languages
+  incl. Turkish (confirmed live). It stays the sole STT engine.
+- The FluidAudio ASR models also cost ~1.1 GB on disk (Parakeet 461 MB + Nemotron
+  635 MB) for no benefit over Whisper.
+
+Lessons worth keeping:
+- **FluidAudio model/language map:** Parakeet = European (no Turkish); Nemotron =
+  ~40 langs incl. Turkish but weaker English; SenseVoice = 5 langs. TTS: Kokoro =
+  en/zh/ja only; Supertonic3 supports Turkish. Whisper comes from **WhisperKit, a
+  separate library — FluidAudio has no Whisper** — which is why the app pulls in both.
+- **FluidAudio ASR models cache to `~/Library/Application Support/FluidAudio/Models`**
+  (not `~/.cache/fluidaudio`, which holds the Kokoro TTS chain).
+- **Kokoro voice packs download on demand**; a non-default voice (e.g. `am_michael`)
+  needs a fetch the dev's Little Snitch blocks, and a missing pack makes TTS silently
+  fall through. Stick to the cached `af_heart`, or allow the fetch once.
+
+The protocol-seam implementation (`Transcriber` / `SpeechSynthesizer`,
+`FluidAudioTranscriber` with Parakeet-batch + Nemotron-streaming) lives on the
+abandoned `worktree-engine-config` branch / PR #6 if ever revisited.
+
 ## Success criteria (the feel-test)
 
 1. App launches defaulting to Nemotron STT + Kokoro TTS; dictation works.
