@@ -72,7 +72,7 @@ case "$STYLE" in
   *)     LEN="one plain spoken sentence" ;;
 esac
 # terse/normal/rich build the summary nudge from LEN; full sets NUDGE directly above.
-[ -z "$NUDGE" ] && NUDGE="This turn was dictated by voice and your reply will be read aloud. Open with ${LEN} that stands alone as a summary; details can follow."
+[ -z "$NUDGE" ] && NUDGE="This turn was dictated by voice and ONLY your first paragraph is read aloud. Open with ${LEN} that stands alone as the spoken summary, then a blank line before any further detail (everything after the blank line stays on screen, unspoken)."
 
 # additionalContext is visible to the model; suppressOutput keeps it out of the transcript.
 jq -n --arg ctx "$NUDGE" '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $ctx}, suppressOutput: true}'
