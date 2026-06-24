@@ -7,6 +7,9 @@ enum PTTKey: String, CaseIterable {
     case ctrl = "ctrl"
     case option = "option"
     case cmd = "cmd"
+    case rightCtrl = "rightCtrl"
+    case rightOption = "rightOption"
+    case rightCmd = "rightCmd"
 
     var label: String {
         switch self {
@@ -14,15 +17,18 @@ enum PTTKey: String, CaseIterable {
         case .ctrl: return "Ctrl"
         case .option: return "Option"
         case .cmd: return "Cmd"
+        case .rightCtrl: return "Right Ctrl"
+        case .rightOption: return "Right Option"
+        case .rightCmd: return "Right Cmd"
         }
     }
 
     var modifierFlag: NSEvent.ModifierFlags {
         switch self {
         case .fn: return .function
-        case .ctrl: return .control
-        case .option: return .option
-        case .cmd: return .command
+        case .ctrl, .rightCtrl: return .control
+        case .option, .rightOption: return .option
+        case .cmd, .rightCmd: return .command
         }
     }
 }
@@ -86,7 +92,24 @@ class HotkeyManager {
     private func handleEvent(_ event: NSEvent) {
         switch event.type {
         case .flagsChanged:
-            let pressed = event.modifierFlags.contains(pttKey.modifierFlag)
+            let pressed: Bool
+            switch pttKey {
+            case .fn:
+                pressed = event.modifierFlags.contains(.function)
+            case .ctrl:
+                pressed = event.modifierFlags.contains(.control)
+            case .option:
+                pressed = event.modifierFlags.contains(.option)
+            case .cmd:
+                pressed = event.modifierFlags.contains(.command)
+            case .rightCtrl:
+                pressed = (event.modifierFlags.rawValue & 0x2000) != 0
+            case .rightOption:
+                pressed = (event.modifierFlags.rawValue & 0x0040) != 0
+            case .rightCmd:
+                pressed = (event.modifierFlags.rawValue & 0x0010) != 0
+            }
+
             if pressed && !keyDown {
                 keyDown = true
                 wasCombo = false
