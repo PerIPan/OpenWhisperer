@@ -34,8 +34,6 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 - **WhisperKit 1.0** — the speech-to-text engine is updated to the 1.0 stable release.
 - **Reliability hardening** — generation-guarded TTS cancellation, a request body-size cap and surfaced bind-failure on the loopback TTS server, the "Speaking…" lock now clears if the output device drops mid-reply, and a uniform voice-turn freshness window so dictating then pausing before submit still speaks.
 
-> The native rewrite at the heart of this release (the first three items above) was contributed by [Hakan Ensari](https://github.com/hakanensari) — see [Acknowledgments](#acknowledgments).
-
 ## Install
 
 [**Download OpenWhisperer-1.5.0.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.5.0/OpenWhisperer-1.5.0.dmg) — drag to Applications and launch.
@@ -256,10 +254,6 @@ OpenWhisperer/
 ## Contributing
 
 Contributions are welcome! Feel free to open issues or submit pull requests. Whether it's bug fixes, new features, documentation improvements, or voice model suggestions — all contributions are appreciated.
-
-## Acknowledgments
-
-The **v1.5 native rewrite** — replacing the out-of-process Python server with fully in-process Swift speech-to-text (WhisperKit) and text-to-speech (FluidAudio Kokoro), in-process streaming playback and barge-in, and the tagless voice-turn handshake — was contributed by [**Hakan Ensari**](https://github.com/hakanensari) ([fork](https://github.com/hakanensari/OpenWhisperer)). It removed the Python/venv stack entirely and made the app notarizable. Thank you!
 
 ## Credits
 
