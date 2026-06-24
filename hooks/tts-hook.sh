@@ -35,9 +35,63 @@ PENDING="$PENDING_DIR/$SAFE_ID"
 # Sweep markers orphaned by sessions that died between prompt and response. The 15-minute
 # window lets a long agent turn finish without its own marker being swept mid-turn.
 find "$PENDING_DIR" -type f -mmin +15 -delete 2>/dev/null
-# Only speak if THIS session was marked a voice turn by the UPS hook.
-[ -f "$PENDING" ] || exit 0
-rm -f "$PENDING"
+
+IS_VOICE_TURN=false
+if [ -f "$PENDING" ]; then
+  IS_VOICE_TURN=true
+  rm -f "$PENDING"
+else
+  # Fallback: check if prompt matches voice_turn hash (for platforms like Antigravity TUI)
+  VOICE_TURN="$APP_SUPPORT/voice_turn"
+  if [ -f "$VOICE_TURN" ]; then
+    TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcriptPath // empty')
+    if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+      # Read the last user input from transcript
+      USER_LINE=$(tail -r "$TRANSCRIPT_PATH" | grep -m 1 '"type":"USER_INPUT"')
+      if [ -n "$USER_LINE" ]; then
+        RAW_CONTENT=$(printf '%s' "$USER_LINE" | jq -r '.content // empty')
+        if [ -n "$RAW_CONTENT" ]; then
+          # Extract prompt inside <USER_REQUEST> tags
+          PROMPT=$(printf '%s' "$RAW_CONTENT" | awk '/<USER_REQUEST>/{flag=1; next} /<\/USER_REQUEST>/{flag=0} flag')
+          
+          # Read voice_turn details
+          STORED_HASH=$(sed -n '1p' "$VOICE_TURN" 2>/dev/null)
+          STORED_TS=$(sed -n '2p' "$VOICE_TURN" 2>/dev/null)
+          
+          if [ -n "$STORED_HASH" ]; then
+            # Freshness check
+            NOW=$(date +%s)
+            FRESHNESS=300
+            if [ -n "$STORED_TS" ] && [ "$((NOW - STORED_TS))" -le "$FRESHNESS" ]; then
+              # Hash and compare
+              trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
+              TRIMMED=$(trim "$PROMPT")
+              if command -v shasum >/dev/null 2>&1; then
+                PROMPT_HASH=$(printf '%s' "$TRIMMED" | shasum -a 256 | awk '{print $1}')
+              else
+                PROMPT_HASH=$(printf '%s' "$TRIMMED" | openssl dgst -sha256 | awk '{print $NF}')
+              fi
+              
+              if [ "$PROMPT_HASH" = "$STORED_HASH" ]; then
+                # Match found! Atomic claim: move and remove to claim
+                CLAIM="$APP_SUPPORT/.voice_turn.claimed.$$"
+                if mv "$VOICE_TURN" "$CLAIM" 2>/dev/null; then
+                  rm -f "$CLAIM"
+                  IS_VOICE_TURN=true
+                fi
+              fi
+            else
+              # Clean stale voice turn
+              rm -f "$VOICE_TURN"
+            fi
+          fi
+        fi
+      fi
+    fi
+  fi
+fi
+
+[ "$IS_VOICE_TURN" = "true" ] || exit 0
 
 # Extract the response text and resolve style.
 TEXT=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // empty')
