@@ -51,6 +51,7 @@ actor KokoroTTS {
     /// model on first use if `prepare()` hasn't run.
     func synthesize(_ text: String, voice: String = "af_heart") async throws -> Data {
         if !loaded { try await prepare() }
+        await ensureVoicePack(voice)
         let spoken = NumberNormalizer.normalize(text)
         return try await manager.synthesize(text: spoken, voice: voice)
     }
@@ -60,8 +61,42 @@ actor KokoroTTS {
     func synthesizeSamples(_ text: String, voice: String = "af_heart") async throws
         -> (samples: [Float], sampleRate: Int) {
         if !loaded { try await prepare() }
+        await ensureVoicePack(voice)
         let spoken = NumberNormalizer.normalize(text)
         let result = try await manager.synthesizeDetailed(text: spoken, voice: voice)
         return (result.samples, result.sampleRate)
+    }
+
+    /// Helper to download and cache alternative voice .bin files if they are missing or corrupted on disk,
+    /// because the upstream FluidInference repository only hosts af_heart.bin in its ANE folder.
+    private func ensureVoicePack(_ voice: String) async {
+        let sanitized = voice.filter { $0.isLetter || $0.isNumber || $0 == "_" }
+        guard !sanitized.isEmpty && sanitized != "af_heart" else { return }
+
+        let fileManager = FileManager.default
+        let home = fileManager.homeDirectoryForCurrentUser
+        let localDir = home.appendingPathComponent(".cache/fluidaudio/Models/kokoro-82m-coreml/ANE")
+        let localURL = localDir.appendingPathComponent("\(sanitized).bin")
+
+        // If file exists and size is valid (not a tiny error page), skip downloading
+        if fileManager.fileExists(atPath: localURL.path) {
+            if let attrs = try? fileManager.attributesOfItem(atPath: localURL.path),
+               let size = attrs[.size] as? Int64,
+               size > 1000 {
+                return
+            }
+        }
+
+        let remoteURLString = "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/\(sanitized).bin"
+        guard let url = URL(string: remoteURLString) else { return }
+
+        do {
+            try fileManager.createDirectory(at: localDir, withIntermediateDirectories: true)
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard data.count > 1000 else { return }
+            try data.write(to: localURL, options: .atomic)
+        } catch {
+            // Ignore downloading errors; KokoroAneManager will handle missing assets downstream
+        }
     }
 }

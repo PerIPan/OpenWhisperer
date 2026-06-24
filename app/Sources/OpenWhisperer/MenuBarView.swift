@@ -76,19 +76,9 @@ struct MenuBarView: View {
         ("am_michael", "Michael (English M)"),
         // French
         ("ff_siwis", "Siwis (French F)"),
-        // Spanish
-        ("ef_dora", "Dora (Spanish F)"),
         // Italian
         ("if_sara", "Sara (Italian F)"),
         ("im_nicola", "Nicola (Italian M)"),
-        // Portuguese
-        ("pf_dora", "Dora (Portuguese F)"),
-        // Hindi
-        ("hf_alpha", "Alpha (Hindi F)"),
-        // Japanese
-        ("jf_alpha", "Alpha (Japanese F)"),
-        // Chinese
-        ("zf_xiaobei", "Xiaobei (Chinese F)"),
     ]
 
     private static let languages: [(id: String, label: String)] = [
