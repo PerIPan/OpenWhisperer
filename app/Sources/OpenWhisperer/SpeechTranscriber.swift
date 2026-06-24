@@ -39,6 +39,13 @@ actor SpeechTranscriber {
 
     var isReady: Bool { whisperKit != nil }
 
+    /// True when the CoreML model is already downloaded on disk. The first run downloads ~1.5 GB;
+    /// the first *load* after that also pays a one-time Neural-Engine compile. Used to choose the
+    /// right "this is taking a while because…" message.
+    static var isModelCached: Bool {
+        FileManager.default.fileExists(atPath: cachedModelFolder.path)
+    }
+
     /// Download (first run) + load the model. Idempotent: concurrent callers await the
     /// same in-flight load rather than starting a second one.
     @discardableResult

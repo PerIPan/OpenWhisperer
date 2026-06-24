@@ -3,22 +3,49 @@ import ServiceManagement
 
 // MARK: - Design Tokens
 
-private enum OWColor {
-    /// Card background — translucent to let vibrancy show through
-    static let cardBackground = Color(nsColor: .controlBackgroundColor).opacity(0.35)
-    /// Section label / secondary text
-    static let muted = Color.secondary
-    /// Thin separator line
-    static let divider = Color.primary.opacity(0.08)
-    /// Accent — gray for interactive states (pickers, checkboxes)
-    static let accent = Color.gray
-    /// Inline tag pill background
-    static let pillBackground = Color.primary.opacity(0.06)
+// Warm "Open Whisperer" palette (openwhisperer.com). Tokens are light/dark dynamic —
+// see Theme.swift for the `Color.ow(light, dark)` helper. Module-internal so the overlay
+// and any other view can share the same design tokens.
+enum OWColor {
+    // Surfaces
+    static let page = Color.ow(0xFAF7F1, 0x1E1B16)            // popover background (cream / warm-dark)
+    static let surface = Color.ow(0xFFFFFF, 0x2A2520)          // card surface
+    static let cardBackground = surface                        // legacy alias (OWCard)
+    // Lines
+    static let line = Color.ow(0xDCCFB8, 0x3A332B)             // borders + dividers (deepened for visible cards)
+    static let divider = line                                  // legacy alias
+    // Text ramp (warm ink → cream)
+    static let ink = Color.ow(0x2A2520, 0xF3ECDF)
+    static let inkSoft = Color.ow(0x6A6157, 0xB6AC9C)
+    static let inkFaint = Color.ow(0x978C7E, 0x877D6F)
+    static let muted = inkSoft                                 // legacy alias
+    // Accent (gold)
+    static let accent = Color.ow(0xC0A06A, 0xCBA86A)
+    static let accentDeep = Color.ow(0x98763F, 0xD8B677)
+    static let onAccent = Color.ow(0x2A2520, 0x211B12)         // text/icon on a gold fill (WCAG-safe ink)
+    static let success = accentDeep                            // "applied" state → deep gold (WCAG-safe as text)
+    // Fills
+    static let pillFill = Color.ow(0xEADFC8, 0x342D24)
+    static let pickerBg = Color.ow(0xF3EBDD, 0x332C23)
+    static let pickerBorder = Color.ow(0xE0D4BD, 0x423A30)
+    static let checkboxBorder = Color.ow(0xCBBFA9, 0x4A4136)
+    static let pillBackground = pillFill                       // legacy alias
+    // Status semantics — warm equivalents of system red/amber/green so dots + badges don't
+    // clash with the cream/gold palette (the system colors are especially jarring in dark mode).
+    static let recording = Color.ow(0xCC3D33, 0xE2675A)        // recording / error
+    static let warn = Color.ow(0xB8822E, 0xE0B25C)             // transient / warning
+    static let live = Color.ow(0x5E8C4E, 0x86C06A)             // listening / running / ready
+    static let danger = recording                             // alias for error states
 }
 
-private enum OWFont {
+enum OWFont {
+    /// Brand serif for the wordmark + titled headers. The bundled cut is a single SemiBold static
+    /// face (family "Fraunces SemiBold"), so the weight is intrinsic — no `.weight()` needed.
     static func title(_ size: CGFloat = 15) -> Font {
-        .custom("Outfit", size: size).weight(.semibold)
+        .custom("Fraunces SemiBold", size: size)
+    }
+    static func serif(_ size: CGFloat = 15) -> Font {
+        .custom("Fraunces SemiBold", size: size)
     }
     static func sectionLabel(_ size: CGFloat = 11) -> Font {
         .custom("Outfit", size: size).weight(.semibold)
@@ -144,7 +171,7 @@ struct MenuBarView: View {
             setupProgressSection
 
             serverStatusCard
-                .padding(.bottom, 8)
+                .padding(.bottom, 10)
 
             voiceInputCard
                 .padding(.bottom, 8)
@@ -165,9 +192,14 @@ struct MenuBarView: View {
         }
         .padding(14)
         .font(OWFont.body())
+        .foregroundStyle(OWColor.ink)
+        .tint(OWColor.accent)
         .frame(width: 310)
-        // Native AppKit controls replaced with custom OWMenuPicker/OWCheckbox
-        .background(.ultraThinMaterial)
+        // Native AppKit controls replaced with custom OWMenuPicker/OWCheckbox.
+        // Warm solid surface (no material) to match openwhisperer.com; window chrome
+        // tinted to match in both light + dark via OWWindowBackground.
+        .background(OWColor.page)
+        .background(OWWindowBackground())
         .onAppear {
             selectedPlatform = Platform.load()
             launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -234,11 +266,12 @@ struct MenuBarView: View {
             if let appIcon = NSApp.applicationIconImage {
                 Image(nsImage: appIcon)
                     .resizable()
-                    .frame(width: 28, height: 28)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .frame(width: 24, height: 24)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
             }
             Text("Open Whisperer")
-                .font(OWFont.title(15))
+                .font(OWFont.title(17))
+                .foregroundColor(OWColor.ink)
             Spacer()
         }
     }
@@ -264,7 +297,7 @@ struct MenuBarView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Label(reason, systemImage: "exclamationmark.triangle.fill")
                         .font(OWFont.caption())
-                        .foregroundColor(.red)
+                        .foregroundColor(OWColor.danger)
                     Button("Retry Setup") {
                         setupManager.resetAndRerun { success in
                             guard success else { return }
@@ -338,7 +371,7 @@ struct MenuBarView: View {
 
                     Text("Required for built-in dictation")
                         .font(OWFont.caption())
-                        .foregroundColor(.orange)
+                        .foregroundColor(OWColor.warn)
                 } else {
                     OWInternalDivider()
 
@@ -347,11 +380,11 @@ struct MenuBarView: View {
                         Circle()
                             .fill(stateColor)
                             .frame(width: 7, height: 7)
-                            .shadow(color: stateColor.opacity(0.5), radius: stateColor == .green || stateColor == .red ? 3 : 0)
+                            .shadow(color: stateColor.opacity(0.5), radius: stateGlows ? 3 : 0)
                             .frame(width: 16)
                         Text(stateLabel)
                             .font(OWFont.body(12))
-                            .foregroundColor(.primary)
+                            .foregroundColor(OWColor.ink)
 
                         Spacer()
 
@@ -398,7 +431,7 @@ struct MenuBarView: View {
                                 ProgressView().controlSize(.small)
                                 Text("Calibrating microphone...")
                                     .font(OWFont.caption())
-                                    .foregroundColor(.orange)
+                                    .foregroundColor(OWColor.warn)
                             }
                         }
 
@@ -406,7 +439,7 @@ struct MenuBarView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "speaker.wave.2.fill")
                                     .font(.system(size: 9))
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(OWColor.accentDeep)
                                 Text("say \"hold on\" to interrupt TTS")
                                     .font(OWFont.caption())
                                     .foregroundColor(.secondary)
@@ -418,7 +451,7 @@ struct MenuBarView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "waveform")
                             .font(.system(size: 11))
-                            .foregroundColor(overlay.isVisible ? .green : .secondary)
+                            .foregroundColor(overlay.isVisible ? OWColor.live : OWColor.inkFaint)
                             .frame(width: 16)
                         Text("Transcription Overlay")
                             .font(OWFont.body(12))
@@ -437,12 +470,12 @@ struct MenuBarView: View {
 
                     // Hotkey-change notice
                     if pttKeyChanged {
-                        InlineBadge(text: "Restart app to apply new hotkey", color: .orange)
+                        InlineBadge(text: "Restart app to apply new hotkey", color: OWColor.warn)
                     }
 
                     // Error display
                     if let err = dictationManager.error {
-                        InlineBadge(text: err, color: .red)
+                        InlineBadge(text: err, color: OWColor.danger)
                     }
                 }
             }
@@ -689,18 +722,12 @@ struct MenuBarView: View {
                     Text(applyMessage)
                         .font(OWFont.caption())
                         .foregroundColor(
-                            applyMessage.lowercased().contains("fail") ? .red : .green
+                            applyMessage.lowercased().contains("fail") ? OWColor.danger : OWColor.live
                         )
                         .transition(.opacity)
                 }
-
-                // Diagnostics
-                VStack(alignment: .leading, spacing: 4) {
-                    ModernDiagnosticRow(label: "HOOK configured", ok: hookApplied)
-                    if selectedPlatform == .claudeCode {
-                        ModernDiagnosticRow(label: "superpowers installed", ok: superpowersApplied)
-                    }
-                }
+                // (Removed the redundant "HOOK configured" / "superpowers installed" diagnostic
+                // rows — the Applied/Installed pills above already convey this state.)
             }
         }
         .onChange(of: setupExpanded) { _, newValue in
@@ -860,10 +887,21 @@ struct MenuBarView: View {
 
     private var stateColor: Color {
         switch dictationManager.recorderState {
-        case .recording: return .red
-        case .uploading: return .orange
-        case .listening: return .green
-        case .idle: return dictationManager.ttsPlaying ? .blue : .green
+        case .recording: return OWColor.recording
+        case .uploading: return OWColor.warn
+        case .listening: return OWColor.live
+        case .idle: return dictationManager.ttsPlaying ? OWColor.accentDeep : OWColor.live
+        }
+    }
+
+    /// The status dot glows for the "live" states (recording / listening / idle-ready),
+    /// not for transient transcribing or while TTS is playing — derived from state, not
+    /// from a fragile color comparison.
+    private var stateGlows: Bool {
+        switch dictationManager.recorderState {
+        case .recording, .listening: return true
+        case .uploading: return false
+        case .idle: return !dictationManager.ttsPlaying
         }
     }
 
@@ -912,16 +950,16 @@ struct OWCard<Content: View>: View {
 
     var body: some View {
         content
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(OWColor.cardBackground)
-                    .shadow(color: Color.black.opacity(0.04), radius: 1, x: 0, y: 1)
+                    .shadow(color: Color(red: 0.18, green: 0.14, blue: 0.08).opacity(0.08), radius: 5, x: 0, y: 2)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(OWColor.line, lineWidth: 0.6)
             )
     }
 }
@@ -957,17 +995,17 @@ struct OWCollapsibleCard<Trailing: View, Expanded: View>: View {
                     HStack(spacing: 6) {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 8, weight: .bold))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(OWColor.inkFaint)
                             .rotationEffect(.degrees(expanded ? 90 : 0))
                             .animation(.easeInOut(duration: 0.18), value: expanded)
 
                         Image(systemName: icon)
                             .font(.system(size: 11))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(OWColor.accent.opacity(0.75))
 
                         Text(title)
-                            .font(OWFont.sectionLabel(12))
-                            .foregroundColor(.secondary)
+                            .font(OWFont.body(12).weight(.semibold))
+                            .foregroundColor(expanded ? OWColor.inkSoft : OWColor.ink)
                     }
                     .contentShape(Rectangle())
                     .onTapGesture { withAnimation { expanded.toggle() } }
@@ -999,12 +1037,15 @@ struct OWCardHeader: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(OWColor.accent)
+                .frame(width: 2, height: 13)
             Image(systemName: icon)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.secondary)
+                .foregroundColor(OWColor.accent.opacity(0.75))
             Text(title)
                 .font(OWFont.sectionLabel(11))
-                .foregroundColor(.secondary)
+                .foregroundColor(OWColor.inkSoft)
         }
     }
 }
@@ -1038,7 +1079,7 @@ struct OWPickerRow<Content: View>: View {
 struct OWInternalDivider: View {
     var body: some View {
         Rectangle()
-            .fill(Color.primary.opacity(0.07))
+            .fill(OWColor.line)
             .frame(height: 0.5)
     }
 }
@@ -1066,20 +1107,20 @@ struct OWMenuPicker<T: Hashable>: View {
             HStack(spacing: 4) {
                 Text(currentLabel)
                     .font(OWFont.body(11))
-                    .foregroundColor(.primary)
+                    .foregroundColor(OWColor.ink)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 8, weight: .medium))
-                    .foregroundColor(Color.primary.opacity(0.35))
+                    .foregroundColor(OWColor.accent.opacity(0.6))
             }
             .padding(.horizontal, 7)
-            .padding(.vertical, 4)
+            .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(Color.primary.opacity(0.04))
+                    .fill(OWColor.pickerBg)
                     .overlay(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                            .strokeBorder(OWColor.checkboxBorder, lineWidth: 1)
                     )
             )
         }
@@ -1097,7 +1138,7 @@ struct OWMenuPicker<T: Hashable>: View {
 struct OWCheckbox: View {
     let label: String
     @Binding var isOn: Bool
-    var tint: Color = Color.primary.opacity(0.40)
+    var tint: Color = OWColor.accent
 
     var body: some View {
         Button {
@@ -1105,12 +1146,12 @@ struct OWCheckbox: View {
         } label: {
             HStack(spacing: 5) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(isOn ? tint : Color.clear)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
                                 .strokeBorder(
-                                    isOn ? tint : Color.primary.opacity(0.25),
+                                    isOn ? tint : OWColor.checkboxBorder,
                                     lineWidth: 1
                                 )
                         )
@@ -1118,13 +1159,13 @@ struct OWCheckbox: View {
                     if isOn {
                         Image(systemName: "checkmark")
                             .font(.system(size: 8, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(OWColor.onAccent)
                     }
                 }
                 .animation(.easeInOut(duration: 0.12), value: isOn)
                 Text(label)
                     .font(OWFont.body(12))
-                    .foregroundColor(.primary)
+                    .foregroundColor(OWColor.ink)
             }
         }
         .buttonStyle(.plain)
@@ -1188,7 +1229,7 @@ struct ModernStatusRow: View {
                 .padding(.vertical, 2)
                 .background(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(Color.primary.opacity(0.06))
+                        .fill(OWColor.pillFill)
                 )
         }
         .padding(.vertical, 4)
@@ -1196,10 +1237,10 @@ struct ModernStatusRow: View {
 
     private var dotColor: Color {
         switch status {
-        case .running: return .green
-        case .starting: return .orange
-        case .error: return .red
-        case .stopped: return Color(nsColor: .systemGray)
+        case .running: return OWColor.live
+        case .starting: return OWColor.warn
+        case .error: return OWColor.recording
+        case .stopped: return OWColor.inkFaint
         }
     }
 }
@@ -1219,7 +1260,7 @@ struct ModernDiagnosticRow: View {
 
             Text(notInstalled ? "\(label) (not installed)" : label)
                 .font(OWFont.body(11))
-                .foregroundColor(notInstalled ? .secondary : (ok ? .primary : .secondary))
+                .foregroundColor(notInstalled ? OWColor.inkFaint : (ok ? OWColor.ink : OWColor.inkSoft))
         }
     }
 
@@ -1229,8 +1270,8 @@ struct ModernDiagnosticRow: View {
     }
 
     private var iconColor: Color {
-        if notInstalled { return .secondary }
-        return ok ? .green : .secondary
+        if notInstalled { return OWColor.inkFaint }
+        return ok ? OWColor.live : OWColor.inkFaint
     }
 }
 
@@ -1313,7 +1354,7 @@ struct OWPrimaryButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(OWColor.accent.opacity(configuration.isPressed ? 0.85 : 1.0))
             )
-            .foregroundColor(.white)
+            .foregroundColor(OWColor.onAccent)
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
@@ -1324,17 +1365,16 @@ struct OWRowButtonStyle: ButtonStyle {
     var urgent: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
-        let color: Color = tinted ? .green : (urgent ? .orange : .primary)
-        let bgOpacity = tinted || urgent
-            ? (configuration.isPressed ? 0.20 : 0.12)
-            : (configuration.isPressed ? 0.12 : 0.05)
+        let color: Color = tinted ? OWColor.success : (urgent ? OWColor.warn : OWColor.inkSoft)
         configuration.label
             .font(OWFont.body(11))
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(color.opacity(bgOpacity))
+                    .fill(tinted || urgent
+                          ? color.opacity(configuration.isPressed ? 0.22 : 0.14)
+                          : OWColor.pillFill.opacity(configuration.isPressed ? 1.0 : 0.7))
             )
             .foregroundColor(color)
             .contentShape(RoundedRectangle(cornerRadius: 6))
@@ -1373,7 +1413,7 @@ struct PortField: View {
                 .frame(width: 70)
                 .disabled(disabled)
                 .opacity(disabled ? 0.45 : 1.0)
-                .foregroundColor(isValid || text.isEmpty ? .primary : .red)
+                .foregroundColor(isValid || text.isEmpty ? OWColor.ink : OWColor.danger)
                 .onAppear { text = "\(port)" }
                 .onChange(of: text) { _, newValue in
                     if let p = Int(newValue), p >= 1024, p <= 65535 {

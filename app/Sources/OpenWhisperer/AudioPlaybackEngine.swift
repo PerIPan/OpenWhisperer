@@ -17,10 +17,16 @@ final class AudioPlaybackEngine {
 
     /// Invoked when the last queued buffer finishes playing (queue drained).
     var onDrained: (@Sendable () -> Void)?
+    /// Invoked when the engine fails to start (e.g. the output device disappeared), so the
+    /// controller can clear the "Speaking…" lock instead of hanging.
+    var onPlaybackError: (@Sendable () -> Void)?
 
     init(sampleRate: Double = 24_000) {
-        format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
+        guard let fmt = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false) else {
+            fatalError("AudioPlaybackEngine: unsupported PCM format at \(sampleRate) Hz")
+        }
+        format = fmt
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
     }
@@ -41,6 +47,7 @@ final class AudioPlaybackEngine {
             if !engine.isRunning { try engine.start() }
         } catch {
             NSLog("AudioPlaybackEngine: engine.start failed: \(error)")
+            onPlaybackError?()
             return
         }
 

@@ -21,10 +21,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ConfigManager.migrateRemoveVoiceTags()
         }
 
-        // Register bundled Outfit font
-        if let fontURL = Bundle.main.url(forResource: "Outfit-VariableFont_wght", withExtension: "ttf") {
-            CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
-        }
+        // Register bundled fonts (Outfit body + Fraunces serif). Idempotent — also
+        // registered in OpenWhispererApp.init() so faces exist before first layout.
+        registerBundledFonts()
 
         // Wire in-process TTS playback so dictation barge-in can stop it instantly (Phase 3).
         dictationManager.ttsController = serverManager.playback

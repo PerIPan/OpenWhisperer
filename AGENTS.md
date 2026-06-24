@@ -79,6 +79,11 @@ Only **voice-dictated** turns are spoken; typed turns stay silent. The mechanism
 
 `VoiceSignal.canonicalHash` lives in `OpenWhispererKit` and is unit-tested specifically to guarantee parity with the bash `shasum` reader — **if you touch hashing/trimming on either side, update both and run `HookTests`.** Codex has no per-prompt session id, so `hooks/codex-tts-hook.sh` gates on `voice_turn` presence+freshness directly instead of a per-session marker.
 
+**Known limitations (by design, document don't "fix" blindly):**
+- The hash covers the **dictated text only**. It matches the submitted prompt **only when the input buffer was empty** before dictation. Pre-typed text in the prompt, or dictating twice into one prompt, makes `trim(prompt) != dictated text` → the turn is treated as typed and silently **not spoken**. Editing a dictated prompt before submit (manual-submit mode) likewise un-matches — which is correct (you took over by keyboard).
+- The voice-turn TTL is **900 s**, uniform across `voice-context.sh`, `codex-tts-hook.sh`, and the `tts-hook.sh` Antigravity fallback, matched to the 15-min `speak_pending` sweep — so a dictate → review → submit pause still speaks.
+- **Codex is weaker than Claude Code:** it gates on bare `voice_turn` presence+freshness and clears it on the first `agent-turn-complete`, so under unusual multi-event turns the wrong reply could be spoken or the right one missed. Claude Code's per-session `speak_pending` routing does not have this ambiguity.
+
 ### State & IPC: flat files in Application Support
 
 `~/Library/Application Support/OpenWhisperer` (0700) is the shared bus between the GUI app, the bash hooks, and the embedded server. All prefs and signals are flat files — see `Paths.swift` for the full list. Notable ones: `tts_voice`, `tts_volume`, `stt_language`, `interaction_mode`, `ptt_hotkey`, `tts_style` (spoken-summary style: `terse`/`normal`/`rich` summary lengths, or `full` = speak the whole reply as prose; was `voice_detail` before the rename — `ConfigManager.migrateVoiceDetailToTtsStyle()` migrates it on launch), `selected_platform`, `auto_submit`, `auto_focus_app`, `voice_turn`, `speak_pending/`, and `tts_playing.lock` (written while speaking; polled to drive the overlay waveform and mute the mic in hands-free mode).
@@ -103,6 +108,6 @@ This matters because the developer's firewall (Little Snitch) blocks the Hugging
 
 - **Code signing identity** is set by `OW_SIGN_IDENTITY` (default `-` = ad-hoc). With ad-hoc, the cdhash changes every build, so macOS **drops the Accessibility and Microphone grants** — dictation breaks until you remove and re-add the app in System Settings → Privacy & Security. **To stop the churn locally:** sign with a stable self-signed cert — `OW_SIGN_IDENTITY="OpenWhisperer Dev" ./build-dmg.sh` — whose designated requirement pins to the cert leaf hash (constant across rebuilds), so TCC grants persist; you re-grant only once. Release builds set `OW_SIGN_IDENTITY="Developer ID Application: …"` plus `OW_NOTARIZE=1` and `OW_NOTARIZE_PROFILE` to add hardened runtime (`Resources/OpenWhisperer.entitlements`) + notarize + staple the DMG (needs a paid Apple Developer account).
 - Platform (Claude Code vs Codex CLI) is selected in the menubar; `ConfigManager` writes the right hooks/config for each (`~/.claude/settings.json` or `~/.codex/config.toml`).
-- Version is hardcoded as `1.4.0` in both `build-dmg.sh` and `Resources/Info.plist` — bump both together.
+- Version is hardcoded as `1.5.0` in both `build-dmg.sh` (`DMG_NAME`) and `Resources/Info.plist` (`CFBundleVersion` + `CFBundleShortVersionString`) — bump all three together.
 - `app/Tools/` (G2PParity, STTDiag, FluidTTSSpike) are local-only diagnostic spikes and are **gitignored**.
 - Design docs and implementation plans live in `docs/superpowers/{specs,plans}/`, organized by phase (Phase 1 = STT port, Phase 2 = native TTS, Phase 3 = streaming TTS). Consult these for the rationale behind the Swift port.

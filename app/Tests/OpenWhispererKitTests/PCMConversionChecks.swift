@@ -18,7 +18,7 @@ func pcmConversionFailures() -> [String] {
     expect([-32768], [-1.0], "minClipsToNegativeOne")
     expect([16384], [0.5], "half")
     expect([-16384], [-0.5], "negativeHalf")
-    expect([32767], [32767.0 / 32768.0], "maxNearPositiveOne")
+    expect([32767], [Float(32767.0 / 32768.0)], "maxNearPositiveOne")
     expect([0, 16384, -16384, -32768], [0, 0.5, -0.5, -1.0], "sequence")
 
     return failures

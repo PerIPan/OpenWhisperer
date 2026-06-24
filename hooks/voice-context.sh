@@ -8,7 +8,10 @@ export LANG="${LANG:-en_US.UTF-8}"
 APP_SUPPORT="$HOME/Library/Application Support/OpenWhisperer"
 VOICE_TURN="$APP_SUPPORT/voice_turn"
 PENDING_DIR="$APP_SUPPORT/speak_pending"
-FRESHNESS=300
+# voice_turn time-to-live (seconds). Matched to the speak_pending sweep (15 min) in
+# tts-hook.sh so a dictate → review → submit pause in manual-submit mode still speaks
+# instead of silently dropping to a typed turn.
+FRESHNESS=900
 
 # Fast path for typed turns: no pending dictation → nothing to do.
 [ -f "$VOICE_TURN" ] || exit 0

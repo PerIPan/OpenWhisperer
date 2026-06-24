@@ -27,7 +27,8 @@ if [ "$TYPE" != "agent-turn-complete" ] && [ -n "$TYPE" ]; then exit 0; fi
 # --- Voice-turn gate: Codex has no per-prompt session id, so gate on the app's voice_turn signal
 #     (presence + freshness) and clear it so future typed turns are not spoken. ---
 VOICE_TURN="$APP_SUPPORT/voice_turn"
-VOICE_FRESHNESS=300
+# voice_turn TTL (s) — kept uniform with voice-context.sh + the 15-min speak_pending sweep.
+VOICE_FRESHNESS=900
 [ -f "$VOICE_TURN" ] || exit 0
 VT_TS=$(sed -n '2p' "$VOICE_TURN" 2>/dev/null)
 NOW=$(date +%s)

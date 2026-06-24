@@ -27,6 +27,14 @@ final class TTSHTTPServer {
         params.allowLocalEndpointReuse = true
         params.requiredInterfaceType = .loopback  // localhost only
         let l = try NWListener(using: params, on: port)
+        let boundPort = port.rawValue
+        l.stateUpdateHandler = { state in
+            // Surface a bind failure (e.g. port already in use) instead of silently appearing
+            // healthy while the endpoint is dead.
+            if case .failed(let err) = state {
+                NSLog("TTSHTTPServer: listener failed on port \(boundPort): \(err)")
+            }
+        }
         l.newConnectionHandler = { [weak self] conn in self?.accept(conn) }
         l.start(queue: queue)
         listener = l
@@ -50,6 +58,12 @@ final class TTSHTTPServer {
             guard let self else { return }
             var buf = buffer
             if let data { buf.append(data) }
+            // Loopback hook bodies are tiny; cap accumulation so a malformed/huge Content-Length
+            // can't grow the buffer unbounded.
+            guard buf.count <= 1 << 20 else {
+                self.respond(conn, "413 Payload Too Large", Data())
+                return
+            }
             if let req = Self.parse(buf) {
                 self.route(conn, req)
             } else if isComplete || error != nil {

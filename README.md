@@ -16,7 +16,7 @@ The command to bypass Gatekeeper for the DMG:
 xattr -cr /Applications/Open\ Whisperer.app
 
 If you want to do it on the DMG itself before opening:
-xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.4.0.dmg
+xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.5.0.dmg
 
 
 ## What It Does
@@ -25,16 +25,20 @@ You use Claude Code or Codex CLI normally. After every response, the AI's answer
 
 Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
-## What's New in 1.4.0
+## What's New in 1.5.0
 
-- **Streaming text-to-speech** — speech starts after the first sentence is synthesized instead of waiting for the whole response, so the AI starts talking back noticeably sooner. Playback is gapless, and "hold on" barge-in stops it near-instantly.
-- **Fully native** — speech-to-text (WhisperKit) and text-to-speech (FluidAudio Kokoro) now run in-process on the Apple Neural Engine. No Python, no separate server process to manage, and a faster cold start.
-- **Codex TTS respects your volume** — the Codex CLI hook now honors the in-app volume setting instead of a fixed level.
-- **Stability & security hardening** — fixed a transcription-overlay teardown crash, mode-switch edge cases that could mis-route dictated text, dictation landing in the wrong app when a menubar menu (ours or another utility's) was open, a faster/cleaner app quit, clearer audio-engine error messages, and tighter permissions on config files.
+- **Fully native, no Python** — speech-to-text (WhisperKit) and text-to-speech (FluidAudio Kokoro) run in-process on the Apple Neural Engine. The Python server, virtualenv, and `setup.sh` are gone, so install is just "drag to Applications," cold start is faster, and a whole class of dependency-drift failures disappears.
+- **In-app streaming playback + instant barge-in** — replies start speaking after the first sentence and play gaplessly; saying "hold on" (or starting a new turn) stops audio *and* cancels in-flight synthesis in-process, freeing the Neural Engine immediately.
+- **Tagless voice mode** — no more `[VOICE:]` tag in `CLAUDE.md`. The app fingerprints each dictation and a `UserPromptSubmit` hook routes the spoken reply to the session you actually dictated into; only dictated turns are spoken.
+- **Warm redesign** — the menubar and transcription overlay now match [openwhisperer.com](https://openwhisperer.com): a warm cream/gold palette with a Fraunces serif wordmark, in full light **and** dark mode.
+- **WhisperKit 1.0** — the speech-to-text engine is updated to the 1.0 stable release.
+- **Reliability hardening** — generation-guarded TTS cancellation, a request body-size cap and surfaced bind-failure on the loopback TTS server, the "Speaking…" lock now clears if the output device drops mid-reply, and a uniform voice-turn freshness window so dictating then pausing before submit still speaks.
+
+> The native rewrite at the heart of this release (the first three items above) was contributed by [Hakan Ensari](https://github.com/hakanensari) — see [Acknowledgments](#acknowledgments).
 
 ## Install
 
-[**Download OpenWhisperer-1.4.0.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.4.0/OpenWhisperer-1.4.0.dmg) — drag to Applications and launch.
+[**Download OpenWhisperer-1.5.0.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.5.0/OpenWhisperer-1.5.0.dmg) — drag to Applications and launch.
 
 On first launch, the app:
 - Downloads the Whisper (speech-to-text) and Kokoro (text-to-speech) CoreML models
@@ -45,8 +49,8 @@ The menubar icon gives you:
 - Start/Stop/Restart server with configurable port
 - **Push-to-Talk** — configurable hotkey (Ctrl, fn, Option, Cmd) to record
 - **Language selector** — set STT language to avoid hallucinations (17 languages)
-- **Voice picker** — choose from 11 Kokoro voices across 8 languages (no server restart needed)
-- **Voice detail** — how verbose the spoken summary is: Terse, Normal (default), or Rich
+- **Voice picker** — choose from several Kokoro voices across English, French, and Italian (no server restart needed)
+- **Voice detail** — how verbose the spoken summary is: Terse, Normal (default), Rich, or Full (speaks the entire reply)
 - **TTS Volume** — Low, Medium (default), or High output volume
 - **Start on startup** — optional login item to launch automatically when you log in
 - **Automation** — Auto-Focus and Auto-Submit (requires Accessibility permission)
@@ -138,6 +142,7 @@ Choose how verbose that opening summary should be (set in the menubar under **De
 | **Terse** | One short sentence — just the key outcome |
 | **Normal** | One plain sentence (default) |
 | **Rich** | A sentence or two of summary |
+| **Full** | The entire reply, read as natural spoken prose (code/paths/tables described, not read literally) |
 
 ## Configuration
 
@@ -196,7 +201,7 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-This produces `Open Whisperer.app` and `OpenWhisperer-1.4.0.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
+This produces `Open Whisperer.app` and `OpenWhisperer-1.5.0.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
 
 ### Step 2: Wire up the hooks
 
@@ -251,6 +256,10 @@ OpenWhisperer/
 ## Contributing
 
 Contributions are welcome! Feel free to open issues or submit pull requests. Whether it's bug fixes, new features, documentation improvements, or voice model suggestions — all contributions are appreciated.
+
+## Acknowledgments
+
+The **v1.5 native rewrite** — replacing the out-of-process Python server with fully in-process Swift speech-to-text (WhisperKit) and text-to-speech (FluidAudio Kokoro), in-process streaming playback and barge-in, and the tagless voice-turn handshake — was contributed by [**Hakan Ensari**](https://github.com/hakanensari) ([fork](https://github.com/hakanensari/OpenWhisperer)). It removed the Python/venv stack entirely and made the app notarizable. Thank you!
 
 ## Credits
 

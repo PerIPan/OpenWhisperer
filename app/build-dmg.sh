@@ -7,7 +7,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$SCRIPT_DIR/.build"
 APP_NAME="OpenWhisperer"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
-DMG_NAME="OpenWhisperer-1.4.0"
+DMG_NAME="OpenWhisperer-1.5.0"
 
 echo "=== Building Open Whisperer ==="
 
@@ -45,6 +45,7 @@ done
 cp "$SCRIPT_DIR/Resources/Info.plist" "$APP_BUNDLE/Contents/"
 cp "$SCRIPT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 cp "$SCRIPT_DIR/Resources/Outfit-VariableFont_wght.ttf" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
+cp "$SCRIPT_DIR/Resources/Fraunces.ttf" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 
 # Step 3: Bundle the TTS hooks (native TTS — no Python scripts to bundle)
 cp "$PROJECT_DIR/hooks/tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"

@@ -126,7 +126,9 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
             contentView.wantsLayer = true
             contentView.layer?.cornerRadius = 12
             contentView.layer?.masksToBounds = true
-            contentView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
+            // Warm "Open Whisperer" surface (cream / warm-dark) to match the menubar + site.
+            // Dark value matches OWColor.page dark (0x1E1B16). Near-opaque to avoid bleed-through.
+            contentView.layer?.backgroundColor = NSColor.ow(0xFAF7F1, 0x1E1B16).withAlphaComponent(0.97).cgColor
         }
 
         // Position bottom-right of screen
@@ -304,9 +306,9 @@ struct OverlayView: View {
             HStack {
                 Spacer()
                 Button(action: { overlay.hide() }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.secondary)
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(OWColor.inkFaint)
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 4)
@@ -334,7 +336,7 @@ struct OverlayView: View {
                 VStack(spacing: 6) {
                     Label(status, systemImage: overlay.statusIsError ? "exclamationmark.triangle.fill" : "arrow.down.circle")
                         .font(.custom("Outfit", size: 10))
-                        .foregroundColor(overlay.statusIsError ? .red : .secondary)
+                        .foregroundColor(overlay.statusIsError ? OWColor.danger : OWColor.inkSoft)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                     if overlay.statusIsError, let dm = overlay.dictationManager, dm.sttFailed {
@@ -382,48 +384,30 @@ struct WaveformBar: View {
     var pttKeyLabel: String = "Ctrl"
     var interactionMode: InteractionMode = .pressToTalk
 
-    /// Active waveform gradient: cyan → blue → purple → magenta
+    /// Active/recording waveform: warm cream-gold → gold → deep gold (mirrors the site's EQ bars).
     private static let waveGradient = LinearGradient(
-        colors: [
-            Color(red: 0.0, green: 0.78, blue: 0.95),
-            Color(red: 0.35, green: 0.60, blue: 0.90),
-            Color(red: 0.55, green: 0.45, blue: 0.80),
-            Color(red: 0.72, green: 0.30, blue: 0.68),
-            Color(red: 0.82, green: 0.22, blue: 0.55),
-        ],
+        colors: [Color.ow(0xE7CF9E, 0xE7CF9E), OWColor.accent, OWColor.accentDeep],
         startPoint: .leading,
         endPoint: .trailing
     )
 
-    /// Idle/standby waveform gradient: green tones
+    /// Idle/standby waveform: muted warm neutral.
     private static let idleGradient = LinearGradient(
-        colors: [
-            Color(red: 0.2, green: 0.75, blue: 0.4),
-            Color(red: 0.3, green: 0.8, blue: 0.5),
-            Color(red: 0.2, green: 0.7, blue: 0.45),
-        ],
+        colors: [OWColor.inkFaint, OWColor.inkSoft, OWColor.inkFaint],
         startPoint: .leading,
         endPoint: .trailing
     )
 
-    /// Listening gradient: cyan/blue tones
+    /// Listening gradient: gold tones.
     private static let listeningGradient = LinearGradient(
-        colors: [
-            Color(red: 0.0, green: 0.75, blue: 0.9),
-            Color(red: 0.1, green: 0.8, blue: 1.0),
-            Color(red: 0.0, green: 0.7, blue: 0.85),
-        ],
+        colors: [OWColor.accent, OWColor.accentDeep, OWColor.accent],
         startPoint: .leading,
         endPoint: .trailing
     )
 
-    /// TTS-mode gradient: warm orange tones
+    /// TTS-mode gradient: warm gold (the output counterpart to the recording gradient).
     private static let ttsGradient = LinearGradient(
-        colors: [
-            Color(red: 1.0, green: 0.6, blue: 0.2),
-            Color(red: 1.0, green: 0.45, blue: 0.3),
-            Color(red: 0.95, green: 0.35, blue: 0.45),
-        ],
+        colors: [Color.ow(0xE7CF9E, 0xE7CF9E), OWColor.accent, OWColor.accentDeep],
         startPoint: .leading,
         endPoint: .trailing
     )
@@ -508,12 +492,12 @@ struct WaveformBar: View {
     }
 
     private var statusColor: Color {
-        if isTTSPlaying && recorder.state == .idle { return .orange }
+        if isTTSPlaying && recorder.state == .idle { return OWColor.accent }
         switch recorder.state {
-        case .recording: return .red
-        case .uploading: return .orange
-        case .listening: return .cyan
-        case .idle: return .green
+        case .recording: return OWColor.recording
+        case .uploading: return OWColor.warn
+        case .listening: return OWColor.accentDeep
+        case .idle: return OWColor.live
         }
     }
 
@@ -540,10 +524,10 @@ struct SilenceProgressBar: View {
                 ZStack(alignment: .leading) {
                     // Track (always visible)
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.primary.opacity(0.25))
-                    // Fill
+                        .fill(OWColor.line)
+                    // Fill — gold reads as "completing a valuable action" (auto-submit countdown)
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.green)
+                        .fill(OWColor.accent)
                         .frame(width: max(0, geo.size.width * progress))
                 }
             }

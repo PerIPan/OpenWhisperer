@@ -6,8 +6,14 @@ let package = Package(
     platforms: [.macOS(.v14)],
     dependencies: [
         // Native in-process Whisper STT (CoreML / ANE). MIT. macOS 14+.
-        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
+        // v1.5: floor `0.9.0` → `1.0.0` (resolved 0.18.0 → 1.0.0, the stable milestone). The
+        // transcribe/config APIs we use are unchanged; 1.0.0's breaking changes were to
+        // deprecated APIs we don't call. To revert: set the floor back AND re-resolve
+        // (`swift package resolve`) — Package.resolved is pinned, so editing this line alone
+        // won't downgrade.
+        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.0.0"),
         // Native in-process Kokoro TTS (CoreML / ANE). Apache-2.0. macOS 14+. No metallib.
+        // Already at the latest release (0.15.4).
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.4"),
     ],
     targets: [

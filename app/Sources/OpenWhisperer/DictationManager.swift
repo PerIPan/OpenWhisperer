@@ -144,7 +144,11 @@ class DictationManager: ObservableObject {
     /// first dictation isn't blocked on a multi-minute download. Idempotent.
     func prepareSTT() {
         guard !sttModelReady else { return }
-        sttStatus = "Loading speech model…"
+        // Set expectations: the first launch downloads (~1.5 GB) and then compiles the model for
+        // the Neural Engine (up to ~1–2 min). Without this, a slow first load looks "stuck".
+        sttStatus = SpeechTranscriber.isModelCached
+            ? "Preparing the speech model… first launch compiles it for the Neural Engine — up to a minute or two. Dictation will be ready when it finishes."
+            : "Downloading the speech model… one-time, about 1.5 GB. This can take a few minutes on first launch."
         Task { [weak self] in
             guard let self else { return }
             do {

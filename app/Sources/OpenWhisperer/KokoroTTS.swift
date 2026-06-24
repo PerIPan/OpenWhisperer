@@ -96,7 +96,9 @@ actor KokoroTTS {
             guard data.count > 1000 else { return }
             try data.write(to: localURL, options: .atomic)
         } catch {
-            // Ignore downloading errors; KokoroAneManager will handle missing assets downstream
+            // Non-fatal: KokoroAneManager handles the missing asset downstream. Log so a failed
+            // voice-pack fetch is diagnosable from the Events log instead of silently swallowed.
+            NSLog("KokoroTTS: voice pack download failed for \(sanitized): \(error.localizedDescription)")
         }
     }
 }

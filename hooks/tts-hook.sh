@@ -61,7 +61,7 @@ else
           if [ -n "$STORED_HASH" ]; then
             # Freshness check
             NOW=$(date +%s)
-            FRESHNESS=300
+            FRESHNESS=900   # uniform voice_turn TTL (see voice-context.sh)
             if [ -n "$STORED_TS" ] && [ "$((NOW - STORED_TS))" -le "$FRESHNESS" ]; then
               # Hash and compare
               trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }

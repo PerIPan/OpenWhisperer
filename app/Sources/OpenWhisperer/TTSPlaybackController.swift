@@ -35,13 +35,19 @@ actor TTSPlaybackController {
         engine.onDrained = { [weak self] in
             Task { await self?.handleDrain(gen: gen) }
         }
+        engine.onPlaybackError = { [weak self] in
+            Task { await self?.handlePlaybackError(gen: gen) }
+        }
 
         playTask = Task {
             for sentence in sentences {
-                if Task.isCancelled { break }
+                if Task.isCancelled || gen != generation { break }
                 do {
                     let (samples, _) = try await self.tts.synthesizeSamples(sentence, voice: voice)
-                    if Task.isCancelled { break }
+                    // Generation guard in addition to Task.isCancelled: immune to a synthesize
+                    // call that returns after a barge-in/supersede already bumped the generation
+                    // (e.g. if cooperative cancellation is swallowed by the CoreML pipeline).
+                    if Task.isCancelled || gen != generation { break }
                     self.engine.schedule(samples, volume: volume)
                 } catch {
                     NSLog("TTSPlaybackController: synthesis failed: \(error)")
@@ -76,6 +82,14 @@ actor TTSPlaybackController {
         guard gen == generation else { return }
         synthDone = true
         if engine.isIdle { removeLock() }
+    }
+
+    /// The audio engine failed to start (e.g. the output device was removed mid-reply). Drop the
+    /// lock so the UI doesn't hang in "Speaking…", and stop any further synthesis.
+    private func handlePlaybackError(gen: Int) {
+        guard gen == generation else { return }
+        playTask?.cancel()
+        removeLock()
     }
 
     // MARK: - Lock file + volume
