@@ -9,4 +9,4 @@ Open Whisperer is a macOS **menubar app** (Swift/SwiftUI, Apple Silicon, macOS 1
 > **The README describes an obsolete architecture.** `README.md` documents an out-of-process Python server (`unified_server.py`, FastAPI, uvicorn, spaCy, MLX Whisper, a `~/mlx-openai-whisper` venv, `setup.sh`, `servers/start-servers.sh`). **All of that is gone.** The app was ported to **pure Swift** with both models running in-process on the ANE. `setup.sh` and `servers/start-servers.sh` no longer exist; ignore the README's Python/setup sections for anything architectural. The README's `[VOICE:]` tag mechanism is also vestigial (see "Voice-turn handshake" below).
 
 For commands, testing, changes workflow, commit message rules, architecture details, and developer conventions:
-See @.agents/AGENTS.md
+See @AGENTS.md
