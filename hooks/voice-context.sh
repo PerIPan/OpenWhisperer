@@ -22,7 +22,7 @@ fi
 
 INPUT=$(cat)
 PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // empty')
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // .conversationId // empty')
 [ -z "$PROMPT" ] && exit 0
 [ -z "$SESSION_ID" ] && exit 0
 

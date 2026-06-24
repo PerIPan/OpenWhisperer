@@ -27,7 +27,7 @@ if [ "$(printf '%s' "$INPUT" | jq -r '.stop_hook_active')" = "true" ]; then
 fi
 
 # --- Voice-turn gate: only speak turns the UserPromptSubmit hook marked as dictated. ---
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // .conversationId // empty')
 [ -z "$SESSION_ID" ] && exit 0
 PENDING_DIR="$APP_SUPPORT/speak_pending"
 SAFE_ID=$(printf '%s' "$SESSION_ID" | tr -c 'A-Za-z0-9_.-' '_')
@@ -41,6 +41,12 @@ rm -f "$PENDING"
 
 # Extract the response text and resolve style.
 TEXT=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // empty')
+if [ -z "$TEXT" ]; then
+  TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcriptPath // empty')
+  if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+    TEXT=$(tail -r "$TRANSCRIPT_PATH" | grep -m 1 '"source":"MODEL"' | jq -r '.content // empty')
+  fi
+fi
 [ -z "$TEXT" ] && exit 0
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Spoken-text style. Precedence: per-project OW_TTS_STYLE env → global tts_style file →
