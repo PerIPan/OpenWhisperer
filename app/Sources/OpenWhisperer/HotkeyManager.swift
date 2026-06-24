@@ -23,14 +23,6 @@ enum PTTKey: String, CaseIterable {
         }
     }
 
-    var modifierFlag: NSEvent.ModifierFlags {
-        switch self {
-        case .fn: return .function
-        case .ctrl, .rightCtrl: return .control
-        case .option, .rightOption: return .option
-        case .cmd, .rightCmd: return .command
-        }
-    }
 }
 
 /// Manages a global modifier-key toggle hotkey for push-to-talk dictation.
@@ -103,11 +95,11 @@ class HotkeyManager {
             case .cmd:
                 pressed = event.modifierFlags.contains(.command)
             case .rightCtrl:
-                pressed = (event.modifierFlags.rawValue & 0x2000) != 0
+                pressed = event.modifierFlags.contains(.control) && (event.modifierFlags.rawValue & 0x2000) != 0
             case .rightOption:
-                pressed = (event.modifierFlags.rawValue & 0x0040) != 0
+                pressed = event.modifierFlags.contains(.option) && (event.modifierFlags.rawValue & 0x0040) != 0
             case .rightCmd:
-                pressed = (event.modifierFlags.rawValue & 0x0010) != 0
+                pressed = event.modifierFlags.contains(.command) && (event.modifierFlags.rawValue & 0x0010) != 0
             }
 
             if pressed && !keyDown {
