@@ -13,8 +13,13 @@ let package = Package(
         // won't downgrade.
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.0.0"),
         // Native in-process Kokoro TTS (CoreML / ANE). Apache-2.0. macOS 14+. No metallib.
-        // Already at the latest release (0.15.4).
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.4"),
+        // Pinned PAST the 0.15.4 release to the #730 fix ("Fix KokoroAne strided MLMultiArray
+        // handling") — 0.15.4 mis-reads a *strided* MLMultiArray the Kokoro chain returns on some
+        // Apple Silicon (e.g. M3/macOS 15), yielding fluent-but-WRONG words (issue #727). Code-only
+        // fix; existing model assets are unchanged. Revisit when a release ≥ this lands.
+        .package(
+            url: "https://github.com/FluidInference/FluidAudio.git",
+            revision: "313feb4bd692780a9a5b5fa9048fdb119486dde8"),
     ],
     targets: [
         // Pure, dependency-free logic that is unit-tested in isolation
