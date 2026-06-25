@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ServiceManagement
 
@@ -89,8 +90,6 @@ struct MenuBarView: View {
     @State private var superpowersApplied = false
     @State private var applyMessage = ""
     @State private var serverReachable = false
-    @State private var showDeleteModelsConfirm = false
-    @State private var deleteModelsMessage = ""
     @State private var deletedModelsBanner = false
     @State private var launchAtLogin = false
     @State private var voiceSettingsExpanded = false  // always collapsed by default on launch
@@ -804,8 +803,34 @@ struct MenuBarView: View {
                     }
 
                     Button(action: {
-                        deleteModelsMessage = ModelStorage.confirmationMessage()
-                        showDeleteModelsConfirm = true
+                        // A SwiftUI `.alert` is hosted inside the MenuBarExtra(.window) popover,
+                        // which resigns key and tears down on the first click — so the confirm
+                        // could never complete. Present a standalone AppKit NSAlert instead
+                        // (the app's existing pattern for windows; see ConfigManager.showLog).
+                        let (lines, total) = ModelStorage.breakdown()
+                        let alert = NSAlert()
+                        alert.alertStyle = .warning
+                        alert.messageText = "Delete downloaded models?"
+                        alert.informativeText = total == 0
+                            ? "No downloaded models were found — nothing to delete."
+                            : "Frees \(ModelStorage.format(total)):\n\n"
+                                + lines.joined(separator: "\n")
+                                + "\n\nThe models re-download automatically the next time you dictate or use speech."
+                        if total == 0 {
+                            alert.addButton(withTitle: "OK")
+                        } else {
+                            alert.addButton(withTitle: "Delete")   // rightmost
+                            alert.addButton(withTitle: "Cancel")
+                            alert.buttons[0].keyEquivalent = ""     // don't let Return delete
+                            alert.buttons[1].keyEquivalent = "\r"   // Cancel is the default
+                        }
+                        NSApp.activate(ignoringOtherApps: true)
+                        if total > 0, alert.runModal() == .alertFirstButtonReturn {
+                            serverManager.stopAll()
+                            ModelStorage.deleteAll()
+                            deletedModelsBanner = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { deletedModelsBanner = false }
+                        }
                     }) {
                         Label("Delete", systemImage: "trash")
                             .frame(maxWidth: .infinity)
@@ -813,17 +838,6 @@ struct MenuBarView: View {
                     .buttonStyle(OWRowButtonStyle())
 
                     PortField(label: "", port: $serverManager.port, disabled: !serverStopped)
-                }
-                .alert("Delete downloaded models?", isPresented: $showDeleteModelsConfirm) {
-                    Button("Cancel", role: .cancel) {}
-                    Button("Delete", role: .destructive) {
-                        serverManager.stopAll()
-                        ModelStorage.deleteAll()
-                        deletedModelsBanner = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { deletedModelsBanner = false }
-                    }
-                } message: {
-                    Text(deleteModelsMessage)
                 }
 
                 if deletedModelsBanner {
