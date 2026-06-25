@@ -1,7 +1,7 @@
 import Foundation
 import Network
 
-/// Tiny embedded HTTP/1.1 server (Network.framework, zero deps) that replaces the Python
+/// Tiny embedded HTTP/1.1 server (Network.framework, zero deps) ported from the former Python
 /// TTS server for the bash hook. Loopback-only. Serves exactly what the hook + health
 /// checks need:
 ///   GET  /v1/models        -> 200 minimal models JSON

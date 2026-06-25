@@ -2,21 +2,21 @@ import Foundation
 
 /// Detects and strips a trailing "submit" phrase from a transcript.
 ///
-/// Faithful Swift port of the Python server's `SUBMIT_TRIGGERS` / `check_submit_trigger`
-/// (unified_server.py:134-147) + `_SUBMIT_PATTERNS`. A trailing trigger phrase
+/// Faithful Swift port of the former Python server's `SUBMIT_TRIGGERS` / `check_submit_trigger`
+/// (former unified_server.py) + `_SUBMIT_PATTERNS`. A trailing trigger phrase
 /// ("submit", "send it", "go ahead", "send", "enter") is removed, and whether one was
 /// found is reported so callers can decide whether to press Enter. Matching is
 /// case-insensitive, tolerant of trailing punctuation, and tries the longest triggers
 /// first.
 public enum SubmitTrigger {
 
-    /// Longest-first, mirroring Python `sorted(..., key=len, reverse=True)`:
+    /// Longest-first, mirroring the former Python `sorted(..., key=len, reverse=True)`:
     /// "go ahead", "send it", "submit", "enter", "send".
     static let triggers: [String] = ["submit", "send it", "go ahead", "send", "enter"]
         .sorted { $0.count > $1.count }
 
     /// Trailing characters stripped before the `endsWith` pre-check
-    /// (Python `lower.rstrip(" .,!?…")`).
+    /// (former Python `lower.rstrip(" .,!?…")`).
     private static let trailingStripChars: Set<Character> = [" ", ".", ",", "!", "?", "…"]
 
     public static func process(_ text: String) -> (cleaned: String, didMatch: Bool) {
@@ -32,7 +32,7 @@ public enum SubmitTrigger {
                 return (rstripWhitespace(cleaned), true)
             }
 
-            // Fallback (Python `lower.rfind(trigger)`): the `\b` boundary can defeat the
+            // Fallback (former Python `lower.rfind(trigger)`): the `\b` boundary can defeat the
             // regex (e.g. "presubmit") even though the text ends with the trigger — strip
             // from the last case-insensitive occurrence.
             if let range = stripped.range(of: trigger, options: [.backwards, .caseInsensitive]) {
@@ -53,7 +53,7 @@ public enum SubmitTrigger {
         return String(s[..<end])
     }
 
-    /// Python `str.rstrip()` — strip trailing whitespace only.
+    /// Former Python `str.rstrip()` — strip trailing whitespace only.
     private static func rstripWhitespace(_ s: String) -> String {
         var end = s.endIndex
         while end > s.startIndex {

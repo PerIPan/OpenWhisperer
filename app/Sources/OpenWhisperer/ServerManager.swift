@@ -2,8 +2,8 @@ import Foundation
 import Combine
 
 /// Hosts the in-process native TTS: a `KokoroTTS` actor (FluidAudio CoreML/ANE) behind a
-/// tiny embedded HTTP server (`TTSHTTPServer`) on :8000. Replaces the out-of-process Python
-/// `unified_server.py`. STT is native in-app (`SpeechTranscriber`) and needs no server.
+/// tiny embedded HTTP server (`TTSHTTPServer`) on :8000. Ported from the former out-of-process Python
+/// `unified_server.py` (now deleted). STT is native in-app (`SpeechTranscriber`) and needs no server.
 class ServerManager: ObservableObject {
     enum ServerStatus: String {
         case stopped = "Stopped"
