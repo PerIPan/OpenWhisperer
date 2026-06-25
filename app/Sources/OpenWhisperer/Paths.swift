@@ -32,16 +32,16 @@ enum Paths {
     static let serverLog = appSupport.appendingPathComponent("server.log")
     static let setupLog = appSupport.appendingPathComponent("setup.log")
 
-    /// Auto-submit flag file (unified_server.py checks this)
+    /// Auto-submit flag file (read in-process by the Swift app)
     static let autoSubmitFlag = appSupport.appendingPathComponent("auto_submit")
 
-    /// Auto-focus app file (unified_server.py reads target app name from this)
+    /// Auto-focus app file (target app name, read in-process by the Swift app)
     static let autoFocusApp = appSupport.appendingPathComponent("auto_focus_app")
 
     /// Auto-focus "with return" flag — return to origin app after text insertion
     static let autoFocusReturn = appSupport.appendingPathComponent("auto_focus_return")
 
-    /// STT language file (unified_server.py reads default language from this)
+    /// STT language file (default language for in-process WhisperKit STT)
     static let sttLanguage = appSupport.appendingPathComponent("stt_language")
 
     /// TTS voice file (tts-hook.sh reads voice name from this)

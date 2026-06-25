@@ -1,7 +1,7 @@
 import OpenWhispererKit
 
 /// Checks for `VoiceSignal`. Parity-critical: these hashes MUST equal what
-/// `shasum -a 256` produces for the same trimmed bytes (see tests/test_voice_context.py).
+/// `shasum -a 256` produces for the same trimmed bytes (see the former tests/test_voice_context.py).
 func voiceSignalFailures() -> [String] {
     var failures: [String] = []
 

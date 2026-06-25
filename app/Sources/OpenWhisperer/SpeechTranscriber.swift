@@ -3,7 +3,7 @@ import WhisperKit
 
 /// In-process Whisper speech-to-text via WhisperKit (CoreML / ANE).
 ///
-/// Replaces the old HTTP round-trip to the Python `mlx_whisper` server. Actor-isolated
+/// Ported from the former HTTP round-trip to the Python `mlx_whisper` server (now deleted). Actor-isolated
 /// so concurrent `transcribe` calls serialize on the compute unit, and so the one-time
 /// model load can't race.
 actor SpeechTranscriber {

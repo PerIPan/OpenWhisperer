@@ -1,6 +1,6 @@
 import Foundation
 
-/// Port of `tests/test_voice_context.py`. `voice-context.sh` is the UserPromptSubmit hook: it
+/// Port of the former `tests/test_voice_context.py` (now deleted). `voice-context.sh` is the UserPromptSubmit hook: it
 /// matches the submitted prompt against the app's `voice_turn` signal and, on a match, marks the
 /// session (`speak_pending/<id>`) and emits a nudge. Returns failures.
 func voiceContextFailures() -> [String] {

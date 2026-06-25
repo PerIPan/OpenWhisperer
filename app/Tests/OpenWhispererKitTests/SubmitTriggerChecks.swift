@@ -1,7 +1,7 @@
 import OpenWhispererKit
 
-/// Behavioral parity checks for `SubmitTrigger.process`, mirroring the Python
-/// `check_submit_trigger` (unified_server.py:134-147) + `_SUBMIT_PATTERNS`.
+/// Behavioral parity checks for `SubmitTrigger.process`, mirroring the former Python
+/// `check_submit_trigger` (former unified_server.py) + `_SUBMIT_PATTERNS`.
 /// Returns a list of human-readable failures (empty = all passed).
 func submitTriggerFailures() -> [String] {
     var failures: [String] = []
@@ -29,7 +29,7 @@ func submitTriggerFailures() -> [String] {
     expect("I will send the file", cleaned: "I will send the file", didMatch: false, "midTextSend")
     expect("Type this SUBMIT", cleaned: "Type this", didMatch: true, "caseInsensitive")
     expect("send it", cleaned: "", didMatch: true, "longestTriggerWins")
-    // Parity with the Python `rfind` fallback when `\b` defeats the regex.
+    // Parity with the former Python `rfind` fallback when `\b` defeats the regex.
     expect("presubmit", cleaned: "pre", didMatch: true, "wordBoundaryFallbackParity")
     expect("  hello there submit  ", cleaned: "hello there", didMatch: true, "whitespaceTrimmed")
 

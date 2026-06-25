@@ -55,7 +55,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     }
 
     /// Mirrors the speech-model / setup status into the standby overlay so it shows
-    /// "Loading speech model…", a failure message, or a setup failure (e.g. spaCy)
+    /// "Loading speech model…", a failure message, or a model-load failure
     /// instead of always claiming "Listening for transcriptions…".
     @Published var statusText: String?
     @Published var statusIsError: Bool = false

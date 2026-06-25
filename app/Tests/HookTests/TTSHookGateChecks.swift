@@ -1,6 +1,6 @@
 import Foundation
 
-/// Replaces the stale `tests/test_tts_hook_gate.py` (which asserted the removed `tts_hook.lockdir`
+/// Replaces the former `tests/test_tts_hook_gate.py` (now deleted; it asserted the removed `tts_hook.lockdir`
 /// / `tts_hook.pid` / afplay machinery). Tests the Phase 3 `tts-hook.sh`: gate on the
 /// `speak_pending` marker, then a fire-and-forget `POST /v1/audio/play`. Returns failures.
 func ttsHookGateFailures() -> [String] {

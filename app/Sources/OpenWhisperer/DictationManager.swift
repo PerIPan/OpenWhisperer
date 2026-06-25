@@ -11,7 +11,7 @@ private let dictLog = OSLog(subsystem: "com.openwhisperer.app", category: "dicta
 class DictationManager: ObservableObject {
     let recorder = AudioRecorder()
     let keywordDetector = KeywordDetector()
-    /// In-process Whisper STT (WhisperKit). Replaces the HTTP call to the Python server.
+    /// In-process Whisper STT (WhisperKit). Ported from the former HTTP call to the Python server (now deleted).
     let transcriber = SpeechTranscriber()
     /// In-process TTS playback (Phase 3). Injected by `AppDelegate` from `ServerManager`; used by
     /// `killTTS()` for instant barge-in. Optional so headless/test paths without a server still run.

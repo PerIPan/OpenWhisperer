@@ -35,7 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupDictation()
 
         // Kick off the one-time WhisperKit model download + load so the first dictation
-        // isn't blocked on it. Independent of the Python server (which now serves TTS only).
+        // isn't blocked on it. Independent of the in-process TTS server (`TTSHTTPServer` on :8000).
         dictationManager.prepareSTT()
 
         if setupManager.isSetupComplete {

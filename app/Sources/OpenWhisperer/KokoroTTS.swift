@@ -4,7 +4,7 @@ import OpenWhispererKit
 
 /// In-process Kokoro text-to-speech via FluidAudio (CoreML / ANE).
 ///
-/// Replaces the out-of-process Python `mlx_audio` server. Actor-isolated so the one-time
+/// Ported from the former out-of-process Python `mlx_audio` server (now deleted). Actor-isolated so the one-time
 /// model load can't race and synthesis calls serialize on the compute unit. Mirrors the
 /// `SpeechTranscriber` pattern (in-flight load dedup, error wrapping). FluidAudio caches
 /// its CoreML chain under `~/.cache/fluidaudio` and loads from cache when present, so an
@@ -19,7 +19,7 @@ actor KokoroTTS {
         }
     }
 
-    /// US-English female voice — the same default the Python Kokoro path used.
+    /// US-English female voice — the same default the former Python Kokoro path used.
     static let defaultVoice = "af_heart"
 
     private let manager = KokoroAneManager(variant: .english)

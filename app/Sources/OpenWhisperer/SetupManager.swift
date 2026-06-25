@@ -1,10 +1,10 @@
 import Foundation
 import SwiftUI
 
-/// First-launch setup. Native STT (WhisperKit) + native TTS (FluidAudio) need **no Python
-/// venv** — both download their CoreML models lazily on first use, and load failures surface
+/// First-launch setup. Native STT (WhisperKit) + native TTS (FluidAudio) run fully in-process
+/// on the ANE — both download their CoreML models lazily on first use, and load failures surface
 /// via `ServerManager` / the standby overlay. So setup has nothing to install; it just marks
-/// itself complete. (The whole `uv`/venv/pip bootstrap was removed in the Phase-2b port.)
+/// itself complete. (The former `uv`/venv/pip bootstrap was removed in the Phase-2b port.)
 class SetupManager: ObservableObject {
     enum SetupState: Equatable {
         case notStarted
