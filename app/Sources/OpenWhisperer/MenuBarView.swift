@@ -89,6 +89,9 @@ struct MenuBarView: View {
     @State private var superpowersApplied = false
     @State private var applyMessage = ""
     @State private var serverReachable = false
+    @State private var showDeleteModelsConfirm = false
+    @State private var deleteModelsMessage = ""
+    @State private var deletedModelsBanner = false
     @State private var launchAtLogin = false
     @State private var voiceSettingsExpanded = false  // always collapsed by default on launch
     @State private var setupExpanded = false   // always collapsed by default on launch
@@ -800,7 +803,35 @@ struct MenuBarView: View {
                         .buttonStyle(OWRowButtonStyle())
                     }
 
+                    Button(action: {
+                        deleteModelsMessage = ModelStorage.confirmationMessage()
+                        showDeleteModelsConfirm = true
+                    }) {
+                        Label("Delete", systemImage: "trash")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(OWRowButtonStyle())
+
                     PortField(label: "", port: $serverManager.port, disabled: !serverStopped)
+                }
+                .alert("Delete downloaded models?", isPresented: $showDeleteModelsConfirm) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Delete", role: .destructive) {
+                        serverManager.stopAll()
+                        ModelStorage.deleteAll()
+                        deletedModelsBanner = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { deletedModelsBanner = false }
+                    }
+                } message: {
+                    Text(deleteModelsMessage)
+                }
+
+                if deletedModelsBanner {
+                    Text("Models deleted — they'll re-download on next use")
+                        .font(OWFont.body(11))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .transition(.opacity)
                 }
 
                 if showStoppedBanner {
