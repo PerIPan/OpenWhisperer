@@ -43,7 +43,7 @@ struct OpenWhispererApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("Open Whisperer", systemImage: "waveform") {
+        MenuBarExtra {
             MenuBarView()
                 .environmentObject(appDelegate.serverManager)
                 .environmentObject(appDelegate.setupManager)
@@ -52,7 +52,22 @@ struct OpenWhispererApp: App {
                 .onAppear {
                     appDelegate.setupDictation()
                 }
+        } label: {
+            // Always-visible first-run signal: hourglass while the models load, waveform once ready.
+            MenuBarStatusIcon(dictation: appDelegate.dictationManager, server: appDelegate.serverManager)
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+/// The menu-bar icon. Shows an hourglass while a model is still loading (most visible on the
+/// very first launch), then the waveform once everything is ready.
+private struct MenuBarStatusIcon: View {
+    @ObservedObject var dictation: DictationManager
+    @ObservedObject var server: ServerManager
+
+    var body: some View {
+        let loading = (!dictation.sttModelReady && !dictation.sttFailed) || server.status == .starting
+        Image(systemName: loading ? "hourglass" : "waveform")
     }
 }

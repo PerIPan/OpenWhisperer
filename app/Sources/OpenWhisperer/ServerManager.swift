@@ -15,7 +15,7 @@ class ServerManager: ObservableObject {
     @Published var status: ServerStatus = .stopped
     @Published var port: Int = 8000
     @Published var sttModel: String = "whisper-large-v3-turbo"  // native WhisperKit
-    @Published var ttsModel: String = "Kokoro-82M"              // native FluidAudio
+    @Published var ttsModel: String = "kokoro-82m"              // native FluidAudio
     @Published var lastError: String = ""
 
     private let tts = KokoroTTS()

@@ -90,9 +90,9 @@ struct MenuBarView: View {
     @State private var applyMessage = ""
     @State private var serverReachable = false
     @State private var launchAtLogin = false
-    @State private var voiceSettingsExpanded = FileManager.default.fileExists(atPath: Paths.voiceSettingsCardExpanded.path)
-    @State private var setupExpanded = !FileManager.default.fileExists(atPath: Paths.setupCardExpanded.path)
-    @State private var serverExpanded = FileManager.default.fileExists(atPath: Paths.serverCardExpanded.path)
+    @State private var voiceSettingsExpanded = false  // always collapsed by default on launch
+    @State private var setupExpanded = false   // always collapsed by default on launch
+    @State private var serverExpanded = false  // always collapsed by default on launch
     // logsExpanded removed — merged into serverExpanded
     @ObservedObject private var overlay = TranscriptionOverlay.shared
 
@@ -170,8 +170,7 @@ struct MenuBarView: View {
 
             setupProgressSection
 
-            serverStatusCard
-                .padding(.bottom, 10)
+            modelLoadingBanner
 
             voiceInputCard
                 .padding(.bottom, 8)
@@ -311,27 +310,33 @@ struct MenuBarView: View {
         }
     }
 
-    // MARK: - Server Status Card
+    // MARK: - Model Loading Banner (first-run signal)
 
-    private var serverStatusCard: some View {
-        OWCard {
-            VStack(spacing: 0) {
-                ModernStatusRow(
-                    label: "Whisper STT (on-device)",
-                    subtitle: dictationManager.sttModelReady
-                        ? "large-v3-turbo"
-                        : (dictationManager.sttStatus ?? "Loading…"),
-                    port: "local",
-                    status: dictationManager.sttModelReady ? .running : .starting
-                )
-                OWInternalDivider()
-                ModernStatusRow(
-                    label: "Kokoro Text-to-Speech",
-                    subtitle: serverManager.ttsModel,
-                    port: "\(serverManager.port)",
-                    status: serverManager.status
-                )
+    /// Prominent banner shown only while a model is still loading — most visible on the very
+    /// first launch (download + Neural-Engine compile can take 1–2 min). Disappears once ready.
+    @ViewBuilder
+    private var modelLoadingBanner: some View {
+        let sttLoading = !dictationManager.sttModelReady && !dictationManager.sttFailed
+        let ttsLoading = serverManager.status == .starting
+        if sttLoading || ttsLoading {
+            OWCard {
+                HStack(spacing: 9) {
+                    ProgressView().controlSize(.small)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Preparing models…")
+                            .font(OWFont.body(12).weight(.semibold))
+                            .foregroundColor(OWColor.ink)
+                        Text(sttLoading
+                            ? (dictationManager.sttStatus ?? "Loading the speech model…")
+                            : "Loading the voice model…")
+                            .font(OWFont.caption(11))
+                            .foregroundColor(OWColor.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
             }
+            .padding(.bottom, 10)
         }
     }
 
@@ -355,10 +360,12 @@ struct MenuBarView: View {
                     dictationManager.interactionMode = newValue
                 }
 
-                // Mode description hint
+                // Mode description hint — wrap to multiple lines instead of truncating
                 Text(selectedMode.description)
-                    .font(OWFont.caption(10))
-                    .foregroundColor(.secondary)
+                    .font(OWFont.caption(11))
+                    .foregroundColor(OWColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !dictationManager.recorder.micPermission {
                     OWInternalDivider()
@@ -750,6 +757,26 @@ struct MenuBarView: View {
             EmptyView()
         } expandedContent: {
             VStack(alignment: .leading, spacing: 8) {
+                // Model status rows (moved here from the top of the menu)
+                VStack(spacing: 0) {
+                    ModernStatusRow(
+                        label: "Whisper STT",
+                        subtitle: dictationManager.sttModelReady
+                            ? "large-v3-turbo"
+                            : (dictationManager.sttStatus ?? "Loading…"),
+                        port: "local",
+                        status: dictationManager.sttModelReady ? .running : .starting
+                    )
+                    OWInternalDivider()
+                    ModernStatusRow(
+                        label: "Kokoro TTS",
+                        subtitle: serverManager.ttsModel,
+                        port: "\(serverManager.port)",
+                        status: serverManager.status
+                    )
+                }
+                OWInternalDivider()
+
                 let serverStopped = serverManager.status == .stopped
 
                 HStack(spacing: 6) {

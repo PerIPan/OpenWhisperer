@@ -106,7 +106,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         hostingView.sizingOptions = [.minSize, .intrinsicContentSize, .preferredContentSize]
 
         let w = KeyableWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 280, height: 130),
+            contentRect: NSRect(x: 0, y: 0, width: 240, height: 64),
             styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false
@@ -119,7 +119,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.backgroundColor = .clear
         w.isOpaque = false
         w.hasShadow = true
-        w.minSize = NSSize(width: 160, height: 70)
+        w.minSize = NSSize(width: 200, height: 44)
 
         // Round corners
         if let contentView = w.contentView {
@@ -133,7 +133,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
 
         // Position bottom-right of screen
         if let screen = NSScreen.main {
-            let x = screen.visibleFrame.maxX - 300
+            let x = screen.visibleFrame.maxX - 260
             let y = screen.visibleFrame.minY + 20
             w.setFrameOrigin(NSPoint(x: x, y: y))
         }
@@ -217,8 +217,10 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
                         return Line(id: self.nextLineId, text: text)
                     }
                     self.lines.append(contentsOf: tagged)
-                    if self.lines.count > 3 {
-                        self.lines = Array(self.lines.suffix(3))
+                    // Keep a scrollable history (the overlay caps its visible height and
+                    // scrolls internally), but bound memory so it can't grow unbounded.
+                    if self.lines.count > 50 {
+                        self.lines = Array(self.lines.suffix(50))
                     }
                 }
             }
@@ -294,85 +296,82 @@ struct OverlayView: View {
     /// would freeze the reference at the moment NSHostingView was constructed.
     @ObservedObject var overlay: TranscriptionOverlay
 
+    /// Hard cap on the transcript scroll area. The window auto-sizes to this view
+    /// (sizingOptions in show()), so the transcript MUST live inside a fixed-height
+    /// frame — content beyond it scrolls internally and the window can never grow
+    /// past the screen (the original overflow bug).
+    private static let transcriptMaxHeight: CGFloat = 84
+
     var body: some View {
-        // FIX: Derive recorder from overlay.currentRecorder each time body evaluates.
-        // Because overlay is @ObservedObject and currentRecorder is @Published,
-        // any assignment to overlay.currentRecorder triggers a body re-evaluation
-        // here, giving WaveformBar the new live instance.
+        // Derive the live recorder from overlay.currentRecorder each time body evaluates,
+        // so WaveformBar always observes the instance that is actually recording.
         let recorder = overlay.currentRecorder
 
-        VStack(alignment: .leading, spacing: 0) {
-            // Close button
+        VStack(alignment: .leading, spacing: 4) {
+            // Slim close affordance (this is a persistent standby overlay).
             HStack {
                 Spacer()
                 Button(action: { overlay.hide() }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundColor(OWColor.inkFaint)
                 }
                 .buttonStyle(.plain)
-                .padding(.top, 4)
-                .padding(.trailing, 6)
             }
-            .frame(height: 14)
+            .frame(height: 12)
 
-            // Waveform always visible — shows status label + bars
+            // Live waveform + state word ("Standby" / "Recording…" / "Speaking…").
             WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, pttKeyLabel: overlay.pttKeyLabel, interactionMode: overlay.interactionMode)
-                .frame(height: 36)
-                .padding(.horizontal, 8)
+                .frame(height: 32)
 
-            // Silence progress bar — always visible in hands-free mode
+            // Silence countdown — hands-free only.
             if overlay.interactionMode == .handsFree {
                 SilenceProgressBar(recorder: recorder)
                     .frame(height: 1.5)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 3)
+                    .padding(.top, 2)
             }
 
-            Divider().padding(.horizontal, 8).padding(.vertical, 4)
-
+            // Body region: model-loading / failure status takes priority; otherwise a
+            // capped, scrollable transcript that only appears once there are lines
+            // (so the overlay stays a small pill while idle).
             if let status = overlay.statusText {
-                // Model loading / failed, or a setup failure — never claim "Listening".
-                VStack(spacing: 6) {
+                HStack(spacing: 6) {
                     Label(status, systemImage: overlay.statusIsError ? "exclamationmark.triangle.fill" : "arrow.down.circle")
                         .font(.custom("Outfit", size: 10))
                         .foregroundColor(overlay.statusIsError ? OWColor.danger : OWColor.inkSoft)
-                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                     if overlay.statusIsError, let dm = overlay.dictationManager, dm.sttFailed {
+                        Spacer(minLength: 0)
                         Button("Retry") { dm.retrySTT() }
                             .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
+                            .controlSize(.mini)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(8)
-            } else if overlay.lines.isEmpty && recorder.state == .idle {
-                Text("Listening for transcriptions...")
-                    .font(.custom("Outfit", size: 10))
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+                .padding(.top, 4)
+            } else if !overlay.lines.isEmpty {
+                Divider().padding(.top, 4)
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(overlay.lines.reversed().enumerated()), id: \.element.id) { index, line in
-                            if index > 0 {
-                                Divider()
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 4)
-                            }
+                            if index > 0 { Divider() }
                             Text(line.text)
                                 .font(.custom("Outfit", size: 11))
+                                .foregroundColor(OWColor.ink)
                                 .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .id(line.id)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
+                    .padding(.top, 2)
                 }
+                .frame(height: Self.transcriptMaxHeight)  // CAP → scrolls inside; window never overflows
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 10)
+        .padding(.top, 6)
+        .padding(.bottom, 9)
+        .frame(width: 240, alignment: .leading)
     }
 }
 
