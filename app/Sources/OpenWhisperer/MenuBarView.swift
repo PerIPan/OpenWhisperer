@@ -561,19 +561,14 @@ struct MenuBarView: View {
 
                 OWInternalDivider()
 
-                // Style (spoken summary length) + Response (when replies are spoken),
-                // two compact dropdowns sharing one row.
+                // Style (spoken summary length) as a compact, unlabeled dropdown +
+                // Response (when replies are spoken) labeled, sharing one row.
                 HStack(alignment: .center, spacing: 12) {
-                    HStack(spacing: 5) {
-                        Text("Style")
-                            .font(OWFont.body(11))
-                            .foregroundColor(OWColor.ink)
-                        OWMenuPicker(selection: $selectedStyle, options: Self.styleLevels)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .onChange(of: selectedStyle) { _, newValue in
-                        try? newValue.write(to: Paths.ttsStyle, atomically: true, encoding: .utf8)
-                    }
+                    OWMenuPicker(selection: $selectedStyle, options: Self.styleLevels)
+                        .frame(width: 92)
+                        .onChange(of: selectedStyle) { _, newValue in
+                            try? newValue.write(to: Paths.ttsStyle, atomically: true, encoding: .utf8)
+                        }
 
                     HStack(spacing: 5) {
                         Text("Response")
@@ -582,11 +577,12 @@ struct MenuBarView: View {
                         OWMenuPicker(selection: $selectedResponse, options: Self.responseModes)
                             .frame(maxWidth: .infinity)
                     }
+                    .frame(maxWidth: .infinity)
                     .onChange(of: selectedResponse) { _, newValue in
                         try? newValue.write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
                     }
                 }
-                .help("Style = spoken summary length. Response = when replies are spoken: when Voice (dictated), when Text (typed), or Always. Text/Always also shape typed replies for speech (summary-first).")
+                .help("Left: spoken summary length (Terse/Normal/Rich/Full). Response: when replies are spoken — when Voice (dictated, the default), when Text (typed), or Always.")
 
                 OWInternalDivider()
 
@@ -616,7 +612,7 @@ struct MenuBarView: View {
     private var automationCard: some View {
         OWCard {
             VStack(alignment: .leading, spacing: 10) {
-                OWCardHeader(title: "Automation", icon: "gearshape.2")
+                OWCardHeader(title: "App Focus Automation", icon: "gearshape.2")
 
                 HStack(spacing: 20) {
                     OWCheckbox(label: "auto-focus", isOn: $autoFocusEnabled)
