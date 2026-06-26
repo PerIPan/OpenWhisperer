@@ -109,7 +109,7 @@ final class TTSHTTPServer {
         case ("POST", "/v1/audio/speech"):
             let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any]
             let input = json?["input"] as? String ?? ""
-            let voice = json?["voice"] as? String ?? "af_heart"
+            let voice = json?["voice"] as? String ?? Self.userVoice()
             Task { [tts] in
                 do {
                     let wav = try await tts.synthesize(input, voice: voice)
@@ -125,7 +125,7 @@ final class TTSHTTPServer {
             // player synthesizes sentence-by-sentence and supersedes any current playback.
             let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any]
             let input = json?["input"] as? String ?? ""
-            let voice = json?["voice"] as? String ?? "af_heart"
+            let voice = json?["voice"] as? String ?? Self.userVoice()
             Task { [playback] in await playback.play(text: input, voice: voice) }
             respond(conn, "202 Accepted",
                     Data(#"{"status":"accepted"}"#.utf8), contentType: "application/json")
@@ -139,7 +139,7 @@ final class TTSHTTPServer {
             case .accepted:
                 respond(conn, "202 Accepted", Data())
             case .speak(let response, let text, let voice):
-                Task { [playback] in await playback.play(text: text, voice: voice ?? "af_heart") }
+                Task { [playback] in await playback.play(text: text, voice: voice ?? Self.userVoice()) }
                 respond(conn, "200 OK", response, contentType: "application/json")
             }
 
@@ -150,6 +150,14 @@ final class TTSHTTPServer {
         default:
             respond(conn, "404 Not Found", Data())
         }
+    }
+
+    /// The user's selected TTS voice (global `tts_voice` pref), or the Kokoro default. Used when a
+    /// request omits a voice — notably the `speak` MCP tool, which the model calls with text only.
+    private static func userVoice() -> String {
+        let v = (try? String(contentsOf: Paths.ttsVoice, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (v?.isEmpty == false) ? v! : "af_heart"
     }
 
     private func respond(_ conn: NWConnection, _ status: String, _ body: Data, contentType: String = "text/plain") {
