@@ -361,7 +361,7 @@ struct MenuBarView: View {
                     ProgressView().controlSize(.small)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Preparing models…")
-                            .font(OWFont.body(12).weight(.semibold))
+                            .font(OWFont.body(11).weight(.semibold))
                             .foregroundColor(OWColor.ink)
                         Text(sttLoading
                             ? (dictationManager.sttStatus ?? "Loading the speech model…")
@@ -430,7 +430,7 @@ struct MenuBarView: View {
                             .shadow(color: stateColor.opacity(0.5), radius: stateGlows ? 3 : 0)
                             .frame(width: 16)
                         Text(stateLabel)
-                            .font(OWFont.body(12))
+                            .font(OWFont.body(11))
                             .foregroundColor(OWColor.ink)
                             .help("Dictation status: Standby (ready), Recording, Transcribing, Listening (Hands-Free wake word), Playing (speaking a reply), or Calibrating.")
 
@@ -461,7 +461,7 @@ struct MenuBarView: View {
                                 .foregroundColor(.secondary)
                                 .frame(width: 16)
                             Text("Silence")
-                                .font(OWFont.body(12))
+                                .font(OWFont.body(11))
                             Spacer()
                             OWMenuPicker(
                                 selection: $silenceThreshold,
@@ -504,7 +504,7 @@ struct MenuBarView: View {
                             .foregroundColor(overlay.isVisible ? OWColor.live : OWColor.inkFaint)
                             .frame(width: 16)
                         Text("Transcription Overlay")
-                            .font(OWFont.body(12))
+                            .font(OWFont.body(11))
                         Spacer()
                         OWMenuPicker(
                             selection: Binding(
@@ -569,7 +569,9 @@ struct MenuBarView: View {
                     try? newValue.write(to: Paths.ttsVoice, atomically: true, encoding: .utf8)
                 }
 
-                OWInternalDivider()
+                // No visible separator between Voice and Response, but keep the same
+                // gap (the divider was 0.5pt) so the rows don't move closer.
+                Color.clear.frame(height: 0.5)
 
                 // Both dropdowns are Response settings: spoken-summary length (left)
                 // + when replies are spoken (right). One "Response" label, formatted
@@ -662,7 +664,7 @@ struct MenuBarView: View {
                         if focusSelection == "CUSTOM" {
                             TextField("App name", text: $customFocusApp)
                                 .textFieldStyle(.roundedBorder)
-                                .font(OWFont.body(12))
+                                .font(OWFont.body(11))
                                 .onChange(of: customFocusApp) { _, newValue in
                                     if !newValue.isEmpty {
                                         focusAppName = newValue
@@ -689,6 +691,8 @@ struct MenuBarView: View {
                     Text(hint)
                         .font(OWFont.caption())
                         .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -1045,7 +1049,7 @@ struct MenuBarView: View {
 
                     Button(action: { NSApplication.shared.terminate(nil) }) {
                         Label("Quit", systemImage: "power")
-                            .font(OWFont.body(12))
+                            .font(OWFont.body(11))
                     }
                     .buttonStyle(OWRowButtonStyle())
                     .keyboardShortcut("q")
@@ -1395,7 +1399,7 @@ struct OWAppPicker: View {
             VStack(alignment: .leading, spacing: 6) {
                 TextField("Search apps…", text: $query)
                     .textFieldStyle(.roundedBorder)
-                    .font(OWFont.body(12))
+                    .font(OWFont.body(11))
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
@@ -1461,7 +1465,7 @@ struct OWAppPicker: View {
                     .foregroundColor(OWColor.accent)
                     .opacity(id == selection ? 1 : 0)
                 Text(label)
-                    .font(OWFont.body(12))
+                    .font(OWFont.body(11))
                     .foregroundColor(OWColor.ink)
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -1506,7 +1510,7 @@ struct OWCheckbox: View {
                 }
                 .animation(.easeInOut(duration: 0.12), value: isOn)
                 Text(label)
-                    .font(OWFont.body(12))
+                    .font(OWFont.body(11))
                     .foregroundColor(OWColor.ink)
             }
         }
@@ -1554,7 +1558,7 @@ struct ModernStatusRow: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(label)
-                    .font(OWFont.body(12))
+                    .font(OWFont.body(11))
                 if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(OWFont.caption(10))
@@ -1689,7 +1693,7 @@ extension CollapsibleHeader where Trailing == EmptyView {
 struct OWPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(OWFont.body(12).weight(.medium))
+            .font(OWFont.body(11).weight(.medium))
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
@@ -1747,7 +1751,7 @@ struct PortField: View {
         HStack {
             if !label.isEmpty {
                 Text(label)
-                    .font(OWFont.body(12))
+                    .font(OWFont.body(11))
                     .frame(minWidth: 60, alignment: .leading)
             }
             TextField("", text: $text)
