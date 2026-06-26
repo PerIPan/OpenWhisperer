@@ -4,18 +4,19 @@
 
 **Goal:** Replace the Claude Code Stop-hook spoken-summary with an in-app `speak` MCP tool the model calls *first*, so audio starts mid-turn instead of after the reply finishes.
 
-**Architecture:** The pure `MCPServer` JSON-RPC dispatch (`OpenWhispererKit`) and the `POST /mcp` route in `TTSHTTPServer` already exist (built + verified in the spike, commits `2f64512`). This plan does the rest: rewrite `voice-context.sh` to nudge the model to call `speak` first (dropping the `speak_pending` marker), delete the Claude Stop hook, have `ConfigManager` register the MCP server and stop registering the Stop hook, bump the version, and rewrite the docs. **Codex is deliberately left on its existing `codex-tts-hook.sh` Stop path** (Codex HTTP-MCP is unconfirmed; migrating it would remove Codex voice with no replacement).
+**Architecture:** The pure `MCPServer` JSON-RPC dispatch (`OpenWhispererKit`) and the `POST /mcp` route in `TTSHTTPServer` already exist (built + verified in the spike, commits `2f64512`). This plan does the rest: rewrite `voice-context.sh` to nudge the model to call `speak` first (dropping the `speak_pending` marker), delete the Stop hooks, have `ConfigManager` register the MCP server + the shared nudge hook and stop registering the Stop hooks, and rewrite the docs. **No version bump** — releasing/versioning is left to the upstream maintainer. **Both Claude Code and Codex are migrated.** Codex was spiked (2026-06-26): HTTP MCP works with no flag, a `UserPromptSubmit` hook gives 5/5 speak-first, and Codex's hook stdin carries `prompt`+`session_id`, so the *same* `voice-context.sh` serves both platforms. The Claude Stop hook (`tts-hook.sh`) and the Codex `notify` hook (`codex-tts-hook.sh`) are both deleted. **Open Codex detail:** Codex silently skips *untrusted* hooks, so the setup must establish persisted hook trust (Task 4).
 
 **Tech Stack:** Swift 5.9 (SwiftPM, CLT-only — no XCTest), bash hooks, JSON-RPC 2.0 / MCP Streamable HTTP (protocol `2025-11-25`), FluidAudio Kokoro TTS.
 
 ## Global Constraints
 
-- **KISS variant — no fallback.** Delete the Claude Stop hook outright; do **not** add a `spoke_early` dedupe path. A missed `speak` call = a silent turn, accepted by decision.
-- **Claude Code only.** Do not modify `codex-tts-hook.sh`, `applyHookToCodexConfig`, or the Codex path. `speakable-text.sh` stays (Codex still uses it).
+- **KISS variant — no fallback.** Delete both Stop hooks outright; do **not** add a `spoke_early` dedupe path. A missed `speak` call = a silent turn, accepted by decision.
+- **Both platforms.** Migrate Claude Code *and* Codex to the shared `voice-context.sh` nudge + `speak` tool. Delete `tts-hook.sh` (Claude Stop) and `codex-tts-hook.sh` (Codex notify). Once both are gone, `speakable-text.sh` + `SpeakableTextChecks` are unused — delete them too (after a `grep` confirms no other consumer). **Codex hook trust** must be established or the hook is silently skipped (Task 4).
 - **Hashing parity is sacred.** Do not touch `VoiceSignal.canonicalHash` or the bash `shasum` classification in `voice-context.sh`; the `IS_VOICE` block is copied verbatim. Run `HookTests` after any hook edit.
 - **Pure logic lives in `OpenWhispererKit`** (CLT-testable). `ConfigManager`/`TTSHTTPServer` are AppKit/Network-linked and verified by build + manual smoke, not unit tests — matching the existing repo norm.
 - **Server URL is fixed:** `http://localhost:8000/mcp`. MCP entry shape in `~/.claude.json` → `mcpServers.<name>`: `{"type":"http","url":"http://localhost:8000/mcp"}`.
-- **Version:** `1.5.1 → 1.6.0` in `app/Resources/Info.plist` (CFBundleVersion + CFBundleShortVersionString) and `app/build-dmg.sh` (`DMG_NAME`).
+- **Do not bump the version.** Leave `Info.plist` / `build-dmg.sh` at `1.5.1`; cutting the release + version is the upstream maintainer's (Perikles's) call. The launch migration strips stale hooks regardless of version, so nothing here depends on a version number.
+- **Codex MCP/hook config** (`~/.codex/config.toml`): `[mcp_servers.OpenWhisperer]` with `url = "http://localhost:8000/mcp"` (no experimental flag); the nudge hook is `[[hooks.UserPromptSubmit]]` → `[[hooks.UserPromptSubmit.hooks]]` with `type="command"`, `command=<voice-context.sh path>`. Codex's hook I/O schema matches Claude Code's exactly.
 - **Commands run from `app/`:** `swift run OpenWhispererKitTests`, `swift run HookTests` (both `exit(1)` on failure).
 - **Branch:** `worktree-speak-mcp-spike` (already created). Commit after each task.
 
@@ -476,23 +477,54 @@ git commit -m "feat(mcp): register speak MCP server in ~/.claude.json on apply"
 
 ---
 
-### Task 4: Version bump `1.5.1 → 1.6.0`
+### Task 4: Migrate Codex — `speak` tool + shared nudge hook; delete `codex-tts-hook.sh`
+
+Codex now gets the same treatment as Claude: register the MCP server and the shared
+`voice-context.sh` as a `UserPromptSubmit` hook in `~/.codex/config.toml`, and delete the old
+`notify` → `codex-tts-hook.sh` path. Spiked 2026-06-26 (5/5 speak-first). **Two parts need care
+during execution:** (a) robust TOML editing of `config.toml` (the existing code does line-based
+`notify` editing; adding `[mcp_servers.*]` + `[[hooks.*]]` tables needs idempotent append-if-absent),
+and (b) **hook trust** — Codex skips untrusted hooks, so the setup must establish persisted trust
+(resolve the mechanism: a one-time `codex` trust prompt the user approves, vs. an app-written trust
+record). Surface trust in the instruction window regardless.
 
 **Files:**
-- Modify: `app/Resources/Info.plist` (CFBundleVersion + CFBundleShortVersionString)
-- Modify: `app/build-dmg.sh` (`DMG_NAME`)
+- Delete: `hooks/codex-tts-hook.sh`, `app/Tests/HookTests/CodexTtsHookChecks.swift`
+- Delete (after `grep` confirms no other consumer): `hooks/speakable-text.sh`, `app/Tests/HookTests/SpeakableTextChecks.swift`
+- Modify: `app/Tests/HookTests/main.swift` (drop `codexTtsHookFailures()`, `speakableTextFailures()`)
+- Modify: `app/Sources/OpenWhisperer/ConfigManager.swift` (`applyHookToCodexConfig`, `showCodexConfigInstructions`, `checkCodexHookConfigured`)
+- Modify: `app/Sources/OpenWhisperer/Paths.swift` (drop `codexTtsHook`; drop `speakableTextScript` if deleted)
 
-- [ ] **Step 1: Edit `app/Resources/Info.plist`.** Change both `<string>1.5.1</string>` values (under `CFBundleVersion` and `CFBundleShortVersionString`) to `1.6.0`.
+**Interfaces:**
+- Consumes: `Paths.codexConfig` (`~/.codex/config.toml`), `Paths.voiceContextHook`.
+- Produces: `applyHookToCodexConfig()` writes `[mcp_servers.OpenWhisperer]` + the `UserPromptSubmit` command hook into `config.toml` and removes any stale `notify = […codex-tts-hook…]` line; preserves all other content.
 
-- [ ] **Step 2: Edit `app/build-dmg.sh`.** Change `DMG_NAME="OpenWhisperer-1.5.1"` to `DMG_NAME="OpenWhisperer-1.6.0"`.
+- [ ] **Step 1: Confirm `speakable-text.sh` has no remaining consumer.** `grep -rn "speakable-text" hooks scripts app` — both Stop hooks are its only callers; once they're gone it's dead. If `scripts/speak.sh` or anything else references it, keep it (and its test) and skip those deletions.
 
-- [ ] **Step 3: Verify.** `grep -rn "1.5.1" app/Resources/Info.plist app/build-dmg.sh` → no matches.
-
-- [ ] **Step 4: Commit.**
+- [ ] **Step 2: Delete the Codex notify hook + its test, de-wire the runner.**
 
 ```bash
-git add app/Resources/Info.plist app/build-dmg.sh
-git commit -m "build: bump version to 1.6.0"
+git rm hooks/codex-tts-hook.sh app/Tests/HookTests/CodexTtsHookChecks.swift
+# only if Step 1 showed no other consumer:
+git rm hooks/speakable-text.sh app/Tests/HookTests/SpeakableTextChecks.swift
+```
+In `app/Tests/HookTests/main.swift` remove `failures += codexTtsHookFailures()` (and `failures += speakableTextFailures()` if that test was deleted).
+
+- [ ] **Step 3: Verify HookTests builds + passes.** From `app/`: `swift run HookTests`. Expected: `✅` (now just `voice-context` — shared by both platforms).
+
+- [ ] **Step 4: Rewrite `applyHookToCodexConfig()`** to register the MCP server + the shared nudge hook instead of `notify`. Read `config.toml`, then: remove any line matching `^notify\s*=` that references our hook; ensure a `[mcp_servers.OpenWhisperer]` block with `url = "http://localhost:8000/mcp"` exists (append if absent); ensure the `[[hooks.UserPromptSubmit]]` + `[[hooks.UserPromptSubmit.hooks]]` (`type="command"`, `command="<Paths.voiceContextHook.path>"`) block exists (append if absent). Idempotent: detect our blocks by the `OpenWhisperer`/`voice-context.sh` substrings before appending. Preserve all other content.
+
+- [ ] **Step 5: Update `showCodexConfigInstructions()`** to document the two config blocks AND the hook-trust step (e.g. "run `codex` once and approve trusting the OpenWhisperer hook, or it won't fire"). Update `checkCodexHookConfigured()` to look for `mcp_servers.OpenWhisperer` / `voice-context.sh` instead of `codex-tts-hook`.
+
+- [ ] **Step 6: Drop dead Paths.** Remove `Paths.codexTtsHook`; remove `Paths.speakableTextScript` if the script was deleted. Build will flag stragglers.
+
+- [ ] **Step 7: Build to confirm no dangling references.** From `app/`: `swift build`. Expected: `Build complete!`.
+
+- [ ] **Step 8: Commit.**
+
+```bash
+git add -A
+git commit -m "feat(codex): migrate Codex to the speak tool + shared nudge hook"
 ```
 
 ---
@@ -505,7 +537,7 @@ Replace the Stop-hook narrative in `CLAUDE.md` / `AGENTS.md` with the new one (r
 - Modify: `AGENTS.md` (§ "Voice-turn handshake", § "TTS …", state/IPC notes referencing `speak_pending`/`tts-hook.sh`)
 - Modify: `CLAUDE.md` (the `[VOICE:]`/handshake pointer paragraph if it references the Stop hook)
 
-- [ ] **Step 1: Rewrite the AGENTS.md "Voice-turn handshake" section** so it reads: app writes `voice_turn` on dictation → `voice-context.sh` (UserPromptSubmit) hash-matches + claims it, applies `tts_response_mode`, and on a speak decision injects a hidden nudge to **call the `speak` MCP tool first** → the model calls `speak`, which the app synthesizes + plays in-process. State plainly: **there is no Stop hook and no `speak_pending` marker for Claude Code**; **Codex still uses `codex-tts-hook.sh`** (its own Stop-equivalent) and is unchanged. Update the `ServerManager`/TTS section to mention `POST /mcp` alongside `/v1/audio/play`. Remove `speak_pending` from the Paths list narrative; note `speak_pending` is retired for Claude.
+- [ ] **Step 1: Rewrite the AGENTS.md "Voice-turn handshake" section** so it reads: app writes `voice_turn` on dictation → `voice-context.sh` (UserPromptSubmit) hash-matches + claims it, applies `tts_response_mode`, and on a speak decision injects a hidden nudge to **call the `speak` MCP tool first** → the model calls `speak`, which the app synthesizes + plays in-process. State plainly: **there is no Stop hook and no `speak_pending` marker** — *both* Claude Code and Codex now use the shared `voice-context.sh` nudge + the `speak` MCP tool (the Codex `notify` → `codex-tts-hook.sh` path is deleted; note Codex's one-time hook-trust step). Update the `ServerManager`/TTS section to mention `POST /mcp` alongside `/v1/audio/play`. Remove `speak_pending`/`tts-hook.sh`/`codex-tts-hook.sh` from the Paths-list and architecture narrative.
 
 - [ ] **Step 2: Fix the CLAUDE.md pointer** — its "Voice-turn handshake" mention should say the spoken summary is delivered by the model calling the `speak` tool (no Stop hook), keeping the existing "README is obsolete" framing.
 
@@ -541,9 +573,9 @@ cd app && OW_SIGN_IDENTITY="OpenWhisperer Dev" ./build-dmg.sh
 ```
 Install the built `.app` (replace the menubar app), launch it, click **Apply** for Claude Code (registers the UserPromptSubmit hook + the `speak` MCP server), then **restart Claude Code**.
 
-- [ ] **Step 4: Validate in a real session.** Confirm: `claude mcp list` shows `OpenWhisperer ✔ Connected`; a **dictated** conversational turn → audio starts early; a dictated **coding** turn (the long-turn case) → `speak` still fires and audio leads the written reply; a **typed** turn in default `voice` mode → silent. Watch for any silent dictated turn (the accepted KISS risk) and note frequency.
+- [ ] **Step 4: Validate in a real session (both platforms).** Claude Code: `claude mcp list` shows `OpenWhisperer ✔ Connected`; a **dictated** conversational turn → audio starts early; a dictated **coding** turn (the long-turn case) → `speak` still fires and audio leads the written reply; a **typed** turn in default `voice` mode → silent. Codex: after the one-time hook-trust approval, a dictated turn → `speak` fires (watch the `hook: UserPromptSubmit` line). Watch for any silent dictated turn (the accepted KISS risk) on either platform and note frequency.
 
-- [ ] **Step 5: Update the spec's "Remaining gap"** with the interactive-long-turn result (pass/fail + any silent-turn rate), then commit:
+- [ ] **Step 5: Update the spec's "Remaining gap"** with the interactive long-turn result for both platforms (pass/fail + any silent-turn rate), then commit:
 
 ```bash
 git add docs/superpowers/specs/2026-06-25-early-speak-tool-design.md
@@ -554,8 +586,8 @@ git commit -m "docs(spec): record interactive long-turn validation"
 
 ## Self-Review
 
-**Spec coverage:** Components 1 (`speak` MCP tool) + transport — done in spike (referenced). Component 2 (positive nudge) → Task 1. Component 3 (`ConfigManager` register MCP + remove Stop hooks) → Tasks 2–3. Response-mode gate preserved → Task 1 (tests 10–15). `tts_style`/`full` redefine → Task 1 (test 9 + script `rich|full`). Removed-vs-today (Stop hooks, `speak_pending`) → Task 2. Rollout (version, ConfigManager removal on upgrade) → Tasks 2 (migration) + 4. Docs impact → Task 5. KISS/no-fallback constraint honored throughout. **Deviation from spec, by decision:** Codex `codex-tts-hook.sh` is **kept** (spec said delete both) to avoid removing Codex voice — flagged in Architecture + Global Constraints.
+**Spec coverage:** Components 1 (`speak` MCP tool) + transport — done in spike (referenced). Component 2 (positive nudge) → Task 1 (shared by both platforms). Component 3 (`ConfigManager` register MCP + remove Stop hooks) → Tasks 2–4. Response-mode gate preserved → Task 1 (tests 10–15). `tts_style`/`full` redefine → Task 1 (test 9 + script `rich|full`). Removed-vs-today (both Stop hooks, `speak_pending`) → Tasks 2 + 4. ConfigManager removal-on-upgrade → Task 2 migration. Docs impact → Task 5. KISS/no-fallback + both-platforms honored throughout; **no version bump** (maintainer's call). Now matches the spec's "delete both Stop hooks" since the Codex spike cleared it.
 
-**Placeholder scan:** Task 1 ships the full script + full test file. Tasks 2–4 give exact files/lines/commands and the new functions verbatim. Task 5 is prose-editing (described precisely, content author-able). Task 6 is manual with exact commands. No TBD/TODO.
+**Placeholder scan:** Task 1 ships the full script + full test file. Tasks 2–3 give exact files/lines/commands + functions verbatim. Task 4 (Codex) is concrete on files/commands but deliberately leaves two items to resolve at execution — robust `config.toml` TOML editing and the hook-trust mechanism — because both are genuine unknowns flagged in the task header, not hand-waving. Task 5 is prose-editing; Task 6 is manual with exact commands.
 
-**Type consistency:** `registerClaudeMCPServer()`, `migrateRemoveClaudeStopHook()`, `showClaudeMCPInstructions()`, `Paths.claudeJSON`, `isOurHook(_:)` (existing) are referenced consistently across tasks. Nudge substring `` `speak` tool `` is the single assertion contract between the script (Task 1 Step 3) and tests (Task 1 Step 1).
+**Type consistency:** `registerClaudeMCPServer()`, `migrateRemoveClaudeStopHook()`, `showClaudeMCPInstructions()`, `Paths.claudeJSON`, `isOurHook(_:)`, `Paths.voiceContextHook`, `Paths.codexConfig` referenced consistently across tasks. Nudge substring `` `speak` tool `` is the assertion contract between the script (Task 1 Step 3) and tests (Task 1 Step 1), for both platforms.
