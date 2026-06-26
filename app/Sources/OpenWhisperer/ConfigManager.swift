@@ -31,32 +31,30 @@ enum ConfigManager {
 
     // MARK: - Claude Code: settings.json
 
-    static func showClaudeSettingsInstructions() {
-        let hookPath = Paths.ttsHook.path
+    static func showClaudeMCPInstructions() {
         let window = InstructionWindow(
-            title: "Step 1: Claude Code Hook (settings.json)",
+            title: "Step 1: Claude Code voice (hook + speak tool)",
             instructions: """
-            Add the TTS hook to your Claude Code settings:
+            OpenWhisperer adds voice to Claude Code in two pieces. "Apply" wires
+            both automatically; to do it by hand:
 
-            1. Open ~/.claude/settings.json
-               (or your project's .claude/settings.json)
+            1) UserPromptSubmit hook (in ~/.claude/settings.json) — nudges Claude to
+               speak a summary first on dictated turns:
 
-            2. Add the following:
+               {
+                 "hooks": {
+                   "UserPromptSubmit": [{
+                     "hooks": [{ "type": "command", "command": "\(Paths.voiceContextHook.path)" }]
+                   }]
+                 }
+               }
 
-            {
-              "hooks": {
-                "Stop": [{
-                  "hooks": [{
-                    "type": "command",
-                    "command": "\(hookPath)",
-                    "timeout": 60,
-                    "async": true
-                  }]
-                }]
-              }
-            }
+            2) The `speak` MCP tool (in ~/.claude.json) — lets Claude play that summary:
 
-            This makes Claude speak every response aloud.
+               claude mcp add --scope user --transport http \\
+                 OpenWhisperer http://localhost:8000/mcp
+
+            Then RESTART Claude Code so it loads the tool. Verify with:  /mcp
             """
         )
         window.show()
@@ -272,7 +270,7 @@ enum ConfigManager {
 
     static func showHookInstructions(for platform: Platform) {
         switch platform {
-        case .claudeCode: showClaudeSettingsInstructions()
+        case .claudeCode: showClaudeMCPInstructions()
         case .codexCLI: showCodexConfigInstructions()
         }
     }
@@ -294,7 +292,6 @@ enum ConfigManager {
     }
 
     static func applyHookToSettings() -> (success: Bool, message: String) {
-        let hookPath = Paths.ttsHook.path
         let settingsDir = Paths.claudeSettings.deletingLastPathComponent()
         let fm = FileManager.default
 
@@ -308,27 +305,16 @@ enum ConfigManager {
             settings = json
         }
 
-        // Get or create hooks.Stop array
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
-        var stopArray = hooks["Stop"] as? [[String: Any]] ?? []
 
-        // Remove ALL existing Claude Whisper/Whisperer hooks (any path variant)
-        let countBefore = stopArray.count
-        stopArray.removeAll { entry in
-            guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
-            return innerHooks.contains { hook in
-                guard let cmd = hook["command"] as? String else { return false }
-                return isOurHook(cmd)
+        // Drop any obsolete Stop hook of ours — the `speak` MCP tool replaced it.
+        if var stopArray = hooks["Stop"] as? [[String: Any]] {
+            stopArray.removeAll { entry in
+                guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
+                return inner.contains { (($0["command"] as? String).map(isOurHook) ?? false) }
             }
+            if stopArray.isEmpty { hooks.removeValue(forKey: "Stop") } else { hooks["Stop"] = stopArray }
         }
-        let removed = countBefore - stopArray.count
-
-        // Add exactly one hook with the current path
-        let hookEntry: [String: Any] = ["type": "command", "command": hookPath, "timeout": 60, "async": true]
-        let stopEntry: [String: Any] = ["hooks": [hookEntry]]
-        stopArray.append(stopEntry)
-
-        hooks["Stop"] = stopArray
 
         // Register the UserPromptSubmit voice-turn hook (idempotent: drop our old entries first).
         var upsArray = hooks["UserPromptSubmit"] as? [[String: Any]] ?? []
@@ -360,11 +346,32 @@ enum ConfigManager {
 
         do {
             try jsonString.write(to: Paths.claudeSettings, atomically: true, encoding: .utf8)
-            let msg = removed > 0 ? "Replaced \(removed) old hook(s)" : "Hook applied"
-            return (true, msg)
+            let mcp = registerClaudeMCPServer()
+            return (true, mcp.success ? "Hook + speak tool applied" : "Hook applied (\(mcp.message))")
         } catch {
             return (false, "Write failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Register the in-app `speak` MCP server in ~/.claude.json (user scope). Read-modify-write so
+    /// the rest of the (large, Claude-Code-managed) file is preserved. Idempotent.
+    @discardableResult
+    static func registerClaudeMCPServer() -> (success: Bool, message: String) {
+        let fm = FileManager.default
+        var root: [String: Any] = [:]
+        if fm.fileExists(atPath: Paths.claudeJSON.path),
+           let data = try? Data(contentsOf: Paths.claudeJSON),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            root = json
+        }
+        var servers = root["mcpServers"] as? [String: Any] ?? [:]
+        servers["OpenWhisperer"] = ["type": "http", "url": "http://localhost:8000/mcp"]
+        root["mcpServers"] = servers
+        guard let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .withoutEscapingSlashes]) else {
+            return (false, "Failed to serialize ~/.claude.json")
+        }
+        do { try out.write(to: Paths.claudeJSON); return (true, "speak tool registered") }
+        catch { return (false, "Write failed: \(error.localizedDescription)") }
     }
 
     // MARK: - Migration
@@ -393,20 +400,39 @@ enum ConfigManager {
         try? fm.moveItem(at: Paths.legacyVoiceDetail, to: Paths.ttsStyle)
     }
 
+    /// One-shot upgrade cleanup: remove our obsolete Stop hook from ~/.claude/settings.json so an
+    /// old install doesn't keep a dead `tts-hook.sh` entry (the script no longer ships).
+    static func migrateRemoveClaudeStopHook() {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: Paths.claudeSettings.path),
+              let data = try? Data(contentsOf: Paths.claudeSettings),
+              var settings = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              var hooks = settings["hooks"] as? [String: Any],
+              var stop = hooks["Stop"] as? [[String: Any]] else { return }
+        let before = stop.count
+        stop.removeAll { entry in
+            guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
+            return inner.contains { (($0["command"] as? String).map(isOurHook) ?? false) }
+        }
+        guard stop.count != before else { return }
+        if stop.isEmpty { hooks.removeValue(forKey: "Stop") } else { hooks["Stop"] = stop }
+        settings["hooks"] = hooks
+        if let out = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) {
+            try? out.write(to: Paths.claudeSettings)
+        }
+    }
+
     // MARK: - Diagnostics
 
     static func checkHookConfigured() -> Bool {
         guard let data = try? Data(contentsOf: Paths.claudeSettings),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let hooks = json["hooks"] as? [String: Any],
-              let stopArray = hooks["Stop"] as? [[String: Any]] else { return false }
+              let ups = hooks["UserPromptSubmit"] as? [[String: Any]] else { return false }
         // Accept any Claude Whisper hook variant as "configured"
-        return stopArray.contains { entry in
-            guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
-            return innerHooks.contains { hook in
-                guard let cmd = hook["command"] as? String else { return false }
-                return isOurHook(cmd)
-            }
+        return ups.contains { entry in
+            guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
+            return inner.contains { (($0["command"] as? String).map(isOurHook) ?? false) }
         }
     }
 

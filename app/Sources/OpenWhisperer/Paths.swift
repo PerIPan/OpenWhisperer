@@ -13,10 +13,7 @@ enum Paths {
         Bundle.main.resourceURL ?? Bundle.main.bundleURL.appendingPathComponent("Contents/Resources")
     }()
 
-    /// Bundled hook script
-    static let ttsHook = resources.appendingPathComponent("hooks").appendingPathComponent("tts-hook.sh")
-
-    /// Bundled UserPromptSubmit hook (Claude Code voice-turn detection)
+    /// Bundled UserPromptSubmit hook (Claude Code + Codex voice-turn detection)
     static let voiceContextHook = resources.appendingPathComponent("hooks").appendingPathComponent("voice-context.sh")
 
     /// Bundled spoken-text extractor used by the Stop hooks
@@ -91,6 +88,11 @@ enum Paths {
     static let claudeSettings: URL = {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude").appendingPathComponent("settings.json")
+    }()
+
+    /// Claude Code user config (~/.claude.json) — holds user-scope MCP servers under `mcpServers`.
+    static let claudeJSON: URL = {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude.json")
     }()
 
     /// Codex CLI config (~/.codex/config.toml)
