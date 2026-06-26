@@ -605,7 +605,8 @@ struct MenuBarView: View {
     private var automationCard: some View {
         OWCard {
             VStack(alignment: .leading, spacing: 10) {
-                OWCardHeader(title: "App Focus Automation", icon: "gearshape.2")
+                OWCardHeader(title: "App Focus Automation", icon: "gearshape.2",
+                             help: "Force dictation into a chosen app: focus that app, type your words, optionally press Enter to submit, then (with return) hop back to where you were.")
 
                 HStack(spacing: 20) {
                     OWCheckbox(label: "auto-focus", isOn: $autoFocusEnabled)
@@ -982,7 +983,8 @@ struct MenuBarView: View {
     private var footerSection: some View {
         OWCard {
             VStack(alignment: .leading, spacing: 8) {
-                OWCardHeader(title: "Permissions Required", icon: "lock.shield")
+                OWCardHeader(title: "Permissions Required", icon: "lock.shield",
+                             help: "macOS grants Open Whisperer needs: Accessibility (type into the focused app), Microphone (record dictation), and Speech Recognition (hands-free wake words). Tap a row to open Settings.")
 
                 ModernDiagnosticRow(label: "Accessibility", ok: accessibilityManager.isGranted)
                     .contentShape(Rectangle())
@@ -1200,6 +1202,7 @@ struct OWCollapsibleCard<Trailing: View, Expanded: View>: View {
 struct OWCardHeader: View {
     let title: String
     let icon: String
+    var help: String? = nil
 
     var body: some View {
         HStack(spacing: 6) {
@@ -1212,7 +1215,37 @@ struct OWCardHeader: View {
             Text(title)
                 .font(OWFont.sectionLabel(11))
                 .foregroundColor(OWColor.inkSoft)
+            if let help {
+                OWInfoTip(text: help)
+            }
         }
+    }
+}
+
+// MARK: - OWInfoTip (visible ⓘ that reveals a help bubble on hover)
+
+/// A small info icon next to a label; hovering it shows a styled help bubble.
+/// Uses a popover (not `.help()`, which is unreliable inside a MenuBarExtra popover)
+/// so the bubble is always visible and never clipped by the card bounds.
+struct OWInfoTip: View {
+    let text: String
+    @State private var show = false
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .font(.system(size: 11))
+            .foregroundColor(OWColor.accent.opacity(0.7))
+            .contentShape(Rectangle())
+            .onHover { show = $0 }
+            .popover(isPresented: $show, arrowEdge: .bottom) {
+                Text(text)
+                    .font(OWFont.body(11))
+                    .foregroundColor(OWColor.ink)
+                    .frame(width: 232, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(10)
+                    .background(OWColor.page)
+            }
     }
 }
 
