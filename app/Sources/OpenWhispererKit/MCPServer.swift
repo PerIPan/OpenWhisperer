@@ -51,6 +51,10 @@ public struct MCPServer {
         case "tools/list":
             let speak: [String: Any] = [
                 "name": "speak",
+                // Human-readable label for the tool-call chip. `title` is the current MCP spec field;
+                // `annotations.title` covers clients that read the older location.
+                "title": "Speak aloud",
+                "annotations": ["title": "Speak aloud"],
                 "description": "Synthesize and play the given text aloud through OpenWhisperer's "
                     + "local voice (text-to-speech). Fire-and-forget: returns immediately while audio plays.",
                 "inputSchema": [

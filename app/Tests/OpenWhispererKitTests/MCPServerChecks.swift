@@ -48,6 +48,7 @@ func mcpServerFailures() -> [String] {
         let props = schema?["properties"] as? [String: Any]
         if props?["text"] == nil { failures.append("tools/list: speak missing text property") }
         if props?["voice"] == nil { failures.append("tools/list: speak missing voice property") }
+        if (speak["title"] as? String)?.isEmpty != false { failures.append("tools/list: speak missing display title") }
     } else {
         failures.append("tools/list: expected speak tool in .json outcome")
     }
