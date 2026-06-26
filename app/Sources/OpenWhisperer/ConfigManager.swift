@@ -176,21 +176,25 @@ enum ConfigManager {
     // MARK: - Codex CLI: config.toml
 
     static func showCodexConfigInstructions() {
-        let hookPath = Paths.codexTtsHook.path
         let window = InstructionWindow(
-            title: "Step 1: Codex CLI Hook (config.toml)",
+            title: "Step 1: Codex voice (config.toml + hook trust)",
             instructions: """
-            Add the TTS notify hook to your Codex CLI config:
+            "Apply" wires these into ~/.codex/config.toml automatically. To do it
+            by hand, add:
 
-            1. Open ~/.codex/config.toml
-               (create it if it doesn't exist)
+            [mcp_servers.OpenWhisperer]
+            url = "http://localhost:8000/mcp"
 
-            2. Add the following line:
+            [[hooks.UserPromptSubmit]]
 
-            notify = ["\(hookPath)"]
+            [[hooks.UserPromptSubmit.hooks]]
+            type = "command"
+            command = "\(Paths.voiceContextHook.path)"
+            timeout = 30
 
-            This makes Codex speak every response aloud
-            via the local TTS server.
+            IMPORTANT — hook trust: Codex silently ignores untrusted hooks. The
+            first time you run `codex` after this, approve trusting the
+            OpenWhisperer hook when prompted, or the spoken summary won't fire.
             """
         )
         window.show()
@@ -198,48 +202,49 @@ enum ConfigManager {
 
     // MARK: - Auto-apply hook to Codex config.toml
 
+    /// Register the `speak` MCP server + the shared `voice-context.sh` UserPromptSubmit hook in
+    /// ~/.codex/config.toml, and drop the obsolete `notify` (Stop-style) line. Idempotent
+    /// append-if-absent; preserves the user's other config. NB: Codex silently skips *untrusted*
+    /// hooks, so the user must approve the hook once in Codex (see showCodexConfigInstructions).
     static func applyHookToCodexConfig() -> (success: Bool, message: String) {
-        let hookPath = Paths.codexTtsHook.path
         let configURL = Paths.codexConfig
         let fm = FileManager.default
-
-        // Ensure ~/.codex/ exists
         try? fm.createDirectory(at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
-        var lines: [String] = []
-        if fm.fileExists(atPath: configURL.path),
-           let content = try? String(contentsOf: configURL, encoding: .utf8) {
-            lines = content.components(separatedBy: "\n")
+        var content = ""
+        if fm.fileExists(atPath: configURL.path), let existing = try? String(contentsOf: configURL, encoding: .utf8) {
+            content = existing
         }
 
-        // Find and replace existing `notify = ...` line, or append
-        // Match exactly "notify" followed by optional whitespace and "=" to avoid
-        // corrupting other keys like "notify_on_error"
-        var found = false
-        let newNotifyLine = "notify = [\"\(hookPath)\"]"
-        for i in lines.indices {
-            let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
-            // Exact key match: "notify" followed by whitespace or "="
-            if trimmed.hasPrefix("notify") {
-                let rest = trimmed.dropFirst("notify".count)
-                guard let first = rest.first, first == " " || first == "=" || first == "\t" else { continue }
-                lines[i] = newNotifyLine
-                found = true
-                break
-            }
-        }
-        if !found {
-            // Add under existing content, ensure newline separation
-            if !lines.isEmpty && !(lines.last?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
-                lines.append("")
-            }
-            lines.append(newNotifyLine)
+        // Drop our obsolete `notify = [...]` line (matched exactly to avoid keys like notify_on_error;
+        // only ours — referencing our hook — so a user's unrelated notify is left alone).
+        var lines = content.components(separatedBy: "\n").filter { line in
+            let t = line.trimmingCharacters(in: .whitespaces)
+            guard t.hasPrefix("notify") else { return true }
+            let rest = t.dropFirst("notify".count)
+            guard let f = rest.first, f == " " || f == "=" || f == "\t" else { return true }
+            return !(line.contains("codex-tts-hook") || line.contains("OpenWhisperer"))
         }
 
-        let result = lines.joined(separator: "\n")
+        var added: [String] = []
+        if !content.contains("[mcp_servers.OpenWhisperer]") {
+            added += ["", "[mcp_servers.OpenWhisperer]", "url = \"http://localhost:8000/mcp\""]
+        }
+        if !content.contains("voice-context.sh") {
+            added += ["", "[[hooks.UserPromptSubmit]]", "",
+                      "[[hooks.UserPromptSubmit.hooks]]",
+                      "type = \"command\"",
+                      "command = \"\(Paths.voiceContextHook.path)\"",
+                      "timeout = 30"]
+        }
+        if !added.isEmpty {
+            if let last = lines.last, !last.trimmingCharacters(in: .whitespaces).isEmpty { lines.append("") }
+            lines += added
+        }
+
         do {
-            try result.write(to: configURL, atomically: true, encoding: .utf8)
-            return (true, found ? "Hook updated" : "Hook applied")
+            try lines.joined(separator: "\n").write(to: configURL, atomically: true, encoding: .utf8)
+            return (true, added.isEmpty ? "Already configured" : "Configured — approve the hook once in Codex to enable it")
         } catch {
             return (false, "Write failed: \(error.localizedDescription)")
         }
@@ -249,7 +254,7 @@ enum ConfigManager {
 
     static func checkCodexHookConfigured() -> Bool {
         guard let content = try? String(contentsOf: Paths.codexConfig, encoding: .utf8) else { return false }
-        return content.contains("codex-tts-hook") || content.contains("OpenWhisperer")
+        return content.contains("[mcp_servers.OpenWhisperer]") && content.contains("voice-context.sh")
     }
 
     // MARK: - Platform-dispatching wrappers

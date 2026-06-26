@@ -16,9 +16,6 @@ enum Paths {
     /// Bundled UserPromptSubmit hook (Claude Code + Codex voice-turn detection)
     static let voiceContextHook = resources.appendingPathComponent("hooks").appendingPathComponent("voice-context.sh")
 
-    /// Bundled spoken-text extractor used by the Stop hooks
-    static let speakableTextScript = resources.appendingPathComponent("hooks").appendingPathComponent("speakable-text.sh")
-
     /// Bundled speak script
     static let speakScript = resources.appendingPathComponent("scripts").appendingPathComponent("speak.sh")
 
@@ -100,9 +97,6 @@ enum Paths {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex").appendingPathComponent("config.toml")
     }()
-
-    /// Codex TTS hook (bundled in app Resources)
-    static let codexTtsHook = resources.appendingPathComponent("hooks").appendingPathComponent("codex-tts-hook.sh")
 
     /// Ensure directories exist
     static func ensureDirectories() {

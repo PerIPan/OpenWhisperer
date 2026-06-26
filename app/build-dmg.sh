@@ -47,18 +47,12 @@ cp "$SCRIPT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 cp "$SCRIPT_DIR/Resources/Outfit-VariableFont_wght.ttf" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 cp "$SCRIPT_DIR/Resources/Fraunces.ttf" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 
-# Step 3: Bundle the TTS hooks (native TTS — no Python scripts to bundle)
-cp "$PROJECT_DIR/hooks/tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
-cp "$PROJECT_DIR/hooks/codex-tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
+# Step 3: Bundle the voice hook (the only hook now — speak-first nudge, shared by Claude + Codex)
 cp "$PROJECT_DIR/hooks/voice-context.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
-cp "$PROJECT_DIR/hooks/speakable-text.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/scripts/speak.sh" "$APP_BUNDLE/Contents/Resources/scripts/"
 
 # Make scripts executable
-chmod +x "$APP_BUNDLE/Contents/Resources/hooks/tts-hook.sh"
-chmod +x "$APP_BUNDLE/Contents/Resources/hooks/codex-tts-hook.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/voice-context.sh"
-chmod +x "$APP_BUNDLE/Contents/Resources/hooks/speakable-text.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/scripts/speak.sh"
 
 # Step 4: Bundle jq binary (detect architecture) — the hooks use jq for JSON
