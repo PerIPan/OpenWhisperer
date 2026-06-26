@@ -382,7 +382,8 @@ struct MenuBarView: View {
     private var voiceInputCard: some View {
         OWCard {
             VStack(alignment: .leading, spacing: 10) {
-                OWCardHeader(title: "Voice Input", icon: "mic.fill")
+                OWCardHeader(title: "Voice Input", icon: "mic.fill",
+                             help: "How you start dictation — Press-to-Talk, Hold-to-Talk, or Hands-Free — plus the trigger key and how the app listens.")
 
                 // Mode dropdown
                 OWPickerRow(label: "Mode", labelWidth: 52) {
@@ -538,6 +539,7 @@ struct MenuBarView: View {
         OWCollapsibleCard(
             title: "Voice Settings",
             icon: "slider.horizontal.3",
+            help: "Dictation language, the voice that reads replies aloud, and Response — how much of a reply is spoken, and when.",
             expanded: $voiceSettingsExpanded
         ) {
             EmptyView()
@@ -713,6 +715,7 @@ struct MenuBarView: View {
         OWCollapsibleCard(
             title: "Setup TTS for",
             icon: "hammer",
+            help: "Wire up spoken replies for your CLI (Claude Code or Codex) — Auto-Apply writes the hooks. Volume here sets playback loudness.",
             expanded: $setupExpanded
         ) {
             OWMenuPicker(
@@ -834,6 +837,7 @@ struct MenuBarView: View {
         OWCollapsibleCard(
             title: "Server & Logs",
             icon: "gearshape",
+            help: "The on-device text-to-speech server (local port 8000), downloaded models, and logs. Dictation runs separately from this.",
             expanded: $serverExpanded
         ) {
             EmptyView()
@@ -1137,6 +1141,7 @@ struct OWCard<Content: View>: View {
 struct OWCollapsibleCard<Trailing: View, Expanded: View>: View {
     let title: String
     let icon: String
+    let help: String?
     @Binding var expanded: Bool
     let trailing: Trailing
     let expandedContent: Expanded
@@ -1144,12 +1149,14 @@ struct OWCollapsibleCard<Trailing: View, Expanded: View>: View {
     init(
         title: String,
         icon: String,
+        help: String? = nil,
         expanded: Binding<Bool>,
         @ViewBuilder trailing: () -> Trailing,
         @ViewBuilder expandedContent: () -> Expanded
     ) {
         self.title = title
         self.icon = icon
+        self.help = help
         self._expanded = expanded
         self.trailing = trailing()
         self.expandedContent = expandedContent()
@@ -1177,6 +1184,11 @@ struct OWCollapsibleCard<Trailing: View, Expanded: View>: View {
                     }
                     .contentShape(Rectangle())
                     .onTapGesture { withAnimation { expanded.toggle() } }
+
+                    if let help {
+                        OWInfoTip(text: help)
+                            .padding(.leading, 6)
+                    }
 
                     Spacer()
                         .contentShape(Rectangle())
