@@ -580,18 +580,6 @@ struct MenuBarView: View {
                 }
                 .help("Both are Response settings — left: spoken summary length (Terse/Normal/Rich/Full); right: when replies are spoken (when Voice / when Text / Always).")
 
-                OWInternalDivider()
-
-                OWPickerRow(label: "Volume", labelWidth: 62) {
-                    OWMenuPicker(selection: $selectedVolume, options: Self.volumeLevels.map { (id: $0.id, label: $0.label) })
-                        .frame(maxWidth: .infinity)
-                }
-                .onChange(of: selectedVolume) { _, newValue in
-                    if let level = Self.volumeLevels.first(where: { $0.id == newValue }) {
-                        try? level.value.write(to: Paths.ttsVolume, atomically: true, encoding: .utf8)
-                    }
-                }
-
             }
         }
         .onChange(of: voiceSettingsExpanded) { _, newValue in
@@ -713,7 +701,7 @@ struct MenuBarView: View {
 
     private var setupCard: some View {
         OWCollapsibleCard(
-            title: "Setup",
+            title: "Setup for",
             icon: "hammer",
             expanded: $setupExpanded
         ) {
@@ -804,6 +792,19 @@ struct MenuBarView: View {
                 }
                 // (Removed the redundant "HOOK configured" / "superpowers installed" diagnostic
                 // rows — the Applied/Installed pills above already convey this state.)
+
+                OWInternalDivider()
+
+                // Volume — low-level TTS playback gain; tucked at the bottom of Setup.
+                OWPickerRow(label: "Volume", labelWidth: 62) {
+                    OWMenuPicker(selection: $selectedVolume, options: Self.volumeLevels.map { (id: $0.id, label: $0.label) })
+                        .frame(maxWidth: .infinity)
+                }
+                .onChange(of: selectedVolume) { _, newValue in
+                    if let level = Self.volumeLevels.first(where: { $0.id == newValue }) {
+                        try? level.value.write(to: Paths.ttsVolume, atomically: true, encoding: .utf8)
+                    }
+                }
             }
         }
         .onChange(of: setupExpanded) { _, newValue in
