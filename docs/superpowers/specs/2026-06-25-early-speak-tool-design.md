@@ -231,10 +231,13 @@ emitting `additionalContext`), measured with `claude -p --output-format stream-j
   for the no-fallback design. The "silent turn" risk looks low across short *and*
   long turns.
 
-**Remaining gap:** a headless *research* proxy for long turns passed (3/3 above),
-but real *interactive* coding turns — many edits/tool calls over minutes in an
-actual session — were **not** exercised. Adherence there is now *likely* fine
-(13/13 overall) but not proven; validate in real use.
+**Interactive validation (2026-06-26): both platforms PASS.** Built signed,
+installed, and dictated live — **Claude Code** and **Codex** both fired `speak`
+first on real dictated turns, with audio leading the written reply. So the
+implementation is validated end-to-end on both platforms for short/conversational
+turns; only very long agentic coding turns remain lightly exercised (the
+no-fallback risk there is accepted). *Aside:* Claude Code's tool-call chip renders
+the tool `name`, not the MCP `title` — a `title` experiment was tried and reverted.
 
 **Implication for rollout (see Accepted risks):** 13/13 makes the KISS deletion
 defensible. The fallback is nonetheless cheap insurance — have the `speak` tool set
