@@ -1513,6 +1513,7 @@ struct OWCheckbox: View {
                     .font(OWFont.body(11))
                     .foregroundColor(OWColor.ink)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
