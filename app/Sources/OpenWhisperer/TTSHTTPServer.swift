@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import OpenWhispererKit
 
 /// Tiny embedded HTTP/1.1 server (Network.framework, zero deps) ported from the former Python
 /// TTS server for the bash hook. Loopback-only. Serves exactly what the hook + health
@@ -7,6 +8,7 @@ import Network
 ///   GET  /v1/models        -> 200 minimal models JSON
 ///   POST /v1/audio/speech  -> 200 WAV (FluidAudio Kokoro) | 500 on failure
 ///   POST /v1/audio/play    -> 202 Accepted; plays sentence-by-sentence via the in-app player
+///   POST /mcp              -> MCP (Streamable HTTP) JSON-RPC; exposes the `speak` tool to agents
 ///
 /// One request per connection (`Connection: close`), which is all `curl` (the hook) needs.
 final class TTSHTTPServer {
@@ -127,6 +129,23 @@ final class TTSHTTPServer {
             Task { [playback] in await playback.play(text: input, voice: voice) }
             respond(conn, "202 Accepted",
                     Data(#"{"status":"accepted"}"#.utf8), contentType: "application/json")
+
+        case ("POST", "/mcp"):
+            // Minimal MCP over Streamable HTTP. All JSON-RPC shaping is pure (OpenWhispererKit);
+            // here we only map the outcome onto HTTP and perform the one side effect (playback).
+            switch MCPServer().handle(req.body) {
+            case .json(let data):
+                respond(conn, "200 OK", data, contentType: "application/json")
+            case .accepted:
+                respond(conn, "202 Accepted", Data())
+            case .speak(let response, let text, let voice):
+                Task { [playback] in await playback.play(text: text, voice: voice ?? "af_heart") }
+                respond(conn, "200 OK", response, contentType: "application/json")
+            }
+
+        case ("GET", "/mcp"):
+            // We don't offer the optional server→client SSE stream; say so rather than 404.
+            respond(conn, "405 Method Not Allowed", Data())
 
         default:
             respond(conn, "404 Not Found", Data())
