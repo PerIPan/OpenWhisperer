@@ -92,18 +92,22 @@ STYLE="$OW_TTS_STYLE"
 [ -z "$STYLE" ] && STYLE=$(cat "$APP_SUPPORT/tts_style" 2>/dev/null | tr -d '[:space:]')
 [ -z "$STYLE" ] && STYLE=$(cat "$APP_SUPPORT/voice_detail" 2>/dev/null | tr -d '[:space:]')
 
-# Lead clause reflects how the turn was entered (dictated turns say so; typed turns don't).
-if [ "$IS_VOICE" -eq 1 ]; then LEAD="This turn was dictated by voice and"; else LEAD="Your reply will be read aloud:"; fi
+case "$STYLE" in
+  terse) LEN="one short, plain spoken sentence" ;;
+  rich)  LEN="a sentence or two of plain spoken summary" ;;
+  *)     LEN="one plain spoken sentence" ;;
+esac
 
-if [ "$STYLE" = "full" ]; then
-  NUDGE="${LEAD} your entire reply will be read aloud. Write the whole reply as natural spoken prose: short sentences, expand acronyms, avoid AI-isms and filler, and keep code, file paths, and tables out of the spoken flow — describe them in words instead. Do not write a separate summary."
+# Wording adapts to how the turn was entered (dictated turns say so; typed turns don't)
+# and to the style (full = whole reply; otherwise first paragraph only).
+WHOLE="Write the whole reply as natural spoken prose: short sentences, expand acronyms, avoid AI-isms and filler, and keep code, file paths, and tables out of the spoken flow — describe them in words instead. Do not write a separate summary."
+FIRST="Open with ${LEN} that stands alone as the spoken summary, then a blank line before any further detail (everything after the blank line stays on screen, unspoken)."
+if [ "$IS_VOICE" -eq 1 ]; then
+  if [ "$STYLE" = "full" ]; then NUDGE="This turn was dictated by voice and your entire reply will be read aloud. ${WHOLE}"
+  else NUDGE="This turn was dictated by voice and ONLY your first paragraph is read aloud. ${FIRST}"; fi
 else
-  case "$STYLE" in
-    terse) LEN="one short, plain spoken sentence" ;;
-    rich)  LEN="a sentence or two of plain spoken summary" ;;
-    *)     LEN="one plain spoken sentence" ;;
-  esac
-  NUDGE="${LEAD} ONLY your first paragraph is read aloud. Open with ${LEN} that stands alone as the spoken summary, then a blank line before any further detail (everything after the blank line stays on screen, unspoken)."
+  if [ "$STYLE" = "full" ]; then NUDGE="Your entire reply will be read aloud. ${WHOLE}"
+  else NUDGE="Your reply will be read aloud, but ONLY the first paragraph. ${FIRST}"; fi
 fi
 
 # additionalContext is visible to the model; suppressOutput keeps it out of the transcript.

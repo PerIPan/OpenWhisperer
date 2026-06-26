@@ -181,5 +181,31 @@ func voiceContextFailures() -> [String] {
         _ = r
     }
 
+    // 16) always mode + stale signal → speaks, stale signal swept.
+    do {
+        let s = newSandbox(); s.writeResponseMode("always"); s.writeVoiceTurn(forPrompt: "old", timestamp: 1)
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed now", session: "s-always-stale"), sandbox: s)
+        if !s.markerExists(session: "s-always-stale") { fail("alwaysStaleSpeaks: session not marked") }
+        if s.voiceTurnExists() { fail("alwaysStaleSpeaks: stale signal should be swept") }
+        _ = r
+    }
+
+    // 17) unknown/corrupt mode → safe voice-fallback (typed turn stays silent).
+    do {
+        let s = newSandbox(); s.writeResponseMode("garbage")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed", session: "s-unknown"), sandbox: s)
+        if !r.stdout.isEmpty { fail("unknownModeFallsBackToVoice: expected silence, got \(r.stdout.debugDescription)") }
+        if s.markerExists(session: "s-unknown") { fail("unknownModeFallsBackToVoice: should not mark a typed turn") }
+    }
+
+    // 18) inverse env override: file=always, env=voice → a typed turn stays silent.
+    do {
+        let s = newSandbox(); s.writeResponseMode("always")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed", session: "s-env-inv"),
+                         sandbox: s, env: ["OW_TTS_RESPONSE": "voice"])
+        if !r.stdout.isEmpty { fail("envInverseOverride: env=voice should silence a typed turn") }
+        if s.markerExists(session: "s-env-inv") { fail("envInverseOverride: should not mark") }
+    }
+
     return failures
 }

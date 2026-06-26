@@ -586,7 +586,7 @@ struct MenuBarView: View {
                         try? newValue.write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
                     }
                 }
-                .help("Style = spoken summary length. Response = when replies are spoken: when Voice (dictated), when Text (typed), or Always.")
+                .help("Style = spoken summary length. Response = when replies are spoken: when Voice (dictated), when Text (typed), or Always. Text/Always also shape typed replies for speech (summary-first).")
 
                 OWInternalDivider()
 
