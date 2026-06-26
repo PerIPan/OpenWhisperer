@@ -1179,8 +1179,8 @@ struct OWCollapsibleCard<Trailing: View, Expanded: View>: View {
                             .foregroundColor(OWColor.accent.opacity(0.75))
 
                         Text(title)
-                            .font(OWFont.body(12).weight(.semibold))
-                            .foregroundColor(expanded ? OWColor.inkSoft : OWColor.ink)
+                            .font(OWFont.sectionLabel(11))
+                            .foregroundColor(OWColor.inkSoft)
                     }
                     .contentShape(Rectangle())
                     .onTapGesture { withAnimation { expanded.toggle() } }
