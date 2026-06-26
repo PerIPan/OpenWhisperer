@@ -722,7 +722,7 @@ struct MenuBarView: View {
                 selection: $selectedPlatform,
                 options: Platform.allCases.map { (id: $0, label: $0.label) }
             )
-            .frame(width: 130)
+            .frame(width: 104)
             .help("Which CLI you're setting up. Switches the hook target between ~/.claude/settings.json and ~/.codex/config.toml.")
             .onChange(of: selectedPlatform) { _, newValue in
                 newValue.save()
@@ -1181,6 +1181,8 @@ struct OWCollapsibleCard<Trailing: View, Expanded: View>: View {
                         Text(title)
                             .font(OWFont.sectionLabel(11))
                             .foregroundColor(OWColor.inkSoft)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                     .contentShape(Rectangle())
                     .onTapGesture { withAnimation { expanded.toggle() } }
