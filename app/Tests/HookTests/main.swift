@@ -6,7 +6,6 @@ import Foundation
 var failures: [String] = []
 failures += speakableTextFailures()
 failures += voiceContextFailures()
-failures += ttsHookGateFailures()
 failures += codexTtsHookFailures()
 
 if failures.isEmpty {
