@@ -195,6 +195,49 @@ changes.
   HTTP-MCP registration works and that the model reliably calls `speak` *first*
   in real interactive sessions.
 
+## Spike results (2026-06-26) — both questions PASS
+
+Ran on branch `worktree-speak-mcp-spike`: a pure, unit-tested `MCPServer`
+(`OpenWhispererKit`) + a `POST /mcp` route in `TTSHTTPServer` mapping
+`tools/call(speak)` onto the existing `TTSPlaybackController`. Protocol
+`2025-11-25`, stateless, loopback.
+
+**Q1 — HTTP-MCP reach & invocation: confirmed.**
+- `claude mcp add --transport http speak http://localhost:8000/mcp` → `claude mcp
+  list` shows **`✔ Connected`**: Claude Code's *real* HTTP-MCP client completed the
+  handshake against the in-app server (not just curl). This **settles the Transport
+  section** — HTTP MCP is viable for Claude Code.
+- A headless `claude -p` run **called `mcp__speak__speak`** with no denials, and
+  audio played end-to-end (Kokoro synth → in-process playback). curl independently
+  verified the whole JSON-RPC surface (initialize / notifications / tools/list /
+  tools/call / errors).
+
+**Q2 — first-call adherence: 10/10 turns called `speak`, zero silent.**
+Nudge delivered through the production channel (a throwaway UserPromptSubmit hook
+emitting `additionalContext`), measured with `claude -p --output-format stream-json`:
+- **Conversational turns (6/6):** `speak` fired *before* any on-screen text — the
+  full early-start win. Summaries were clean and standalone.
+- **Investigation/code turns (4/4):** the model Grepped/Read first, *then* spoke,
+  *then* wrote the reply. Speaking after gathering is correct (can't summarize
+  unknown findings) — audio still leads the text, but the head-start shrinks to
+  roughly what a Stop hook would have given.
+- **Adherence (called `speak` at all): 10/10** — the single most important number
+  for the no-fallback design. The "silent turn" risk looks low.
+
+**Untested gap (the important one):** long *interactive* agentic turns — a real
+coding task with many tool calls over minutes — were **not** exercised. That is the
+app's dominant case *and* where the early-start benefit is weakest (most wall-clock
+is spent before there's anything to summarize) *and* where adherence is least
+proven. Validate this before deleting the Stop hooks.
+
+**Implication for rollout (see Accepted risks):** the spike supports the design,
+but given the untested dominant case, consider shipping v1.6.0 with the Stop hook
+**retained as a deduplicated fallback** (the `speak` tool sets a `spoke_early`
+marker; the Stop hook skips when present) rather than deleting it outright — then
+remove the fallback in a follow-up once real-world adherence on long turns is
+confirmed. This re-adds a little of the machinery the design wanted to kill; it is
+a deliberate safety/KISS trade to decide at planning.
+
 ## Rollout
 
 - Version bump `1.5.1 → 1.6.0` (`build-dmg.sh` + `Resources/Info.plist`).
@@ -212,7 +255,12 @@ changes.
 ## Open questions for planning
 
 1. Keep `voice-context.sh` as bash vs. fold the nudge into the app binary.
-2. Compatibility-spike outcome: Claude Code HTTP MCP + first-call adherence, and
-   whether Antigravity accepts a loopback plain-HTTP `serverUrl`.
+2. ~~Compatibility-spike outcome: Claude Code HTTP MCP + first-call adherence~~ —
+   **resolved** (see *Spike results*: Claude Code HTTP MCP works; 10/10 adherence).
+   *Still open:* whether Antigravity accepts a loopback plain-HTTP `serverUrl`, and
+   adherence on long interactive coding turns (the untested gap).
 3. Port default: keep `:8000` vs. move to a less-trafficked fixed port (see
    Transport › Port).
+4. **Delete the Stop hooks outright vs. keep a deduplicated `spoke_early` fallback
+   for v1.6.0** (see *Spike results* → Implication). KISS vs. safety on the
+   untested long-turn case.
