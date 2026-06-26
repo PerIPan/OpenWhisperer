@@ -64,6 +64,12 @@ enum Hook {
                              atomically: true, encoding: .utf8)
         }
 
+        /// Response mode: voice (default) | text | always.
+        func writeResponseMode(_ mode: String) {
+            try? mode.write(to: appSupport.appendingPathComponent("tts_response_mode"),
+                            atomically: true, encoding: .utf8)
+        }
+
         /// Legacy pre-rename settings file; the hook still falls back to it.
         func writeLegacyVoiceDetail(_ style: String) {
             try? style.write(to: appSupport.appendingPathComponent("voice_detail"),

@@ -85,6 +85,7 @@ struct MenuBarView: View {
     @State private var selectedVoice = "af_heart"
     @State private var selectedLanguage = "en"
     @State private var selectedStyle = "normal"
+    @State private var selectedResponse = "voice"
     @State private var showStoppedBanner = false
     @State private var pttKeyChanged = false
     @State private var selectedPlatform: Platform = .claudeCode
@@ -138,6 +139,14 @@ struct MenuBarView: View {
         ("normal", "Normal"),
         ("rich", "Rich"),
         ("full", "Full"),
+    ]
+
+    // When replies are spoken. "voice" (default) = only dictated turns; matches
+    // the tts_response_mode values read by voice-context.sh / codex-tts-hook.sh.
+    private static let responseModes: [(id: String, label: String)] = [
+        ("voice", "when Voice"),
+        ("text", "when Text"),
+        ("always", "Always"),
     ]
 
     private static let volumeLevels: [(id: String, label: String, value: String)] = [
@@ -261,6 +270,13 @@ struct MenuBarView: View {
                 let style = savedStyle.trimmingCharacters(in: .whitespacesAndNewlines)
                 if Self.styleLevels.contains(where: { $0.id == style }) {
                     selectedStyle = style
+                }
+            }
+            if let savedResponse = try? String(contentsOf: Paths.ttsResponseMode, encoding: .utf8),
+               !savedResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let mode = savedResponse.trimmingCharacters(in: .whitespacesAndNewlines)
+                if Self.responseModes.contains(where: { $0.id == mode }) {
+                    selectedResponse = mode
                 }
             }
             if let savedVolume = try? String(contentsOf: Paths.ttsVolume, encoding: .utf8),
@@ -545,14 +561,32 @@ struct MenuBarView: View {
 
                 OWInternalDivider()
 
-                OWPickerRow(label: "Style", labelWidth: 52) {
-                    OWMenuPicker(selection: $selectedStyle, options: Self.styleLevels)
-                        .frame(maxWidth: .infinity)
+                // Style (spoken summary length) + Response (when replies are spoken),
+                // two compact dropdowns sharing one row.
+                HStack(alignment: .center, spacing: 12) {
+                    HStack(spacing: 5) {
+                        Text("Style")
+                            .font(OWFont.body(11))
+                            .foregroundColor(OWColor.ink)
+                        OWMenuPicker(selection: $selectedStyle, options: Self.styleLevels)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .onChange(of: selectedStyle) { _, newValue in
+                        try? newValue.write(to: Paths.ttsStyle, atomically: true, encoding: .utf8)
+                    }
+
+                    HStack(spacing: 5) {
+                        Text("Response")
+                            .font(OWFont.body(11))
+                            .foregroundColor(OWColor.ink)
+                        OWMenuPicker(selection: $selectedResponse, options: Self.responseModes)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .onChange(of: selectedResponse) { _, newValue in
+                        try? newValue.write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
+                    }
                 }
-                .help("Spoken summary length — shapes the voice nudge injected by the hook")
-                .onChange(of: selectedStyle) { _, newValue in
-                    try? newValue.write(to: Paths.ttsStyle, atomically: true, encoding: .utf8)
-                }
+                .help("Style = spoken summary length. Response = when replies are spoken: when Voice (dictated), when Text (typed), or Always.")
 
                 OWInternalDivider()
 

@@ -133,5 +133,53 @@ func voiceContextFailures() -> [String] {
         }
     }
 
+    // --- Response mode (tts_response_mode): voice (default) | text | always ---
+
+    // 11) always mode + typed turn (no signal) → speaks (marked + nudge).
+    do {
+        let s = newSandbox(); s.writeResponseMode("always")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed thing", session: "s-always-typed"), sandbox: s)
+        if !s.markerExists(session: "s-always-typed") { fail("alwaysSpeaksTyped: session not marked") }
+        if nudge(r.stdout)?.contains("read aloud") != true {
+            fail("alwaysSpeaksTyped: nudge missing 'read aloud': \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 12) always mode + dictated turn → speaks AND claims the signal.
+    do {
+        let s = newSandbox(); s.writeResponseMode("always"); s.writeVoiceTurn(forPrompt: "do it")
+        _ = Hook.run("voice-context.sh", stdin: input(prompt: "do it", session: "s-always-voice"), sandbox: s)
+        if !s.markerExists(session: "s-always-voice") { fail("alwaysSpeaksVoice: session not marked") }
+        if s.voiceTurnExists() { fail("alwaysSpeaksVoice: voice_turn should be claimed") }
+    }
+
+    // 13) text mode + typed turn → speaks.
+    do {
+        let s = newSandbox(); s.writeResponseMode("text")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed thing", session: "s-text-typed"), sandbox: s)
+        if !s.markerExists(session: "s-text-typed") { fail("textSpeaksTyped: session not marked") }
+        if nudge(r.stdout)?.contains("read aloud") != true {
+            fail("textSpeaksTyped: nudge missing 'read aloud': \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 14) text mode + dictated turn → silent (not marked), signal still consumed.
+    do {
+        let s = newSandbox(); s.writeResponseMode("text"); s.writeVoiceTurn(forPrompt: "spoke this")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "spoke this", session: "s-text-voice"), sandbox: s)
+        if s.markerExists(session: "s-text-voice") { fail("textSilentOnVoice: should not mark a dictated turn") }
+        if !r.stdout.isEmpty { fail("textSilentOnVoice: expected no nudge, got \(r.stdout.debugDescription)") }
+        if s.voiceTurnExists() { fail("textSilentOnVoice: voice_turn should be consumed") }
+    }
+
+    // 15) per-project OW_TTS_RESPONSE env overrides the global file.
+    do {
+        let s = newSandbox(); s.writeResponseMode("voice")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed", session: "s-env"),
+                         sandbox: s, env: ["OW_TTS_RESPONSE": "always"])
+        if !s.markerExists(session: "s-env") { fail("envResponseOverride: env=always did not speak a typed turn") }
+        _ = r
+    }
+
     return failures
 }

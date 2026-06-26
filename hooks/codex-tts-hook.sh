@@ -26,16 +26,30 @@ if [ "$TYPE" != "agent-turn-complete" ] && [ -n "$TYPE" ]; then exit 0; fi
 
 # --- Voice-turn gate: Codex has no per-prompt session id, so gate on the app's voice_turn signal
 #     (presence + freshness) and clear it so future typed turns are not spoken. ---
+# Response mode: per-project OW_TTS_RESPONSE env → global tts_response_mode → "voice".
+MODE="$OW_TTS_RESPONSE"
+[ -z "$MODE" ] && MODE=$(cat "$APP_SUPPORT/tts_response_mode" 2>/dev/null | tr -d '[:space:]')
+[ -z "$MODE" ] && MODE="voice"
 VOICE_TURN="$APP_SUPPORT/voice_turn"
 # voice_turn TTL (s) — kept uniform with voice-context.sh + the 15-min speak_pending sweep.
 VOICE_FRESHNESS=900
-[ -f "$VOICE_TURN" ] || exit 0
-VT_TS=$(sed -n '2p' "$VOICE_TURN" 2>/dev/null)
-NOW=$(date +%s)
-if [ -n "$VT_TS" ] && [ "$((NOW - VT_TS))" -gt "$VOICE_FRESHNESS" ]; then
-  rm -f "$VOICE_TURN"; exit 0
+# Is this a fresh dictated turn? Claim (consume) the signal so future turns aren't it.
+IS_VOICE=0
+if [ -f "$VOICE_TURN" ]; then
+  VT_TS=$(sed -n '2p' "$VOICE_TURN" 2>/dev/null)
+  NOW=$(date +%s)
+  if [ -n "$VT_TS" ] && [ "$((NOW - VT_TS))" -gt "$VOICE_FRESHNESS" ]; then
+    rm -f "$VOICE_TURN"            # stale → treat as typed
+  else
+    IS_VOICE=1
+    rm -f "$VOICE_TURN"           # claim
+  fi
 fi
-rm -f "$VOICE_TURN"   # claim: this turn is spoken, future typed turns are not
+case "$MODE" in
+  always) ;;                                   # speak every turn
+  text)   [ "$IS_VOICE" -eq 1 ] && exit 0 ;;   # text mode: dictated turns stay silent
+  *)      [ "$IS_VOICE" -eq 1 ] || exit 0 ;;   # voice (default): typed turns stay silent
+esac
 
 # Codex uses "last-assistant-message" (hyphenated key)
 TEXT=$(echo "$INPUT" | jq -r '.["last-assistant-message"] // .last_assistant_message // empty' 2>/dev/null)

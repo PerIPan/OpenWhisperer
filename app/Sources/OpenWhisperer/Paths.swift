@@ -54,6 +54,11 @@ enum Paths {
     /// Legacy name for `ttsStyle` (pre-rename). Migrated to `tts_style` on launch.
     static let legacyVoiceDetail = appSupport.appendingPathComponent("voice_detail")
 
+    /// When replies are spoken: `voice` (default — only dictated turns) | `text`
+    /// (only typed turns) | `always`. Read by voice-context.sh / codex-tts-hook.sh;
+    /// overridable per-project via OW_TTS_RESPONSE.
+    static let ttsResponseMode = appSupport.appendingPathComponent("tts_response_mode")
+
     /// Voice-turn signal (hash + unix timestamp) written by the app on each
     /// dictation; read & claimed by the UserPromptSubmit hook (voice-context.sh).
     static let voiceTurn = appSupport.appendingPathComponent("voice_turn")
