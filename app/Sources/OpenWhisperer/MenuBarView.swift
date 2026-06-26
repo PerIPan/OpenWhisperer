@@ -205,7 +205,13 @@ struct MenuBarView: View {
         .background(OWWindowBackground())
         .onAppear {
             selectedPlatform = Platform.load()
-            launchAtLogin = SMAppService.mainApp.status == .enabled
+            // SMAppService.mainApp.status is a synchronous XPC call to launchservicesd and
+            // can block the main thread for seconds (freezing the menu). Resolve it off the
+            // main thread and assign the flag back on main.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let enabled = SMAppService.mainApp.status == .enabled
+                DispatchQueue.main.async { launchAtLogin = enabled }
+            }
             autoSubmit = FileManager.default.fileExists(atPath: Paths.autoSubmitFlag.path)
             autoFocusEnabled = FileManager.default.fileExists(atPath: Paths.autoFocusApp.path)
             autoFocusReturn = FileManager.default.fileExists(atPath: Paths.autoFocusReturn.path)
@@ -219,13 +225,16 @@ struct MenuBarView: View {
                !saved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let value = saved.trimmingCharacters(in: .whitespacesAndNewlines)
                 focusAppName = value
-                if Self.focusApps.contains(where: { $0.id == value }) {
-                    focusSelection = value            // curated favorite (matched by name)
-                } else if value.contains(".") {
-                    focusSelection = value            // installed-app bundle id
-                } else {
-                    focusSelection = "CUSTOM"
-                    customFocusApp = value            // typed custom name
+                switch FocusTarget.parse(value) {
+                case .bundleID(let bid):
+                    focusSelection = bid              // installed-app pick ("bundleid:" tagged)
+                case .name(let name):
+                    if Self.focusApps.contains(where: { $0.id == name }) {
+                        focusSelection = name         // curated favorite
+                    } else {
+                        focusSelection = "CUSTOM"
+                        customFocusApp = name         // typed custom name (or legacy value)
+                    }
                 }
             }
             if let savedKey = try? String(contentsOf: Paths.pttHotkey, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
@@ -609,10 +618,17 @@ struct MenuBarView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         OWAppPicker(
                             selection: $focusSelection,
-                            favorites: Self.focusApps.filter { $0.id != "CUSTOM" },
+                            favorites: Self.focusApps.filter { $0.id != "CUSTOM" }
+                                .map { AppEntry(bundleID: $0.id, name: $0.label) },
                             installed: installedApps
                         ) { id in
-                            focusAppName = id == "CUSTOM" ? customFocusApp : id
+                            if id == "CUSTOM" {
+                                focusAppName = customFocusApp
+                            } else if installedApps.contains(where: { $0.bundleID == id }) {
+                                focusAppName = FocusTarget.tag(bundleID: id)   // installed pick
+                            } else {
+                                focusAppName = id                             // curated favorite
+                            }
                             saveFocusApp()
                         }
                         .frame(maxWidth: .infinity)
@@ -1241,7 +1257,7 @@ struct OWMenuPicker<T: Hashable>: View {
 /// or `"CUSTOM"`. `onSelect` fires with that id after a pick.
 struct OWAppPicker: View {
     @Binding var selection: String
-    let favorites: [(id: String, label: String)]
+    let favorites: [AppEntry]   // bundleID holds the favorite's id (a display name)
     let installed: [AppEntry]
     let onSelect: (String) -> Void
 
@@ -1285,8 +1301,8 @@ struct OWAppPicker: View {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         if !filteredFavorites.isEmpty {
                             header("Favorites")
-                            ForEach(filteredFavorites, id: \.id) { fav in
-                                row(id: fav.id, label: fav.label)
+                            ForEach(filteredFavorites, id: \.bundleID) { fav in
+                                row(id: fav.bundleID, label: fav.name)
                             }
                         }
                         if !filteredApps.isEmpty {
@@ -1311,17 +1327,13 @@ struct OWAppPicker: View {
         AppFilter.match(installed, query: query)
     }
 
-    private var filteredFavorites: [(id: String, label: String)] {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return favorites }
-        return favorites.filter {
-            $0.label.lowercased().contains(q) || $0.id.lowercased().contains(q)
-        }
+    private var filteredFavorites: [AppEntry] {
+        AppFilter.match(favorites, query: query)
     }
 
     private var currentLabel: String {
         if selection == "CUSTOM" { return "Custom…" }
-        if let fav = favorites.first(where: { $0.id == selection }) { return fav.label }
+        if let fav = favorites.first(where: { $0.bundleID == selection }) { return fav.name }
         if let app = installed.first(where: { $0.bundleID == selection }) { return app.name }
         return selection.isEmpty ? "Select app…" : selection
     }

@@ -17,16 +17,13 @@ enum InstalledApps {
         (NSHomeDirectory() as NSString).appendingPathComponent("Applications"),
     ]
 
-    private static var cache: [AppEntry]?
-
     /// All installed apps as `(bundleID, display name)`, de-duplicated by bundle
-    /// id and sorted by localized name. Cached after the first call.
-    static func all() -> [AppEntry] {
-        if let cache { return cache }
-        let result = scan()
-        cache = result
-        return result
-    }
+    /// id and sorted by localized name. Scanned once per process — Swift guarantees
+    /// the `static let` initializer runs exactly once and thread-safely, so this is
+    /// safe to call from any queue (no manual locking).
+    static func all() -> [AppEntry] { cache }
+
+    private static let cache: [AppEntry] = scan()
 
     private static func scan() -> [AppEntry] {
         let fm = FileManager.default

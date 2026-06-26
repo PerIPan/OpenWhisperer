@@ -19,6 +19,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
             _ = ConfigManager.cleanTempFiles()
             ConfigManager.migrateRemoveVoiceTags()
+            // Warm the installed-apps cache so the Automation picker is populated
+            // before the menu is first opened (the scan is process-cached).
+            _ = InstalledApps.all()
         }
 
         // Register bundled fonts (Outfit body + Fraunces serif). Idempotent — also

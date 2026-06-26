@@ -722,22 +722,21 @@ class DictationManager: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty else { return nil }
         let apps = NSWorkspace.shared.runningApplications
-        // Installed-app picks store a bundle identifier (contains a dot) — the
-        // most robust match, independent of localized name.
-        if value.contains(".") {
-            if let app = apps.first(where: { $0.bundleIdentifier == value }) {
+        switch FocusTarget.parse(value) {
+        case .bundleID(let bid):
+            // Installed-app pick — match by bundle identifier (robust, locale-independent).
+            return apps.first(where: { $0.bundleIdentifier == bid })?.processIdentifier
+        case .name(let name):
+            // Curated favorites + custom + legacy values store the display name.
+            if let app = apps.first(where: { $0.localizedName == name }) {
                 return app.processIdentifier
             }
+            // Bundle-name prefix (e.g. "Code" matches "Code - Insiders") (#17)
+            if let app = apps.first(where: { ($0.localizedName ?? "").hasPrefix(name) }) {
+                return app.processIdentifier
+            }
+            return nil
         }
-        // Curated favorites + custom entries store the app's display name.
-        if let app = apps.first(where: { $0.localizedName == value }) {
-            return app.processIdentifier
-        }
-        // Try matching by bundle name prefix (e.g. "Code" matches "Code - Insiders") (#17)
-        if let app = apps.first(where: { ($0.localizedName ?? "").hasPrefix(value) }) {
-            return app.processIdentifier
-        }
-        return nil
     }
 
     // MARK: - AXUIElement Text Insertion
