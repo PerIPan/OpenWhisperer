@@ -195,6 +195,8 @@ enum ConfigManager {
             IMPORTANT — hook trust: Codex silently ignores untrusted hooks. The
             first time you run `codex` after this, approve trusting the
             OpenWhisperer hook when prompted, or the spoken summary won't fire.
+
+            By default only voice-dictated turns are spoken; typed turns stay silent. Change this with the Response setting (text = typed turns only; always = every turn).
             """
         )
         window.show()

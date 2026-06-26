@@ -13,15 +13,15 @@ Full interactive Voice mode for [Claude Code](https://claude.ai/claude-code) and
 Build from source or DMG, do not pay the 99/year so you would have to allow it to run.
 
 The command to bypass Gatekeeper for the DMG:
-xattr -cr /Applications/Open\ Whisperer.app
+xattr -cr /Applications/OpenWhisperer.app
 
 If you want to do it on the DMG itself before opening:
-xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.5.0.dmg
+xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.5.1.dmg
 
 
 ## What It Does
 
-You use Claude Code or Codex CLI normally. After every response, the AI's answer is automatically spoken aloud through your Mac's speakers using a local TTS model. Three voice input modes: **Press-to-Talk** (press hotkey to start/stop), **Hold-to-Talk** (hold hotkey to record, release to transcribe), or **Hands-Free** (say "initiate" to start recording, 3s silence auto-transcribes, say "hold on" to interrupt TTS).
+You use Claude Code or Codex CLI normally. After a turn you dictated by voice, the AI's reply is automatically spoken aloud through your Mac's speakers using a local TTS model (you can also set replies to speak on typed turns, or always — see Response mode). Three voice input modes: **Press-to-Talk** (press hotkey to start/stop), **Hold-to-Talk** (hold hotkey to record, release to transcribe), or **Hands-Free** (say "initiate" to start recording, 3s silence auto-transcribes, say "hold on" to interrupt TTS).
 
 Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
@@ -33,6 +33,8 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 - **Snappier menu** — fixed a 3–4 second freeze when opening the menubar popover. A synchronous "launch at login" status check (an XPC call to `launchservicesd`) was blocking the main thread on every open; it now runs off-main.
 - **Response mode** — a new **Response** control in Voice Settings (beside Style) chooses *when* replies are spoken: **when Voice** (dictated turns only — the default, unchanged), **when Text** (typed turns only), or **Always**. Per-project override via `OW_TTS_RESPONSE`.
 - **Automation polish** — "with return" is grouped under auto-focus, and the behavior hint now reflects your exact auto-focus / with-return / auto-submit combination.
+- **In-app help** — a hover **ⓘ** on every section explains what it does, and the Hook setup instructions are corrected to document both hooks (Stop + UserPromptSubmit).
+- **Menu tidy** — the auto-focus card is now **App Focus Automation**, the platform/setup card is **Setup TTS for** (with Volume tucked inside), and all section titles share one consistent weight.
 
 ### 1.5.0
 
@@ -47,7 +49,7 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## Install
 
-[**Download OpenWhisperer-1.5.0.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.5.0/OpenWhisperer-1.5.0.dmg) — drag to Applications and launch.
+[**Download OpenWhisperer-1.5.1.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.5.1/OpenWhisperer-1.5.1.dmg) — drag to Applications and launch.
 
 On first launch, the app:
 - Downloads the Whisper (speech-to-text) and Kokoro (text-to-speech) CoreML models
@@ -57,12 +59,13 @@ On first launch, the app:
 The menubar icon gives you:
 - Start/Stop/Restart server with configurable port
 - **Push-to-Talk** — configurable hotkey (Ctrl, fn, Option, Cmd) to record
-- **Language selector** — set STT language to avoid hallucinations (17 languages)
-- **Voice picker** — choose from several Kokoro voices across English, French, and Italian (no server restart needed)
-- **Voice detail** — how verbose the spoken summary is: Terse, Normal (default), Rich, or Full (speaks the entire reply)
-- **TTS Volume** — Low, Medium (default), or High output volume
+- **Language selector** — set STT language to avoid hallucinations (auto-detect plus 17 languages)
+- **Voice picker** — choose from six Kokoro voices across English (Heart, Bella, Michael), French (Siwis), and Italian (Sara, Nicola) (no server restart needed)
+- **Style** — how verbose the spoken summary is: Terse, Normal (default), Rich, or Full (speaks the entire reply)
+- **Response** — when replies are spoken: when Voice (dictated turns only, the default), when Text (typed turns only), or Always
+- **Volume** — Low, Medium (default), or High output volume (in the **Setup TTS for** card)
 - **Start on startup** — optional login item to launch automatically when you log in
-- **Automation** — Auto-Focus and Auto-Submit (requires Accessibility permission)
+- **App Focus Automation** — Auto-Focus and Auto-Submit (requires Accessibility permission)
 - **Platform selector** — switch between Claude Code and Codex CLI (auto-configures hooks)
 - **Auto-Apply** — one-click setup for the hooks (adapts to selected platform)
 - **Accessibility prompt** — asks for permission on first launch with live granted/not-granted status
@@ -113,13 +116,13 @@ No button press needed. Uses on-device keyword detection (Apple Speech framework
 
 > **Note:** After rebuilding from source, you must remove and re-add the app in Accessibility settings (macOS caches the code signature).
 
-### Automation
+### App Focus Automation
 
-Both features are in the **Automation** section of the menubar and require **Accessibility permission** (macOS will prompt you on first use).
+Both features are in the **App Focus Automation** section of the menubar and require **Accessibility permission** (macOS will prompt you on first use).
 
 #### Auto-Focus
 
-Enable **Auto-Focus** to automatically bring a specific app to the front when you finish speaking. Pick from 15 apps (VS Code, Cursor, Windsurf, Zed, Xcode, Sublime Text, Nova, Fleet, Claude, Terminal, iTerm2, Warp, Alacritty, Ghostty) or select **CUSTOM** to type any app name. Uses native `NSRunningApplication.activate()` — no System Events permission needed.
+Enable **Auto-Focus** to automatically bring a specific app to the front when you finish speaking. The app picker is searchable: type a name to filter across **every app installed on your Mac** (Word, WhatsApp, Slack, …), plus a curated **Favorites** section of dev/terminal apps (VS Code, Cursor, Windsurf, Zed, Xcode, Sublime Text, Nova, Fleet, Claude, Terminal, iTerm2, Warp, Alacritty, Ghostty), plus a **Custom…** entry to type any app name. Uses native `NSRunningApplication.activate()` — no System Events permission needed.
 
 #### Auto-Submit
 
@@ -142,9 +145,11 @@ There's no special tag to add — voice mode works automatically. The app and it
 - **Screen**: you see the full detailed response
 - **Speakers**: you hear the spoken opening summary
 
-### Voice Detail Levels
+This "dictated turns only" behavior is the default. The **Response** control in Voice Settings changes *when* replies are spoken: **when Voice** (dictated turns only — the default), **when Text** (typed turns only), or **Always** (every turn). Per-project override via `OW_TTS_RESPONSE`.
 
-Choose how verbose that opening summary should be (set in the menubar under **Detail**):
+### Voice Style Levels
+
+Choose how verbose that opening summary should be (set in the menubar under **Style**, the left dropdown of the Voice Settings **Response** row):
 
 | Level | Spoken summary |
 |-------|----------------|
@@ -155,7 +160,7 @@ Choose how verbose that opening summary should be (set in the menubar under **De
 
 ## Configuration
 
-Most settings are configured from the menubar (voice, volume, language, hotkey, detail level) and stored under `~/Library/Application Support/OpenWhisperer`. The hooks and `speak.sh` also honor a few environment variables:
+Most settings are configured from the menubar (voice, volume, language, hotkey, style, response mode) and stored under `~/Library/Application Support/OpenWhisperer`. The hooks and `speak.sh` also honor a few environment variables:
 
 | Variable | Default | Used by | Description |
 |----------|---------|---------|-------------|
@@ -163,6 +168,9 @@ Most settings are configured from the menubar (voice, volume, language, hotkey, 
 | `TTS_PLAY_URL` | `http://localhost:8000/v1/audio/play` | hooks | In-app streaming-playback endpoint (loopback only) |
 | `TTS_URL` | `http://localhost:8000/v1/audio/speech` | `speak.sh` | Blocking synthesize-to-WAV endpoint |
 | `TTS_VOLUME` | `1` | `speak.sh` | Playback volume (the in-app player uses the menubar volume setting instead) |
+| `OW_TTS_STYLE` | menubar **Style** | hooks | Per-project spoken-summary style (`terse`/`normal`/`rich`/`full`); overrides the global `tts_style` |
+| `OW_TTS_VOICE` | menubar voice | hooks | Per-project Kokoro voice; overrides the global `tts_voice` |
+| `OW_TTS_RESPONSE` | menubar **Response** | hooks | Per-project response mode (`voice`/`text`/`always`); overrides the global `tts_response_mode` |
 
 > **Tip:** Setting a specific language (e.g. English) instead of auto-detect prevents Whisper from hallucinating text in other languages during silence or background noise.
 
@@ -210,7 +218,7 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-This produces `Open Whisperer.app` and `OpenWhisperer-1.5.0.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
+This produces `OpenWhisperer.app` and `OpenWhisperer-1.5.1.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
 
 ### Step 2: Wire up the hooks
 
