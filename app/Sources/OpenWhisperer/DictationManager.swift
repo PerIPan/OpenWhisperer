@@ -718,16 +718,23 @@ class DictationManager: ObservableObject {
     /// If Auto-Focus is enabled, find the PID of the configured app.
     /// Returns nil if Auto-Focus is not enabled or app isn't running.
     private func resolveAutoFocusPID() -> pid_t? {
-        guard let name = try? String(contentsOf: Paths.autoFocusApp, encoding: .utf8)
+        guard let value = try? String(contentsOf: Paths.autoFocusApp, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines),
-              !name.isEmpty else { return nil }
-        // Find running app by name
+              !value.isEmpty else { return nil }
         let apps = NSWorkspace.shared.runningApplications
-        if let app = apps.first(where: { $0.localizedName == name }) {
+        // Installed-app picks store a bundle identifier (contains a dot) — the
+        // most robust match, independent of localized name.
+        if value.contains(".") {
+            if let app = apps.first(where: { $0.bundleIdentifier == value }) {
+                return app.processIdentifier
+            }
+        }
+        // Curated favorites + custom entries store the app's display name.
+        if let app = apps.first(where: { $0.localizedName == value }) {
             return app.processIdentifier
         }
         // Try matching by bundle name prefix (e.g. "Code" matches "Code - Insiders") (#17)
-        if let app = apps.first(where: { ($0.localizedName ?? "").hasPrefix(name) }) {
+        if let app = apps.first(where: { ($0.localizedName ?? "").hasPrefix(value) }) {
             return app.processIdentifier
         }
         return nil
