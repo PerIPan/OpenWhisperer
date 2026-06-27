@@ -86,7 +86,7 @@ By default (**Response = `when Voice`**) only **voice-dictated** turns are spoke
 - **No fallback.** If the model doesn't call `speak` on a turn the mode meant to speak, that turn is simply silent (accepted, KISS). Spiked at 13/13 (Claude) and 5/5 (Codex) speak-first; the untested case is very long interactive agentic turns.
 - **Codex requires hook trust.** Codex silently skips *untrusted* hooks, so a first-run user must approve trusting the OpenWhisperer hook once (the setup window says so). Until then, dictated turns are silent on Codex.
 - The voice-turn TTL is **900 s**, uniform across `voice-context.sh` and `codex-tts-hook.sh`'s successor (none — Codex now shares `voice-context.sh`).
-- **Antigravity** has no `UserPromptSubmit` hook and no confirmed HTTP-MCP support, so it currently gets **no** voice under this design (the old `tts-hook.sh` fallback is gone). Revisit if agy's loopback HTTP-MCP is confirmed.
+- **Antigravity is untested** under this design. It needs HTTP MCP (to host `speak`) + a per-turn pre-prompt hook (to inject the nudge). agy has HTTP MCP, and Antigravity 2.0 (I/O 2026) added a hooks system, so it may work like Codex does — but this was never verified, and the old `tts-hook.sh` fallback is gone. Spike it before claiming agy support either way.
 
 ### State & IPC: flat files in Application Support
 
