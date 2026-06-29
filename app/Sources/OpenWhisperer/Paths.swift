@@ -98,6 +98,16 @@ enum Paths {
             .appendingPathComponent(".codex").appendingPathComponent("config.toml")
     }()
 
+    /// Pi coding agent — bundled extension source (Resources/pi/openwhisperer.ts).
+    static let piExtensionSource = resources.appendingPathComponent("pi").appendingPathComponent("openwhisperer.ts")
+
+    /// Pi coding agent — install destination (~/.pi/agent/extensions/openwhisperer.ts).
+    static let piExtensionDest: URL = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".pi").appendingPathComponent("agent")
+            .appendingPathComponent("extensions").appendingPathComponent("openwhisperer.ts")
+    }()
+
     /// Ensure directories exist
     static func ensureDirectories() {
         // Owner-only perms — the support dir holds config + logs read by the local server (T2.5)

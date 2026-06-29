@@ -727,7 +727,7 @@ struct MenuBarView: View {
                 options: Platform.allCases.map { (id: $0, label: $0.label) }
             )
             .frame(width: 104)
-            .help("Which CLI you're setting up. Switches the hook target between ~/.claude/settings.json and ~/.codex/config.toml.")
+            .help("Which coding agent you're setting up. Claude/Codex get a hook + speak tool; Pi gets an extension.")
             .onChange(of: selectedPlatform) { _, newValue in
                 newValue.save()
                 refreshDiagnostics()
@@ -763,8 +763,10 @@ struct MenuBarView: View {
                     }
                     .buttonStyle(OWRowButtonStyle(tinted: hookApplied, urgent: !hookApplied))
                     .help(selectedPlatform == .claudeCode
-                        ? "Writes the Stop and UserPromptSubmit hooks into ~/.claude/settings.json. Re-applies cleanly on rebuild."
-                        : "Writes the notify hook into ~/.codex/config.toml. Re-applies cleanly on rebuild.")
+                        ? "Writes the UserPromptSubmit hook into ~/.claude/settings.json + the speak MCP server into ~/.claude.json. Re-applies cleanly on rebuild."
+                        : selectedPlatform == .codexCLI
+                        ? "Writes the speak MCP server + UserPromptSubmit hook into ~/.codex/config.toml (needs one-time hook trust). Re-applies cleanly on rebuild."
+                        : "Copies the OpenWhisperer extension into ~/.pi/agent/extensions/ (no MCP). Run /reload in Pi afterward.")
                 }
 
                 // Superpowers row — Claude Code only

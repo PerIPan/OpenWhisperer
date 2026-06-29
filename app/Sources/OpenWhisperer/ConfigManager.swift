@@ -7,11 +7,13 @@ import OpenWhispererKit
 enum Platform: String, CaseIterable {
     case claudeCode = "claudeCode"
     case codexCLI = "codexCLI"
+    case pi = "pi"
 
     var label: String {
         switch self {
         case .claudeCode: return "Claude Code"
         case .codexCLI: return "Codex CLI"
+        case .pi: return "Pi"
         }
     }
 
@@ -259,12 +261,59 @@ enum ConfigManager {
         return content.contains("[mcp_servers.OpenWhisperer]") && content.contains("voice-context.sh")
     }
 
+    // MARK: - Pi: extension (no MCP)
+
+    static func showPiInstructions() {
+        let window = InstructionWindow(
+            title: "Step 1: Pi voice (extension — no MCP)",
+            instructions: """
+            Pi has no MCP. "Apply" copies one extension into Pi's extensions
+            folder; it registers an `openwhisperer_speak` tool and a per-turn
+            voice nudge, talking to OpenWhisperer's local TTS server over HTTP.
+
+            To do it by hand, copy the extension:
+
+              cp "\(Paths.piExtensionSource.path)" \\
+                 "\(Paths.piExtensionDest.path)"
+
+            Then run /reload in Pi (or restart it) to load it.
+
+            By default only voice-dictated turns are spoken; typed turns stay silent. Change this with the Response setting (text = typed turns only; always = every turn).
+            """
+        )
+        window.show()
+    }
+
+    /// Install the Pi extension: copy the bundled `openwhisperer.ts` into
+    /// ~/.pi/agent/extensions/. Idempotent (overwrites). Pi loads it on /reload.
+    static func applyToPi() -> (success: Bool, message: String) {
+        let fm = FileManager.default
+        let src = Paths.piExtensionSource
+        let dest = Paths.piExtensionDest
+        guard fm.fileExists(atPath: src.path) else {
+            return (false, "Bundled extension missing (\(src.lastPathComponent))")
+        }
+        do {
+            try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
+            try fm.copyItem(at: src, to: dest)
+            return (true, "Extension installed — run /reload in Pi to load it")
+        } catch {
+            return (false, "Copy failed: \(error.localizedDescription)")
+        }
+    }
+
+    static func checkPiConfigured() -> Bool {
+        FileManager.default.fileExists(atPath: Paths.piExtensionDest.path)
+    }
+
     // MARK: - Platform-dispatching wrappers
 
     static func applyHook(for platform: Platform) -> (success: Bool, message: String) {
         switch platform {
         case .claudeCode: return applyHookToSettings()
         case .codexCLI: return applyHookToCodexConfig()
+        case .pi: return applyToPi()
         }
     }
 
@@ -272,6 +321,7 @@ enum ConfigManager {
         switch platform {
         case .claudeCode: return checkHookConfigured()
         case .codexCLI: return checkCodexHookConfigured()
+        case .pi: return checkPiConfigured()
         }
     }
 
@@ -279,6 +329,7 @@ enum ConfigManager {
         switch platform {
         case .claudeCode: showClaudeMCPInstructions()
         case .codexCLI: showCodexConfigInstructions()
+        case .pi: showPiInstructions()
         }
     }
 

@@ -28,6 +28,7 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources/hooks"
 mkdir -p "$APP_BUNDLE/Contents/Resources/scripts"
+mkdir -p "$APP_BUNDLE/Contents/Resources/pi"
 
 # Copy binary
 cp "$BINARY" "$APP_BUNDLE/Contents/MacOS/OpenWhisperer"
@@ -47,9 +48,10 @@ cp "$SCRIPT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 cp "$SCRIPT_DIR/Resources/Outfit-VariableFont_wght.ttf" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 cp "$SCRIPT_DIR/Resources/Fraunces.ttf" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 
-# Step 3: Bundle the voice hook (the only hook now — speak-first nudge, shared by Claude + Codex)
+# Step 3: Bundle the voice hook (Claude + Codex), speak.sh, and the Pi extension
 cp "$PROJECT_DIR/hooks/voice-context.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/scripts/speak.sh" "$APP_BUNDLE/Contents/Resources/scripts/"
+cp "$PROJECT_DIR/pi/openwhisperer.ts" "$APP_BUNDLE/Contents/Resources/pi/"
 
 # Make scripts executable
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/voice-context.sh"
