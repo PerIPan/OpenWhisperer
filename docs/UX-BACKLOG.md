@@ -29,11 +29,10 @@ behavior, structure, or user-facing copy and deserve their own pass + sign-off.
 - Make the Automation card collapsible with a state summary in the header.
 - Label clarity: "Style" → "Reply Detail"; "Dictate" → "Language"; title-case "Auto-Focus" /
   "Auto-Submit (presses Enter after dictation)"; "with return" → "Return to previous app after insert";
-  "Superpowers" → "Agent Skills (obra)"; "Setup" card → "Platform & Hooks".
+  "Setup" card → "Platform & Hooks".
 - Move the Transcription Overlay toggle into the Voice Output sub-section (it's a display pref).
 - Rename silence threshold to "Auto-submit after [N]s of silence".
 - Model-download context label ("one-time, ~hundreds of MB") on the setup progress card.
-- Distinguish "Hook (required)" vs "Superpowers (optional)" inline.
 - Annotate "Speech Recognition" permission as Hands-Free-only.
 
 ### P2 candidates

@@ -132,49 +132,6 @@ enum ConfigManager {
         }
     }
 
-    // MARK: - Superpowers (obra/superpowers plugin)
-
-    static func showSuperpowersInstructions() {
-        let window = InstructionWindow(
-            title: "Superpowers — obra/superpowers",
-            instructions: """
-            Superpowers is an agentic skills framework that
-            gives your coding agent a structured workflow:
-
-            • Spec-first design before coding
-            • Subagent-driven development
-            • True red/green TDD, YAGNI, DRY
-            • Autonomous multi-hour work sessions
-
-            Auto-Apply runs:
-              claude /plugin install superpowers@claude-plugins-official
-
-            Or install manually in Claude Code:
-              /plugin install superpowers@claude-plugins-official
-
-            GitHub: https://github.com/obra/superpowers
-            """
-        )
-        window.show()
-    }
-
-    static func applySuperpowers() -> (success: Bool, message: String) {
-        let command = "claude '/plugin install superpowers@claude-plugins-official'"
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(command, forType: .string)
-        return (true, "Copied! Paste in terminal, or ask Claude: 'install superpowers plugin'")
-    }
-
-    static func checkSuperpowersInstalled() -> Bool {
-        // Check installed_plugins.json for any superpowers entry
-        let installedPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/plugins/installed_plugins.json")
-        guard let data = try? Data(contentsOf: installedPath),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let plugins = json["plugins"] as? [String: Any] else { return false }
-        return plugins.keys.contains { $0.lowercased().contains("superpowers") }
-    }
-
     // MARK: - Codex CLI: config.toml
 
     static func showCodexConfigInstructions() {

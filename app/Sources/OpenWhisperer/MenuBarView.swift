@@ -91,7 +91,6 @@ struct MenuBarView: View {
     @State private var pttKeyChanged = false
     @State private var selectedPlatform: Platform = .claudeCode
     @State private var hookApplied = false
-    @State private var superpowersApplied = false
     @State private var applyMessage = ""
     @State private var serverReachable = false
     @State private var deletedModelsBanner = false
@@ -832,38 +831,6 @@ struct MenuBarView: View {
                         : "Copies the OpenWhisperer extension into ~/.pi/agent/extensions/ (no MCP). Run /reload in Pi afterward.")
                 }
 
-                // Superpowers row — Claude Code only
-                if selectedPlatform == .claudeCode {
-                    HStack(spacing: 6) {
-                        HStack(spacing: 4) {
-                            Text("Superpowers")
-                                .font(OWFont.body(11))
-                            Image(systemName: "info.circle")
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(width: 80, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture { ConfigManager.showSuperpowersInstructions() }
-                        .help("obra/superpowers — agentic skills framework for Claude Code. Tap for details.")
-
-                        Button(action: {
-                            let result = ConfigManager.applySuperpowers()
-                            superpowersApplied = ConfigManager.checkSuperpowersInstalled()
-                            applyMessage = result.message
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { applyMessage = "" }
-                        }) {
-                            Label(
-                                superpowersApplied ? "Installed" : "Copy Install",
-                                systemImage: superpowersApplied ? "checkmark.circle.fill" : "doc.on.clipboard"
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(OWRowButtonStyle(tinted: superpowersApplied, urgent: !superpowersApplied))
-                        .help("Copies the plugin-install command to the clipboard — it doesn't install. Paste it in your terminal.")
-                    }
-                }
-
                 // Apply message feedback
                 if !applyMessage.isEmpty {
                     Text(applyMessage)
@@ -873,8 +840,8 @@ struct MenuBarView: View {
                         )
                         .transition(.opacity)
                 }
-                // (Removed the redundant "HOOK configured" / "superpowers installed" diagnostic
-                // rows — the Applied/Installed pills above already convey this state.)
+                // (Removed the redundant "HOOK configured" diagnostic row —
+                // the Applied pill above already conveys this state.)
 
                 OWInternalDivider()
 
@@ -1159,7 +1126,6 @@ struct MenuBarView: View {
 
     private func refreshDiagnostics() {
         hookApplied = ConfigManager.checkHookConfigured(for: selectedPlatform)
-        superpowersApplied = ConfigManager.checkSuperpowersInstalled()
         ConfigManager.testTTS(port: serverManager.port) { ok in
             DispatchQueue.main.async { serverReachable = ok }
         }
