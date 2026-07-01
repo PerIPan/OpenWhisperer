@@ -110,9 +110,12 @@ final class TTSHTTPServer {
             let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any]
             let input = json?["input"] as? String ?? ""
             let voice = json?["voice"] as? String ?? Self.userVoice()
+            // Guard finiteness so a non-finite override can't slip a NaN past clamp into synthesis
+            // (JSON can't carry NaN/Inf today, but don't rely on the serializer for that safety).
+            let speed = (json?["speed"] as? Double).flatMap { $0.isFinite ? TTSSpeed.clamp(Float($0)) : nil } ?? Self.userSpeed()
             Task { [tts] in
                 do {
-                    let wav = try await tts.synthesize(input, voice: voice)
+                    let wav = try await tts.synthesize(input, voice: voice, speed: speed)
                     self.respond(conn, "200 OK", wav, contentType: "audio/wav")
                 } catch {
                     self.respond(conn, "500 Internal Server Error",
@@ -158,6 +161,12 @@ final class TTSHTTPServer {
         let v = (try? String(contentsOf: Paths.ttsVoice, encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return (v?.isEmpty == false) ? v! : "af_heart"
+    }
+
+    /// The user's global TTS speed (`tts_speed`), clamped, or 1.0. Used by the
+    /// blocking WAV path when the request omits a `speed`.
+    private static func userSpeed() -> Float {
+        TTSSpeed.parse(try? String(contentsOf: Paths.ttsSpeed, encoding: .utf8))
     }
 
     private func respond(_ conn: NWConnection, _ status: String, _ body: Data, contentType: String = "text/plain") {

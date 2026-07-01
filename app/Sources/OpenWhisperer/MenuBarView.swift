@@ -83,6 +83,7 @@ struct MenuBarView: View {
     @State private var silenceThreshold: Int = 3
     @State private var selectedVolume = "medium"
     @State private var selectedVoice = "af_heart"
+    @State private var selectedSpeed: Double = 1.0
     @State private var selectedLanguage = "en"
     @State private var selectedStyle = "normal"
     @State private var selectedResponse = "voice"
@@ -286,6 +287,7 @@ struct MenuBarView: View {
                     selectedVolume = match.id
                 }
             }
+            selectedSpeed = Double(TTSSpeed.parse(try? String(contentsOf: Paths.ttsSpeed, encoding: .utf8)))
             selectedMode = InteractionMode.load()
             if let savedStr = try? String(contentsOf: Paths.silenceThreshold, encoding: .utf8),
                let saved = Int(savedStr.trimmingCharacters(in: .whitespacesAndNewlines)) {
@@ -293,6 +295,13 @@ struct MenuBarView: View {
             }
             refreshDiagnostics()
         }
+    }
+
+    /// "1×", "1.15×", "1.2×" — trims trailing zeros so the slider readout stays tidy.
+    private func speedLabel(_ v: Double) -> String {
+        var s = String(format: "%.2f", v)
+        while s.contains(".") && (s.hasSuffix("0") || s.hasSuffix(".")) { s.removeLast() }
+        return s + "×"
     }
 
     // MARK: - Header
@@ -539,7 +548,7 @@ struct MenuBarView: View {
         OWCollapsibleCard(
             title: "Voice Settings",
             icon: "slider.horizontal.3",
-            help: "Dictation language, the voice that reads replies aloud, and Response — how much of a reply is spoken, and when.",
+            help: "Dictation language, the voice that reads replies aloud, how fast it's read, and Response — how much of a reply is spoken, and when.",
             expanded: $voiceSettingsExpanded
         ) {
             EmptyView()
@@ -569,7 +578,28 @@ struct MenuBarView: View {
                     try? newValue.write(to: Paths.ttsVoice, atomically: true, encoding: .utf8)
                 }
 
-                // No visible separator between Voice and Response, but keep the same
+                OWInternalDivider()
+
+                OWPickerRow(label: "Speed", labelWidth: 62) {
+                    HStack(spacing: 8) {
+                        // Bounds MUST equal TTSSpeed.min/max (see TTSSpeed.swift).
+                        Slider(value: $selectedSpeed, in: 0.7...1.5, step: 0.05)
+                            .tint(OWColor.accent)
+                            .help("How fast replies are read aloud. 1× is the default Kokoro rate; higher is faster. Spoken output only.")
+                        Text(speedLabel(selectedSpeed))
+                            .font(OWFont.body(11))
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 34, alignment: .trailing)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .onChange(of: selectedSpeed) { _, newValue in
+                    try? String(format: "%.2f", newValue)
+                        .write(to: Paths.ttsSpeed, atomically: true, encoding: .utf8)
+                }
+
+                // No visible separator between Speed and Response, but keep the same
                 // gap (the divider was 0.5pt) so the rows don't move closer.
                 Color.clear.frame(height: 0.5)
 

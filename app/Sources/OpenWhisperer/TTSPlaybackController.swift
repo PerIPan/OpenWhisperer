@@ -30,6 +30,7 @@ actor TTSPlaybackController {
         let sentences = SentenceSplitter.split(text)
         guard !sentences.isEmpty else { removeLock(); return }
         let volume = Self.readVolume()
+        let speed = Self.readSpeed()
         writeLock()
 
         engine.onDrained = { [weak self] in
@@ -43,7 +44,7 @@ actor TTSPlaybackController {
             for sentence in sentences {
                 if Task.isCancelled || gen != generation { break }
                 do {
-                    let (samples, _) = try await self.tts.synthesizeSamples(sentence, voice: voice)
+                    let (samples, _) = try await self.tts.synthesizeSamples(sentence, voice: voice, speed: speed)
                     // Generation guard in addition to Task.isCancelled: immune to a synthesize
                     // call that returns after a barge-in/supersede already bumped the generation
                     // (e.g. if cooperative cancellation is swallowed by the CoreML pipeline).
@@ -104,5 +105,9 @@ actor TTSPlaybackController {
             .trimmingCharacters(in: .whitespacesAndNewlines),
             let v = Float(raw) else { return 1 }
         return v
+    }
+
+    private static func readSpeed() -> Float {
+        TTSSpeed.parse(try? String(contentsOf: Paths.ttsSpeed, encoding: .utf8))
     }
 }
