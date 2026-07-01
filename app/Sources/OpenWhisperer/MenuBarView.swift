@@ -102,17 +102,50 @@ struct MenuBarView: View {
     // logsExpanded removed — merged into serverExpanded
     @ObservedObject private var overlay = TranscriptionOverlay.shared
 
-    private static let voices: [(id: String, label: String)] = [
-        // English
-        ("af_heart", "Heart (English F)"),
-        ("af_bella", "Bella (English F)"),
-        ("am_michael", "Michael (English M)"),
-        // French
-        ("ff_siwis", "Siwis (French F)"),
-        // Italian
-        ("if_sara", "Sara (Italian F)"),
-        ("im_nicola", "Nicola (Italian M)"),
+    // Full Kokoro-82M v1.0 roster (verified against onnx-community/Kokoro-82M-v1.0-ONNX
+    // on 2026-07-01). Grouped by language for the nested-submenu picker. Non-default
+    // voices download on first selection via KokoroTTS.ensureVoicePack. The bare `af`
+    // alias is intentionally omitted (it is a default mix, not a named voice).
+    private static let voiceGroups: [(group: String, options: [(id: String, label: String)])] = [
+        ("English (US)", [
+            ("af_heart", "Heart (F)"), ("af_bella", "Bella (F)"), ("af_alloy", "Alloy (F)"),
+            ("af_aoede", "Aoede (F)"), ("af_jessica", "Jessica (F)"), ("af_kore", "Kore (F)"),
+            ("af_nicole", "Nicole (F)"), ("af_nova", "Nova (F)"), ("af_river", "River (F)"),
+            ("af_sarah", "Sarah (F)"), ("af_sky", "Sky (F)"),
+            ("am_adam", "Adam (M)"), ("am_echo", "Echo (M)"), ("am_eric", "Eric (M)"),
+            ("am_fenrir", "Fenrir (M)"), ("am_liam", "Liam (M)"), ("am_michael", "Michael (M)"),
+            ("am_onyx", "Onyx (M)"), ("am_puck", "Puck (M)"), ("am_santa", "Santa (M)"),
+        ]),
+        ("English (UK)", [
+            ("bf_alice", "Alice (F)"), ("bf_emma", "Emma (F)"), ("bf_isabella", "Isabella (F)"),
+            ("bf_lily", "Lily (F)"),
+            ("bm_daniel", "Daniel (M)"), ("bm_fable", "Fable (M)"), ("bm_george", "George (M)"),
+            ("bm_lewis", "Lewis (M)"),
+        ]),
+        ("French", [("ff_siwis", "Siwis (F)")]),
+        ("Italian", [("if_sara", "Sara (F)"), ("im_nicola", "Nicola (M)")]),
+        ("Spanish", [("ef_dora", "Dora (F)"), ("em_alex", "Alex (M)"), ("em_santa", "Santa (M)")]),
+        ("Portuguese (BR)", [("pf_dora", "Dora (F)"), ("pm_alex", "Alex (M)"), ("pm_santa", "Santa (M)")]),
+        ("Hindi", [
+            ("hf_alpha", "Alpha (F)"), ("hf_beta", "Beta (F)"),
+            ("hm_omega", "Omega (M)"), ("hm_psi", "Psi (M)"),
+        ]),
+        ("Japanese", [
+            ("jf_alpha", "Alpha (F)"), ("jf_gongitsune", "Gongitsune (F)"), ("jf_nezumi", "Nezumi (F)"),
+            ("jf_tebukuro", "Tebukuro (F)"), ("jm_kumo", "Kumo (M)"),
+        ]),
+        ("Chinese", [
+            ("zf_xiaobei", "Xiaobei (F)"), ("zf_xiaoni", "Xiaoni (F)"), ("zf_xiaoxiao", "Xiaoxiao (F)"),
+            ("zf_xiaoyi", "Xiaoyi (F)"),
+            ("zm_yunjian", "Yunjian (M)"), ("zm_yunxi", "Yunxi (M)"),
+            ("zm_yunxia", "Yunxia (M)"), ("zm_yunyang", "Yunyang (M)"),
+        ]),
     ]
+
+    /// Flattened roster for collapsed-label lookup and load-time validation.
+    private static var allVoices: [(id: String, label: String)] {
+        voiceGroups.flatMap { $0.options }
+    }
 
     private static let languages: [(id: String, label: String)] = [
         ("auto", "Auto-detect"),
@@ -255,7 +288,7 @@ struct MenuBarView: View {
             if let savedVoice = try? String(contentsOf: Paths.ttsVoice, encoding: .utf8),
                !savedVoice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let voice = savedVoice.trimmingCharacters(in: .whitespacesAndNewlines)
-                if Self.voices.contains(where: { $0.id == voice }) {
+                if Self.allVoices.contains(where: { $0.id == voice }) {
                     selectedVoice = voice
                 }
             }
@@ -570,7 +603,7 @@ struct MenuBarView: View {
                 OWInternalDivider()
 
                 OWPickerRow(label: "Voice", labelWidth: 62) {
-                    OWMenuPicker(selection: $selectedVoice, options: Self.voices)
+                    OWGroupedMenuPicker(selection: $selectedVoice, groups: Self.voiceGroups)
                         .frame(maxWidth: .infinity)
                         .help("Voice that speaks the AI's replies aloud. Spoken output only — it doesn't change the dictation language. Non-default voices download on first use.")
                 }
@@ -1379,6 +1412,65 @@ struct OWMenuPicker<T: Hashable>: View {
 
     private var currentLabel: String {
         options.first(where: { $0.id == selection })?.label ?? ""
+    }
+}
+
+// MARK: - OWGroupedMenuPicker (OWMenuPicker with one nested submenu per group)
+
+/// Like `OWMenuPicker`, but renders `groups` as nested submenus (a `Menu` per
+/// group) so a long option list (e.g. ~50 voices) stays navigable instead of one
+/// flat scroll. Same collapsed control/styling as `OWMenuPicker`.
+struct OWGroupedMenuPicker<T: Hashable>: View {
+    @Binding var selection: T
+    let groups: [(group: String, options: [(id: T, label: String)])]
+
+    var body: some View {
+        Menu {
+            ForEach(groups, id: \.group) { group in
+                Menu(group.group) {
+                    ForEach(group.options, id: \.id) { option in
+                        Button {
+                            selection = option.id
+                        } label: {
+                            if option.id == selection {
+                                Label(option.label, systemImage: "checkmark")
+                            } else {
+                                Text(option.label)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(currentLabel)
+                    .font(OWFont.body(11))
+                    .foregroundColor(OWColor.ink)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundColor(OWColor.accent.opacity(0.6))
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(OWColor.pickerBg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(OWColor.checkboxBorder, lineWidth: 1)
+                    )
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+    }
+
+    private var currentLabel: String {
+        for g in groups {
+            if let m = g.options.first(where: { $0.id == selection }) { return m.label }
+        }
+        return ""
     }
 }
 

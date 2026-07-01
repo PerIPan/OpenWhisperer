@@ -81,8 +81,28 @@ case "$STYLE" in
   *)         LEN="one plain spoken sentence" ;;
 esac
 
+# Native-tongue flavor: for a non-English voice, nudge the model to lightly code-switch
+# into the voice's language — self-gated to when the spoken summary isn't already in it.
+# Language = first character of the selected voice id (a/b = English → no flavor).
+# This map lives ONLY here; HookTests is its guard.
+VOICE=$(cat "$APP_SUPPORT/tts_voice" 2>/dev/null | tr -d '[:space:]')
+case "${VOICE:0:1}" in
+  f) FLAVOR_LANG="French" ;;
+  i) FLAVOR_LANG="Italian" ;;
+  e) FLAVOR_LANG="Spanish" ;;
+  p) FLAVOR_LANG="Brazilian Portuguese" ;;
+  h) FLAVOR_LANG="Hindi" ;;
+  j) FLAVOR_LANG="Japanese" ;;
+  z) FLAVOR_LANG="Mandarin Chinese" ;;
+  *) FLAVOR_LANG="" ;;
+esac
+FLAVOR=""
+if [ -n "$FLAVOR_LANG" ]; then
+  FLAVOR=" The voice reading this aloud is ${FLAVOR_LANG}. Unless your spoken sentence is already in ${FLAVOR_LANG}, lightly flavor it the way a bilingual ${FLAVOR_LANG} speaker naturally would — an occasional ${FLAVOR_LANG} word or expression and a touch of native mannerism — kept subtle, never a caricature, and never at the expense of being understood."
+fi
+
 if [ "$IS_VOICE" -eq 1 ]; then PREFIX="This turn was dictated by voice."; else PREFIX="This reply should be spoken aloud."; fi
-NUDGE="${PREFIX} Before writing your on-screen reply, your FIRST action must be to call the \`speak\` tool exactly once, passing ${LEN} that summarizes your answer and stands alone when heard. Then write your full reply on screen as usual. Do not skip the speak call, and do not mention the tool in your written reply."
+NUDGE="${PREFIX} Before writing your on-screen reply, your FIRST action must be to call the \`speak\` tool exactly once, passing ${LEN} that summarizes your answer and stands alone when heard. Then write your full reply on screen as usual. Do not skip the speak call, and do not mention the tool in your written reply.${FLAVOR}"
 
 jq -n --arg ctx "$NUDGE" '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $ctx}, suppressOutput: true}'
 exit 0

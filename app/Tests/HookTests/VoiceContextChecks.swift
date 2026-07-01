@@ -165,5 +165,70 @@ func voiceContextFailures() -> [String] {
         if !r.stdout.isEmpty { fail("unknownMode: expected silence, got \(r.stdout.debugDescription)") }
     }
 
+    // --- Native-tongue flavor addendum (keyed off tts_voice first char) ---
+
+    // 16) non-English voice (French) → nudge gains the flavor addendum naming the language.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let n = nudge(r.stdout)
+        if n?.contains("French") != true { fail("frenchFlavor: missing 'French': \(n?.debugDescription ?? "nil")") }
+        if n?.contains("bilingual") != true { fail("frenchFlavor: missing addendum: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("`speak` tool") != true { fail("frenchFlavor: base nudge lost") }
+    }
+
+    // 17) another non-English voice (Japanese) → its language named.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("jf_alpha")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("Japanese") != true {
+            fail("japaneseFlavor: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 18) English voice (af_heart) → NO flavor addendum.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("af_heart")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("bilingual") == true { fail("englishNoFlavor: unexpected addendum") }
+    }
+
+    // 19) no voice set → NO flavor addendum (safe default).
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("bilingual") == true { fail("noVoiceNoFlavor: unexpected addendum") }
+    }
+
+    // 20) flavor composes with a non-default length style: terse + a French voice → both present.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis"); s.writeTtsStyle("terse")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let n = nudge(r.stdout)
+        if n?.contains("one short, plain spoken sentence") != true { fail("terseFrenchCompose: terse length lost") }
+        if n?.contains("bilingual") != true { fail("terseFrenchCompose: flavor missing") }
+    }
+
+    // 21) English-UK voice (b-prefix) → NO flavor addendum (the a/b → English rule).
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("bf_alice")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("bilingual") == true { fail("ukEnglishNoFlavor: unexpected addendum") }
+    }
+
+    // 22) a different non-English branch (Italian) → its language named.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("if_sara")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("Italian") != true { fail("italianFlavor: \(nudge(r.stdout)?.debugDescription ?? "nil")") }
+    }
+
     return failures
 }

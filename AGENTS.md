@@ -79,6 +79,8 @@ By default (**Response = `when Voice`**) only **voice-dictated** turns are spoke
 2. The **UserPromptSubmit** hook (`hooks/voice-context.sh`) recomputes `shasum -a 256` of the submitted prompt; on a match it **claims (removes)** `voice_turn`, classifies the turn `IS_VOICE`, applies the response mode, and on a "speak" decision injects a hidden `additionalContext` nudge telling the model to **call the `speak` tool first** with a standalone spoken summary (length shaped by `tts_style`).
 3. The model calls `speak(text)` → the app's `POST /mcp` handler synthesizes + plays in-process. Nothing runs at turn end.
 
+**Native-tongue flavor.** For a **non-English** voice, `voice-context.sh` also reads `tts_voice` and appends an always-on, self-gating flavor addendum to the nudge (first-char language map: `f`→French, `i`→Italian, `e`→Spanish, `p`→Brazilian Portuguese, `h`→Hindi, `j`→Japanese, `z`→Mandarin Chinese; English `a`/`b` and unknown get nothing) asking the model to lightly code-switch into the voice's language *unless the spoken sentence is already in it*. The map lives **only** in the hook — there is no Swift parity pair (unlike `VoiceSignal.canonicalHash`); `HookTests` guards it.
+
 **One hook, both platforms.** `voice-context.sh` serves Claude Code *and* Codex — both fire a `UserPromptSubmit` command hook whose stdin carries `prompt`+`session_id` and whose stdout `{hookSpecificOutput:{additionalContext}}` is honored identically. `ConfigManager` registers the MCP server + this hook for each platform (Claude → `~/.claude.json` + `~/.claude/settings.json`; Codex → `~/.codex/config.toml`).
 
 `VoiceSignal.canonicalHash` lives in `OpenWhispererKit` and is unit-tested specifically to guarantee parity with the bash `shasum` reader — **if you touch hashing/trimming on either side, update both and run `HookTests`.**
@@ -107,7 +109,7 @@ First run downloads the models; both then prefer their on-disk cache and load **
 
 - WhisperKit → `~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/<model>` (`SpeechTranscriber` explicitly loads with `download: false` when cached).
 - FluidAudio Kokoro → `~/.cache/fluidaudio` (models and voice packs).
-  - *Note on Alternative Voices:* The upstream `FluidInference/kokoro-82m-coreml` repository only hosts the default `af_heart.bin` voice file under the `ANE/` subpath. Downloading alternative voices from this repository will fail (404/silent error). To use other voices (e.g. `af_bella`, `am_michael`, `ff_siwis`, `ef_dora`, etc.), they must be manually downloaded from the `onnx-community/Kokoro-82M-v1.0-ONNX` repository under `resolve/main/voices/<voice>.bin` and placed in `~/.cache/fluidaudio/Models/kokoro-82m-coreml/ANE/<voice>.bin`.
+  - *Note on Alternative Voices:* The upstream `FluidInference/kokoro-82m-coreml` repository only hosts the default `af_heart.bin` voice file under the `ANE/` subpath. Downloading alternative voices from this repository will fail (404/silent error). The menubar Voice picker offers the full Kokoro-82M v1.0 roster (~54 voices, grouped by language); selecting any non-default voice triggers `KokoroTTS.ensureVoicePack`, which downloads its `<voice>.bin` from the `onnx-community/Kokoro-82M-v1.0-ONNX` repository (`resolve/main/voices/<voice>.bin`) into `~/.cache/fluidaudio/Models/kokoro-82m-coreml/ANE/<voice>.bin` on demand.
 
 This matters because the developer's firewall (Little Snitch) blocks the HuggingFace **Xet CDN**, which breaks fresh downloads — an already-cached model still loads.
 

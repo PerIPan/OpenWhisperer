@@ -64,6 +64,13 @@ enum Hook {
                              atomically: true, encoding: .utf8)
         }
 
+        /// The selected TTS voice (`tts_voice`); voice-context.sh maps its first
+        /// character to a language for the native-tongue flavor addendum.
+        func writeTtsVoice(_ voice: String) {
+            try? voice.write(to: appSupport.appendingPathComponent("tts_voice"),
+                             atomically: true, encoding: .utf8)
+        }
+
         /// Response mode: voice (default) | text | always.
         func writeResponseMode(_ mode: String) {
             try? mode.write(to: appSupport.appendingPathComponent("tts_response_mode"),
