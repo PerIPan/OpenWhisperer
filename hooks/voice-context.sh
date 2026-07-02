@@ -81,28 +81,30 @@ case "$STYLE" in
   *)         LEN="one plain spoken sentence" ;;
 esac
 
-# Native-tongue flavor: for a non-English voice, nudge the model to lightly code-switch
-# into the voice's language — self-gated to when the spoken summary isn't already in it.
-# Language = first character of the selected voice id (a/b = English → no flavor).
-# This map lives ONLY here; HookTests is its guard.
+# Native-tongue flavor: for a non-English voice, two layers keyed off the voice id's first char.
+#   1. PERSONA (ungated, always on): a light per-nation character that colors tone, not vocabulary.
+#   2. Native words (gated ~1 in 5 turns): a rare, actual code-switch word, so foreign words stay
+#      occasional and never a tic. OW_FLAVOR_ROLL pins the dice for tests.
+# The language + persona map lives ONLY here (a/b = English → nothing); HookTests is its guard.
 VOICE=$(cat "$APP_SUPPORT/tts_voice" 2>/dev/null | tr -d '[:space:]')
 case "${VOICE:0:1}" in
-  f) FLAVOR_LANG="French" ;;
-  i) FLAVOR_LANG="Italian" ;;
-  e) FLAVOR_LANG="Spanish" ;;
-  p) FLAVOR_LANG="Brazilian Portuguese" ;;
-  h) FLAVOR_LANG="Hindi" ;;
-  j) FLAVOR_LANG="Japanese" ;;
-  z) FLAVOR_LANG="Mandarin Chinese" ;;
-  *) FLAVOR_LANG="" ;;
+  f) FLAVOR_LANG="French"; FLAVOR_PERSONA="dry and faintly unimpressed — the sort for whom most things are, at best, passable, given to the occasional philosophical shrug" ;;
+  i) FLAVOR_LANG="Italian"; FLAVOR_PERSONA="warm and expressive — things are either wonderful or a small catastrophe, rarely in between" ;;
+  e) FLAVOR_LANG="Spanish"; FLAVOR_PERSONA="relaxed and direct — there's always time, and it'll all be fine" ;;
+  p) FLAVOR_LANG="Brazilian Portuguese"; FLAVOR_PERSONA="sunny and easygoing — unbothered, always a friendly way around things" ;;
+  h) FLAVOR_LANG="Hindi"; FLAVOR_PERSONA="warm and irrepressibly helpful — the eternal problem-solver, delighted to assist, forever assuring you it's no trouble at all and will be sorted right away" ;;
+  j) FLAVOR_LANG="Japanese"; FLAVOR_PERSONA="courteous and understated — meticulous, softening things, quietly prizing care and subtlety" ;;
+  z) FLAVOR_LANG="Mandarin Chinese"; FLAVOR_PERSONA="pragmatic and modest — understated, fond of a proverb, unfussed by small things" ;;
+  *) FLAVOR_LANG=""; FLAVOR_PERSONA="" ;;
 esac
 FLAVOR=""
 if [ -n "$FLAVOR_LANG" ]; then
-  # Occasional, NOT every turn: only ~1 in 5 voice turns carry the flavor line, so spoken
-  # replies stay mostly plain and it never becomes a tic. OW_FLAVOR_ROLL pins the dice for tests.
+  # Persona: ungated, always on — colors tone, not vocabulary.
+  FLAVOR=" The voice reading this aloud is ${FLAVOR_LANG}. Play it ${FLAVOR_PERSONA} — it colors your tone, not your vocabulary; you still answer in plain English. Understated and affectionate, never an accent, never a caricature, never a performance."
+  # Native words: gated ~1 in 5 turns so an actual foreign word stays rare and never a tic.
   ROLL="${OW_FLAVOR_ROLL:-$((RANDOM % 5))}"
   if [ "$ROLL" -eq 0 ]; then
-    FLAVOR=" The voice reading this aloud is ${FLAVOR_LANG}. If it feels natural, you may let a ${FLAVOR_LANG} word or expression slip into your spoken sentence the way a bilingual ${FLAVOR_LANG} speaker might — subtle, never forced, never a caricature, never at the expense of being understood. If nothing fits naturally, plain English is perfectly fine."
+    FLAVOR="${FLAVOR} And just this once, if it lands naturally, you may let a single authentic ${FLAVOR_LANG} word or expression slip in — varied, never the same one twice, never forced; plain English if nothing fits."
   fi
 fi
 
