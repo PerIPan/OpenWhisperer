@@ -129,7 +129,8 @@ final class TTSHTTPServer {
             let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any]
             let input = json?["input"] as? String ?? ""
             let voice = json?["voice"] as? String ?? Self.userVoice()
-            Task { [playback] in await playback.play(text: input, voice: voice) }
+            let speed = (json?["speed"] as? Double).flatMap { $0.isFinite ? TTSSpeed.clamp(Float($0)) : nil } ?? Self.userSpeed()
+            Task { [playback] in await playback.play(text: input, voice: voice, speed: speed) }
             respond(conn, "202 Accepted",
                     Data(#"{"status":"accepted"}"#.utf8), contentType: "application/json")
 
@@ -141,8 +142,9 @@ final class TTSHTTPServer {
                 respond(conn, "200 OK", data, contentType: "application/json")
             case .accepted:
                 respond(conn, "202 Accepted", Data())
-            case .speak(let response, let text, let voice):
-                Task { [playback] in await playback.play(text: text, voice: voice ?? Self.userVoice()) }
+            case .speak(let response, let text, let voice, let speed):
+                let resolvedSpeed = speed.flatMap { $0.isFinite ? TTSSpeed.clamp(Float($0)) : nil } ?? Self.userSpeed()
+                Task { [playback] in await playback.play(text: text, voice: voice ?? Self.userVoice(), speed: resolvedSpeed) }
                 respond(conn, "200 OK", response, contentType: "application/json")
             }
 

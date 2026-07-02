@@ -7,8 +7,8 @@ public enum MCPOutcome {
     case json(Data)
     /// Send `202 Accepted` with an empty body (JSON-RPC notification — nothing to reply).
     case accepted
-    /// Send `response` (200) AND play `text` aloud (optionally in `voice`). The one side effect.
-    case speak(response: Data, text: String, voice: String?)
+    /// Send `response` (200) AND play `text` aloud (optionally in `voice`/`speed`). The one side effect.
+    case speak(response: Data, text: String, voice: String?, speed: Double?)
 }
 
 /// Pure, transport-free dispatch for the minimal slice of MCP that Claude Code needs to register
@@ -58,6 +58,7 @@ public struct MCPServer {
                     "properties": [
                         "text": ["type": "string", "description": "The text to speak aloud."],
                         "voice": ["type": "string", "description": "Optional voice name; defaults to the user's selected voice."],
+                        "speed": ["type": "number", "description": "Optional playback speed, 0.7–1.5; defaults to the user's setting."],
                     ],
                     "required": ["text"],
                 ],
@@ -74,11 +75,12 @@ public struct MCPServer {
                 return .json(Self.toolError(id: requestID, message: "Missing required argument: text"))
             }
             let voice = args["voice"] as? String
+            let speed = args["speed"] as? Double
             let response = Self.resultResponse(id: requestID, result: [
                 "content": [["type": "text", "text": "Speaking."]],
                 "isError": false,
             ])
-            return .speak(response: response, text: text, voice: voice)
+            return .speak(response: response, text: text, voice: voice, speed: speed)
 
         default:
             return .json(Self.errorResponse(id: requestID, code: -32601, message: "Method not found: \(method)"))

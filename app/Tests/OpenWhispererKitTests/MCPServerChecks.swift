@@ -48,15 +48,17 @@ func mcpServerFailures() -> [String] {
         let props = schema?["properties"] as? [String: Any]
         if props?["text"] == nil { failures.append("tools/list: speak missing text property") }
         if props?["voice"] == nil { failures.append("tools/list: speak missing voice property") }
+        if props?["speed"] == nil { failures.append("tools/list: speak missing speed property") }
     } else {
         failures.append("tools/list: expected speak tool in .json outcome")
     }
 
-    // tools/call speak (text + voice) → .speak side effect, args passed through, isError false.
-    switch req(#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"speak","arguments":{"text":"hello there","voice":"af_bella"}}}"#) {
-    case let .speak(response, text, voice):
+    // tools/call speak (text + voice + speed) → .speak side effect, all args passed through.
+    switch req(#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"speak","arguments":{"text":"hello there","voice":"af_bella","speed":1.25}}}"#) {
+    case let .speak(response, text, voice, speed):
         if text != "hello there" { failures.append("tools/call: text not passed through") }
         if voice != "af_bella" { failures.append("tools/call: voice not passed through") }
+        if speed != 1.25 { failures.append("tools/call: speed not passed through") }
         if let r = decode(response)?["result"] as? [String: Any] {
             if (r["isError"] as? Bool) != false { failures.append("tools/call: isError should be false") }
             if ((r["content"] as? [[String: Any]])?.first?["type"] as? String) != "text" { failures.append("tools/call: content[0].type != \"text\"") }
@@ -65,11 +67,12 @@ func mcpServerFailures() -> [String] {
         failures.append("tools/call(speak): expected .speak outcome")
     }
 
-    // tools/call speak without voice → voice nil (handler must not invent one).
+    // tools/call speak without voice/speed → both nil (handler must not invent them).
     switch req(#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"speak","arguments":{"text":"hi"}}}"#) {
-    case let .speak(_, text, voice):
+    case let .speak(_, text, voice, speed):
         if text != "hi" { failures.append("tools/call(no voice): text wrong") }
         if voice != nil { failures.append("tools/call(no voice): voice should be nil") }
+        if speed != nil { failures.append("tools/call(no speed): speed should be nil") }
     default:
         failures.append("tools/call(no voice): expected .speak outcome")
     }

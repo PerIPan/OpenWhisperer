@@ -20,7 +20,7 @@ actor TTSPlaybackController {
     }
 
     /// Speak `text`, superseding any current playback.
-    func play(text: String, voice: String) {
+    func play(text: String, voice: String, speed: Float) {
         generation += 1
         let gen = generation
         synthDone = false
@@ -30,7 +30,6 @@ actor TTSPlaybackController {
         let sentences = SentenceSplitter.split(text)
         guard !sentences.isEmpty else { removeLock(); return }
         let volume = Self.readVolume()
-        let speed = Self.readSpeed()
         writeLock()
 
         engine.onDrained = { [weak self] in
@@ -101,9 +100,5 @@ actor TTSPlaybackController {
 
     private static func readVolume() -> Float {
         TTSVolume.parse(try? String(contentsOf: Paths.ttsVolume, encoding: .utf8))
-    }
-
-    private static func readSpeed() -> Float {
-        TTSSpeed.parse(try? String(contentsOf: Paths.ttsSpeed, encoding: .utf8))
     }
 }
