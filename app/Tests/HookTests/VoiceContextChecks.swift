@@ -165,9 +165,9 @@ func voiceContextFailures() -> [String] {
         if !r.stdout.isEmpty { fail("unknownMode: expected silence, got \(r.stdout.debugDescription)") }
     }
 
-    // --- Native-tongue flavor: ungated per-nation persona + gated native-word layer ---
-    // Persona is present on EVERY non-English voice turn (sentinel: "caricature"); the actual
-    // foreign-word line is gated ~1 in 5 (sentinel: "slip in"), pinned via OW_FLAVOR_ROLL.
+    // --- Native-tongue flavor: an ungated per-nation persona, personality only ---
+    // Persona is present on EVERY voiced turn for a mapped voice (sentinel: "voice reading
+    // this aloud"); there is no vocabulary steering and no native-word layer.
 
     // 16) non-English voice (French) → persona present (ungated), naming the language.
     do {
@@ -176,7 +176,7 @@ func voiceContextFailures() -> [String] {
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         let n = nudge(r.stdout)
         if n?.contains("French") != true { fail("frenchPersona: missing 'French': \(n?.debugDescription ?? "nil")") }
-        if n?.contains("caricature") != true { fail("frenchPersona: missing persona: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("voice reading this aloud") != true { fail("frenchPersona: missing persona: \(n?.debugDescription ?? "nil")") }
         if n?.contains("`speak` tool") != true { fail("frenchPersona: base nudge lost") }
     }
 
@@ -186,19 +186,17 @@ func voiceContextFailures() -> [String] {
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("jf_alpha")
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
         if n?.contains("Japanese") != true { fail("japanesePersona: \(n?.debugDescription ?? "nil")") }
-        if n?.contains("caricature") != true { fail("japanesePersona: missing persona") }
+        if n?.contains("voice reading this aloud") != true { fail("japanesePersona: missing persona") }
     }
 
-    // 18) American English voice (af_heart, the default) → persona present (US), but NO native-word
-    //     layer even with the dice forced on (English has no foreign word to code-switch).
+    // 18) American English voice (af_heart, the default) → persona present (US).
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("af_heart")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s, env: ["OW_FLAVOR_ROLL": "0"])
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         let n = nudge(r.stdout)
         if n?.contains("American") != true { fail("americanPersona: missing 'American': \(n?.debugDescription ?? "nil")") }
-        if n?.contains("caricature") != true { fail("americanPersona: missing persona") }
-        if n?.contains("slip in") == true { fail("americanPersona: English must not get the native-word line") }
+        if n?.contains("voice reading this aloud") != true { fail("americanPersona: missing persona") }
     }
 
     // 19) no voice set → NO flavor (safe default).
@@ -206,7 +204,7 @@ func voiceContextFailures() -> [String] {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
-        if nudge(r.stdout)?.contains("caricature") == true { fail("noVoiceNoFlavor: unexpected persona") }
+        if nudge(r.stdout)?.contains("voice reading this aloud") == true { fail("noVoiceNoFlavor: unexpected persona") }
     }
 
     // 20) persona composes with a non-default length style: terse + a French voice → both present.
@@ -215,52 +213,31 @@ func voiceContextFailures() -> [String] {
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis"); s.writeTtsStyle("terse")
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
         if n?.contains("one short, plain spoken sentence") != true { fail("terseFrenchCompose: terse length lost") }
-        if n?.contains("caricature") != true { fail("terseFrenchCompose: persona missing") }
+        if n?.contains("voice reading this aloud") != true { fail("terseFrenchCompose: persona missing") }
     }
 
-    // 21) British English voice (b-prefix) → persona present (UK), no native-word line.
+    // 21) British English voice (b-prefix) → persona present (UK).
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("bf_alice")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s, env: ["OW_FLAVOR_ROLL": "0"])
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         let n = nudge(r.stdout)
         if n?.contains("British") != true { fail("britishPersona: missing 'British'") }
-        if n?.contains("caricature") != true { fail("britishPersona: missing persona") }
-        if n?.contains("slip in") == true { fail("britishPersona: English must not get the native-word line") }
+        if n?.contains("voice reading this aloud") != true { fail("britishPersona: missing persona") }
     }
 
-    // 22) native-word gate ON (OW_FLAVOR_ROLL=0) → the rare code-switch line is added atop the persona.
-    do {
-        let s = newSandbox()
-        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s, env: ["OW_FLAVOR_ROLL": "0"])
-        let n = nudge(r.stdout)
-        if n?.contains("caricature") != true { fail("wordGateOn: persona missing") }
-        if n?.contains("slip in") != true { fail("wordGateOn: native-word line missing: \(n?.debugDescription ?? "nil")") }
-    }
-
-    // 23) native-word gate OFF (OW_FLAVOR_ROLL=1) → persona still present, but NO code-switch line.
-    do {
-        let s = newSandbox()
-        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s, env: ["OW_FLAVOR_ROLL": "1"])
-        let n = nudge(r.stdout)
-        if n?.contains("caricature") != true { fail("wordGateOff: persona should remain") }
-        if n?.contains("slip in") == true { fail("wordGateOff: code-switch line present on a miss roll") }
-    }
-
-    // 24) a different non-English branch (Italian) → persona present, its language named.
+    // 22) a different non-English branch (Italian) → persona present, its language named.
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("if_sara")
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
         if n?.contains("Italian") != true { fail("italianPersona: \(n?.debugDescription ?? "nil")") }
-        if n?.contains("caricature") != true { fail("italianPersona: missing persona") }
+        if n?.contains("voice reading this aloud") != true { fail("italianPersona: missing persona") }
     }
 
     // --- Per-project voice/speed overrides (env → nudge args; flavor follows the override) ---
 
-    // 25) OW_TTS_VOICE override → nudge instructs speak with that voice arg.
+    // 23) OW_TTS_VOICE override → nudge instructs speak with that voice arg.
     do {
         let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
@@ -270,7 +247,7 @@ func voiceContextFailures() -> [String] {
         }
     }
 
-    // 26) OW_TTS_SPEED (numeric) override → nudge instructs speak with that speed arg.
+    // 24) OW_TTS_SPEED (numeric) override → nudge instructs speak with that speed arg.
     do {
         let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
@@ -280,7 +257,7 @@ func voiceContextFailures() -> [String] {
         }
     }
 
-    // 27) no override → nudge carries no voice=/speed= args (default nudge unchanged).
+    // 25) no override → nudge carries no voice=/speed= args (default nudge unchanged).
     do {
         let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
@@ -290,7 +267,7 @@ func voiceContextFailures() -> [String] {
         }
     }
 
-    // 28) non-numeric OW_TTS_SPEED is dropped (garbage never reaches the nudge).
+    // 26) non-numeric OW_TTS_SPEED is dropped (garbage never reaches the nudge).
     do {
         let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
@@ -300,11 +277,11 @@ func voiceContextFailures() -> [String] {
         }
     }
 
-    // 29) flavor follows OW_TTS_VOICE, not the global file: French override beats an English global.
+    // 27) flavor follows OW_TTS_VOICE, not the global file: French override beats an English global.
     do {
         let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("af_heart")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
-                         sandbox: s, env: ["OW_TTS_VOICE": "ff_siwis", "OW_FLAVOR_ROLL": "0"])
+                         sandbox: s, env: ["OW_TTS_VOICE": "ff_siwis"])
         if nudge(r.stdout)?.contains("French") != true {
             fail("flavorFollowsOverride: \(nudge(r.stdout)?.debugDescription ?? "nil")")
         }

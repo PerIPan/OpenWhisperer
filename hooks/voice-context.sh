@@ -79,40 +79,31 @@ case "$STYLE" in
   *)         LEN="one plain spoken sentence" ;;
 esac
 
-# Native-tongue flavor: for a personified voice, up to two layers keyed off the voice id's first char.
-#   1. PERSONA (ungated, always on): a light national character that colors tone, not vocabulary —
-#      set for English (a/b) too. The flavors stay subdued, so they don't detract from the message.
-#   2. Native words (gated ~1 in 5 turns): a rare, actual foreign word — ONLY for non-English voices
-#      (FLAVOR_NATIVE); English has no word to code-switch. OW_FLAVOR_ROLL pins the dice for tests.
+# Native-tongue flavor: for a personified voice, an ungated persona keyed off the voice id's
+# first char: a light national character, set for English (a/b) too. The flavors stay subdued,
+# so they don't detract from the message. Personality only, no vocabulary steering; whatever
+# code-switching happens is the model's own.
 # The map lives ONLY here (unknown/no voice → nothing); HookTests is its guard.
 # Resolved voice: per-project OW_TTS_VOICE env → global tts_voice file. Drives BOTH the
-# persona/native-tongue flavor (below) and, when it came from the env override, the speak arg.
+# persona flavor (below) and, when it came from the env override, the speak arg.
 VOICE="$OW_TTS_VOICE"
 [ -z "$VOICE" ] && VOICE=$(cat "$APP_SUPPORT/tts_voice" 2>/dev/null)
 VOICE=$(printf '%s' "$VOICE" | tr -d '[:space:]')
-FLAVOR_LANG=""; FLAVOR_PERSONA=""; FLAVOR_NATIVE=""
+FLAVOR_LANG=""; FLAVOR_PERSONA=""
 case "${VOICE:0:1}" in
-  a) FLAVOR_LANG="American English"; FLAVOR_PERSONA="quietly self-assured — a light touch of Silicon Valley optimism, comfortable making the case for the upside, but low-key and never hyped or salesy" ;;
-  b) FLAVOR_LANG="British English"; FLAVOR_PERSONA="dry and unflappable — understated to a fault, meeting triumph and disaster alike with the same mild 'not bad'; a quiet master of saying less" ;;
-  f) FLAVOR_LANG="French"; FLAVOR_NATIVE="French"; FLAVOR_PERSONA="dry and faintly unimpressed — the sort for whom most things are, at best, passable, given to the occasional philosophical shrug" ;;
-  i) FLAVOR_LANG="Italian"; FLAVOR_NATIVE="Italian"; FLAVOR_PERSONA="warm and expressive — things are either wonderful or a small catastrophe, rarely in between" ;;
-  e) FLAVOR_LANG="Spanish"; FLAVOR_NATIVE="Spanish"; FLAVOR_PERSONA="relaxed and direct — there's always time, and it'll all be fine" ;;
-  p) FLAVOR_LANG="Brazilian Portuguese"; FLAVOR_NATIVE="Brazilian Portuguese"; FLAVOR_PERSONA="sunny and easygoing — unbothered, always a friendly way around things" ;;
-  h) FLAVOR_LANG="Hindi"; FLAVOR_NATIVE="Hindi"; FLAVOR_PERSONA="warm and irrepressibly helpful — the eternal problem-solver, delighted to assist, forever assuring you it's no trouble at all and will be sorted right away" ;;
-  j) FLAVOR_LANG="Japanese"; FLAVOR_NATIVE="Japanese"; FLAVOR_PERSONA="courteous and understated — meticulous, softening things, quietly prizing care and subtlety" ;;
-  z) FLAVOR_LANG="Mandarin Chinese"; FLAVOR_NATIVE="Mandarin Chinese"; FLAVOR_PERSONA="pragmatic and modest — understated, fond of a proverb, unfussed by small things" ;;
+  a) FLAVOR_LANG="American English"; FLAVOR_PERSONA="quietly self-assured, with a light touch of Silicon Valley hype" ;;
+  b) FLAVOR_LANG="British English"; FLAVOR_PERSONA="dry and unflappable, with a streak of deadpan wit and gentle irony" ;;
+  f) FLAVOR_LANG="French"; FLAVOR_PERSONA="dry and faintly unimpressed, given to the occasional philosophical shrug" ;;
+  i) FLAVOR_LANG="Italian"; FLAVOR_PERSONA="warm and expressive; things are either wonderful or a small catastrophe, rarely in between" ;;
+  e) FLAVOR_LANG="Spanish"; FLAVOR_PERSONA="relaxed and direct; there's always time, and it'll all be fine" ;;
+  p) FLAVOR_LANG="Brazilian Portuguese"; FLAVOR_PERSONA="sunny and easygoing, unbothered, always a friendly way around things" ;;
+  h) FLAVOR_LANG="Hindi"; FLAVOR_PERSONA="warm and irrepressibly helpful, the eternal problem-solver, assuring you it's no trouble at all" ;;
+  j) FLAVOR_LANG="Japanese"; FLAVOR_PERSONA="courteous and understated, meticulous, softening things, quietly prizing care and subtlety" ;;
+  z) FLAVOR_LANG="Mandarin Chinese"; FLAVOR_PERSONA="pragmatic and modest, understated, fond of a proverb, unfussed by small things" ;;
 esac
 FLAVOR=""
 if [ -n "$FLAVOR_PERSONA" ]; then
-  # Persona: ungated, always on — colors tone, not vocabulary.
-  FLAVOR=" The voice reading this aloud is ${FLAVOR_LANG}. Play it ${FLAVOR_PERSONA} — it colors your tone, not your vocabulary; you still answer in plain English. Understated and affectionate, never an accent, never a caricature, never a performance."
-  # Native words: only for genuinely foreign voices, gated ~1 in 5 turns so a real foreign word stays rare.
-  if [ -n "$FLAVOR_NATIVE" ]; then
-    ROLL="${OW_FLAVOR_ROLL:-$((RANDOM % 5))}"
-    if [ "$ROLL" -eq 0 ]; then
-      FLAVOR="${FLAVOR} And just this once, if it lands naturally, you may let a single authentic ${FLAVOR_NATIVE} word or expression slip in — varied, never the same one twice, never forced; plain English if nothing fits."
-    fi
-  fi
+  FLAVOR=" The voice reading this aloud is ${FLAVOR_LANG}. Play it ${FLAVOR_PERSONA}."
 fi
 
 # Per-project overrides → tell the model to pass them to `speak`. Only an override needs
