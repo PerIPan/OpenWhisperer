@@ -105,11 +105,18 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params) {
       debug(`speak tool called: ${JSON.stringify(params.text).slice(0, 80)}`);
+      // Per-project voice/speed: read here (the extension owns the call, so this is
+      // deterministic — no dependency on the model echoing args). Precedence: env → file.
+      const voice = readPref("OW_TTS_VOICE", "tts_voice", "");
+      const speed = Number.parseFloat(readPref("OW_TTS_SPEED", "tts_speed", ""));
+      const body: Record<string, unknown> = { input: params.text };
+      if (voice) body.voice = voice;
+      if (Number.isFinite(speed)) body.speed = speed;
       try {
         await fetch(TTS_PLAY_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ input: params.text }),
+          body: JSON.stringify(body),
         });
       } catch (e) {
         return {
@@ -134,10 +141,9 @@ export default function (pi: ExtensionAPI) {
     const mode = readPref("OW_TTS_RESPONSE", "tts_response_mode", "voice");
     const isVoice = claimVoiceTurn(prompt);
 
-    let speak: boolean;
-    if (mode === "always") speak = true;
-    else if (mode === "text") speak = !isVoice;
-    else speak = isVoice; // "voice" (default)
+    // Response mode: "always" speaks every turn; "voice" (default, and any stale "text")
+    // speaks only dictated turns.
+    const speak = mode === "always" ? true : isVoice;
 
     debug(`before_agent_start mode=${mode} isVoice=${isVoice} speak=${speak}`);
     if (!speak) return;
