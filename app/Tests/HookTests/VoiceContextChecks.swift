@@ -189,12 +189,16 @@ func voiceContextFailures() -> [String] {
         if n?.contains("caricature") != true { fail("japanesePersona: missing persona") }
     }
 
-    // 18) English voice (af_heart) → NO persona, NO native-word layer.
+    // 18) American English voice (af_heart, the default) → persona present (US), but NO native-word
+    //     layer even with the dice forced on (English has no foreign word to code-switch).
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("af_heart")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
-        if nudge(r.stdout)?.contains("caricature") == true { fail("englishNoFlavor: unexpected persona") }
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s, env: ["OW_FLAVOR_ROLL": "0"])
+        let n = nudge(r.stdout)
+        if n?.contains("American") != true { fail("americanPersona: missing 'American': \(n?.debugDescription ?? "nil")") }
+        if n?.contains("caricature") != true { fail("americanPersona: missing persona") }
+        if n?.contains("slip in") == true { fail("americanPersona: English must not get the native-word line") }
     }
 
     // 19) no voice set → NO flavor (safe default).
@@ -214,12 +218,15 @@ func voiceContextFailures() -> [String] {
         if n?.contains("caricature") != true { fail("terseFrenchCompose: persona missing") }
     }
 
-    // 21) English-UK voice (b-prefix) → NO persona (the a/b → English rule).
+    // 21) British English voice (b-prefix) → persona present (UK), no native-word line.
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("bf_alice")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
-        if nudge(r.stdout)?.contains("caricature") == true { fail("ukEnglishNoFlavor: unexpected persona") }
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s, env: ["OW_FLAVOR_ROLL": "0"])
+        let n = nudge(r.stdout)
+        if n?.contains("British") != true { fail("britishPersona: missing 'British'") }
+        if n?.contains("caricature") != true { fail("britishPersona: missing persona") }
+        if n?.contains("slip in") == true { fail("britishPersona: English must not get the native-word line") }
     }
 
     // 22) native-word gate ON (OW_FLAVOR_ROLL=0) → the rare code-switch line is added atop the persona.
