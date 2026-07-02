@@ -21,7 +21,7 @@ xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.5.1.dmg
 
 ## What It Does
 
-You use Claude Code or Codex CLI normally. After a turn you dictated by voice, the AI's reply is automatically spoken aloud through your Mac's speakers using a local TTS model (you can also set replies to speak on typed turns, or always — see Response mode). Three voice input modes: **Press-to-Talk** (press hotkey to start/stop), **Hold-to-Talk** (hold hotkey to record, release to transcribe), or **Hands-Free** (say "initiate" to start recording, 3s silence auto-transcribes, say "hold on" to interrupt TTS).
+You use Claude Code or Codex CLI normally. After a turn you dictated by voice, the AI's reply is automatically spoken aloud through your Mac's speakers using a local TTS model (you can also set replies to always speak — see Response mode). Three voice input modes: **Press-to-Talk** (press hotkey to start/stop), **Hold-to-Talk** (hold hotkey to record, release to transcribe), or **Hands-Free** (say "initiate" to start recording, 3s silence auto-transcribes, say "hold on" to interrupt TTS).
 
 Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
@@ -31,7 +31,7 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 - **Auto-focus any installed app** — the **Automation** dropdown now offers a searchable list of *every* app installed on your Mac (Word, WhatsApp, Slack, …), alongside the curated dev/terminal favorites and a Custom entry. Search it by name and pin dictation to whichever app you like.
 - **Snappier menu** — fixed a 3–4 second freeze when opening the menubar popover. A synchronous "launch at login" status check (an XPC call to `launchservicesd`) was blocking the main thread on every open; it now runs off-main.
-- **Response mode** — a new **Response** control in Voice Settings (beside Style) chooses *when* replies are spoken: **when Voice** (dictated turns only — the default, unchanged), **when Text** (typed turns only), or **Always**. Per-project override via `OW_TTS_RESPONSE`.
+- **Response mode** — a new **Response** control in Voice Settings (beside Style) chooses *when* replies are spoken: **when Voice** (dictated turns only — the default, unchanged) or **Always**. Per-project override via `OW_TTS_RESPONSE`.
 - **Automation polish** — "with return" is grouped under auto-focus, and the behavior hint now reflects your exact auto-focus / with-return / auto-submit combination.
 - **In-app help** — a hover **ⓘ** on every section explains what it does, and the Hook setup instructions are corrected to document both hooks (Stop + UserPromptSubmit).
 - **Menu tidy** — the auto-focus card is now **App Focus Automation**, the platform/setup card is **Setup TTS for** (with Volume tucked inside), and all section titles share one consistent weight.
@@ -62,7 +62,7 @@ The menubar icon gives you:
 - **Language selector** — set STT language to avoid hallucinations (auto-detect plus 17 languages)
 - **Voice picker** — choose from six Kokoro voices across English (Heart, Bella, Michael), French (Siwis), and Italian (Sara, Nicola) (no server restart needed)
 - **Style** — how verbose the spoken summary is: Terse, Normal (default), Rich, or Full (speaks the entire reply)
-- **Response** — when replies are spoken: when Voice (dictated turns only, the default), when Text (typed turns only), or Always
+- **Response** — when replies are spoken: when Voice (dictated turns only, the default) or Always
 - **Volume** — Low, Medium (default), or High output volume (in the **Setup TTS for** card)
 - **Start on startup** — optional login item to launch automatically when you log in
 - **App Focus Automation** — Auto-Focus and Auto-Submit (requires Accessibility permission)
@@ -145,7 +145,7 @@ There's no special tag to add — voice mode works automatically. The app and it
 - **Screen**: you see the full detailed response
 - **Speakers**: you hear the spoken opening summary
 
-This "dictated turns only" behavior is the default. The **Response** control in Voice Settings changes *when* replies are spoken: **when Voice** (dictated turns only — the default), **when Text** (typed turns only), or **Always** (every turn). Per-project override via `OW_TTS_RESPONSE`.
+This "dictated turns only" behavior is the default. The **Response** control in Voice Settings changes *when* replies are spoken: **when Voice** (dictated turns only — the default) or **Always** (every turn). Per-project override via `OW_TTS_RESPONSE`.
 
 ### Voice Style Levels
 
@@ -170,7 +170,7 @@ Most settings are configured from the menubar (voice, volume, language, hotkey, 
 | `TTS_VOLUME` | `1` | `speak.sh` | Playback volume (the in-app player uses the menubar volume setting instead) |
 | `OW_TTS_STYLE` | menubar **Style** | hooks | Per-project spoken-summary style (`terse`/`normal`/`rich`/`full`); overrides the global `tts_style` |
 | `OW_TTS_VOICE` | menubar voice | hooks | Per-project Kokoro voice; overrides the global `tts_voice` |
-| `OW_TTS_RESPONSE` | menubar **Response** | hooks | Per-project response mode (`voice`/`text`/`always`); overrides the global `tts_response_mode` |
+| `OW_TTS_RESPONSE` | menubar **Response** | hooks | Per-project response mode (`voice`/`always`); overrides the global `tts_response_mode` |
 
 > **Tip:** Setting a specific language (e.g. English) instead of auto-detect prevents Whisper from hallucinating text in other languages during silence or background noise.
 

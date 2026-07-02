@@ -1,7 +1,8 @@
 import OpenWhispererKit
 
-/// Checks for `TTSSpeed` — the clamp/parse shared by TTSPlaybackController.readSpeed()
-/// and TTSHTTPServer.userSpeed(). Bounds MUST match the menubar Slider's `in:` range.
+/// Checks for `TTSSpeed` — the clamp/parse used wherever the app reads the `tts_speed` pref
+/// (TTSHTTPServer.userSpeed() + the `/v1/audio/play` and `speak` clamp sites). Bounds MUST
+/// match the menubar Slider's `in:` range.
 func ttsSpeedFailures() -> [String] {
     var failures: [String] = []
 
