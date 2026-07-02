@@ -135,19 +135,19 @@ func voiceContextFailures() -> [String] {
         if s.voiceTurnExists() { fail("alwaysVoice: voice_turn should be claimed") }
     }
 
-    // 12) text + typed turn → speaks.
-    do {
-        let s = newSandbox(); s.writeResponseMode("text")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed thing", session: "s-tt"), sandbox: s)
-        if nudge(r.stdout)?.contains("`speak` tool") != true { fail("textTyped: missing nudge") }
-    }
-
-    // 13) text + dictated turn → silent, signal still consumed.
+    // 12) removed `text` mode + dictated turn → behaves as voice: speaks and claims the signal.
     do {
         let s = newSandbox(); s.writeResponseMode("text"); s.writeVoiceTurn(forPrompt: "spoke this")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "spoke this", session: "s-tv"), sandbox: s)
-        if !r.stdout.isEmpty { fail("textVoice: expected silence, got \(r.stdout.debugDescription)") }
-        if s.voiceTurnExists() { fail("textVoice: voice_turn should be consumed") }
+        if nudge(r.stdout)?.contains("`speak` tool") != true { fail("textIsVoiceDictated: expected nudge, got \(r.stdout.debugDescription)") }
+        if s.voiceTurnExists() { fail("textIsVoiceDictated: voice_turn should be claimed") }
+    }
+
+    // 13) removed `text` mode + typed turn → behaves as voice: stays silent.
+    do {
+        let s = newSandbox(); s.writeResponseMode("text")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed thing", session: "s-tt"), sandbox: s)
+        if !r.stdout.isEmpty { fail("textIsVoiceTyped: expected silence, got \(r.stdout.debugDescription)") }
     }
 
     // 14) per-project OW_TTS_RESPONSE env overrides the global file.

@@ -415,6 +415,14 @@ enum ConfigManager {
         try? fm.moveItem(at: Paths.legacyVoiceDetail, to: Paths.ttsStyle)
     }
 
+    /// One-shot: the `text` response mode was removed (no sensible use case). Rewrite any
+    /// persisted `tts_response_mode` == "text" to the default "voice" so the picker and hook agree.
+    static func migrateRemoveTextResponseMode() {
+        guard let raw = try? String(contentsOf: Paths.ttsResponseMode, encoding: .utf8),
+              raw.trimmingCharacters(in: .whitespacesAndNewlines) == "text" else { return }
+        try? "voice".write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
+    }
+
     /// One-shot upgrade cleanup: remove our obsolete Stop hook from ~/.claude/settings.json so an
     /// old install doesn't keep a dead `tts-hook.sh` entry (the script no longer ships).
     static func migrateRemoveClaudeStopHook() {

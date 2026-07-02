@@ -178,7 +178,6 @@ struct MenuBarView: View {
     // the tts_response_mode values read by voice-context.sh / codex-tts-hook.sh.
     private static let responseModes: [(id: String, label: String)] = [
         ("voice", "when Voice"),
-        ("text", "when Text"),
         ("always", "Always"),
     ]
 
@@ -658,7 +657,7 @@ struct MenuBarView: View {
                             }
                         OWMenuPicker(selection: $selectedResponse, options: Self.responseModes)
                             .frame(maxWidth: .infinity)
-                            .help("When replies are spoken: when Voice = only dictated turns, when Text = only typed turns, Always = every turn.")
+                            .help("When replies are spoken: when Voice = only dictated turns, Always = every turn.")
                             .onChange(of: selectedResponse) { _, newValue in
                                 try? newValue.write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
                             }

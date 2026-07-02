@@ -4,7 +4,6 @@
 #
 # Response mode (tts_response_mode, or per-project OW_TTS_RESPONSE):
 #   voice  (default) — speak only voice-dictated turns (prompt hash matches voice_turn)
-#   text             — speak only typed turns (no fresh voice_turn match)
 #   always           — speak every turn
 # There is no Stop hook and no speak_pending marker: the model's own `speak` call is the audio.
 # Both platforms pass {prompt, session_id, hook_event_name:"UserPromptSubmit"} and accept the
@@ -66,8 +65,7 @@ fi
 SPEAK=0
 case "$MODE" in
   always) SPEAK=1 ;;
-  text)   [ "$IS_VOICE" -eq 0 ] && SPEAK=1 ;;
-  *)      [ "$IS_VOICE" -eq 1 ] && SPEAK=1 ;;   # voice (default)
+  *)      [ "$IS_VOICE" -eq 1 ] && SPEAK=1 ;;   # voice (default); a stale "text" falls here
 esac
 [ "$SPEAK" -eq 1 ] || exit 0
 

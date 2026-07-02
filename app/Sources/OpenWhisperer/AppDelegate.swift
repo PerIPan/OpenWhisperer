@@ -13,6 +13,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Rename legacy voice_detail → tts_style before the menubar UI reads it.
         ConfigManager.migrateVoiceDetailToTtsStyle()
+        // The `text` response mode was removed — coerce any persisted value to the default.
+        ConfigManager.migrateRemoveTextResponseMode()
         // Strip the obsolete Stop hook (replaced by the speak MCP tool) from existing installs.
         ConfigManager.migrateRemoveClaudeStopHook()
         // Prompt for Accessibility permission if not already granted
