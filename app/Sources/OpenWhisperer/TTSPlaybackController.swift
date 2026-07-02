@@ -100,11 +100,7 @@ actor TTSPlaybackController {
     private func removeLock() { try? FileManager.default.removeItem(at: lockURL) }
 
     private static func readVolume() -> Float {
-        let url = Paths.appSupport.appendingPathComponent("tts_volume")
-        guard let raw = try? String(contentsOf: url, encoding: .utf8)
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            let v = Float(raw) else { return 1 }
-        return v
+        TTSVolume.parse(try? String(contentsOf: Paths.ttsVolume, encoding: .utf8))
     }
 
     private static func readSpeed() -> Float {

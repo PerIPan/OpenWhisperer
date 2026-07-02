@@ -81,7 +81,7 @@ struct MenuBarView: View {
     @State private var selectedPTTKey = "ctrl"
     @State private var selectedMode: InteractionMode = .holdToTalk
     @State private var silenceThreshold: Int = 3
-    @State private var selectedVolume = "medium"
+    @State private var selectedVolume: Double = 1.0
     @State private var selectedVoice = "af_heart"
     @State private var selectedSpeed: Double = 1.0
     @State private var selectedLanguage = "en"
@@ -180,12 +180,6 @@ struct MenuBarView: View {
         ("voice", "when Voice"),
         ("text", "when Text"),
         ("always", "Always"),
-    ]
-
-    private static let volumeLevels: [(id: String, label: String, value: String)] = [
-        ("low", "Low", "0.3"),
-        ("medium", "Medium", "1"),
-        ("high", "High", "4"),
     ]
 
     private static let focusApps: [(id: String, label: String)] = [
@@ -312,13 +306,7 @@ struct MenuBarView: View {
                     selectedResponse = mode
                 }
             }
-            if let savedVolume = try? String(contentsOf: Paths.ttsVolume, encoding: .utf8),
-               !savedVolume.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let val = savedVolume.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let match = Self.volumeLevels.first(where: { $0.value == val }) {
-                    selectedVolume = match.id
-                }
-            }
+            selectedVolume = Double(TTSVolume.parse(try? String(contentsOf: Paths.ttsVolume, encoding: .utf8)))
             selectedSpeed = Double(TTSSpeed.parse(try? String(contentsOf: Paths.ttsSpeed, encoding: .utf8)))
             selectedMode = InteractionMode.load()
             if let savedStr = try? String(contentsOf: Paths.silenceThreshold, encoding: .utf8),
@@ -330,7 +318,8 @@ struct MenuBarView: View {
     }
 
     /// "1×", "1.15×", "1.2×" — trims trailing zeros so the slider readout stays tidy.
-    private func speedLabel(_ v: Double) -> String {
+    /// Formats a playback multiplier (speed or volume) as a trimmed "1.5×" / "1×".
+    private func multiplierLabel(_ v: Double) -> String {
         var s = String(format: "%.2f", v)
         while s.contains(".") && (s.hasSuffix("0") || s.hasSuffix(".")) { s.removeLast() }
         return s + "×"
@@ -618,7 +607,7 @@ struct MenuBarView: View {
                         Slider(value: $selectedSpeed, in: 0.7...1.5, step: 0.05)
                             .tint(OWColor.accent)
                             .help("How fast replies are read aloud. 1× is the default Kokoro rate; higher is faster. Spoken output only.")
-                        Text(speedLabel(selectedSpeed))
+                        Text(multiplierLabel(selectedSpeed))
                             .font(OWFont.body(11))
                             .foregroundColor(.secondary)
                             .monospacedDigit()
@@ -631,7 +620,28 @@ struct MenuBarView: View {
                         .write(to: Paths.ttsSpeed, atomically: true, encoding: .utf8)
                 }
 
-                // No visible separator between Speed and Response, but keep the same
+                OWInternalDivider()
+
+                OWPickerRow(label: "Volume", labelWidth: 62) {
+                    HStack(spacing: 8) {
+                        // Bounds MUST equal TTSVolume.min/max (see TTSVolume.swift).
+                        Slider(value: $selectedVolume, in: 0.3...2.0, step: 0.05)
+                            .tint(OWColor.accent)
+                            .help("How loud replies are read aloud. 1× is normal; higher is louder and may clip. Spoken output only.")
+                        Text(multiplierLabel(selectedVolume))
+                            .font(OWFont.body(11))
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 34, alignment: .trailing)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .onChange(of: selectedVolume) { _, newValue in
+                    try? String(format: "%.2f", newValue)
+                        .write(to: Paths.ttsVolume, atomically: true, encoding: .utf8)
+                }
+
+                // No visible separator between Volume and Response, but keep the same
                 // gap (the divider was 0.5pt) so the rows don't move closer.
                 Color.clear.frame(height: 0.5)
 
@@ -781,7 +791,7 @@ struct MenuBarView: View {
         OWCollapsibleCard(
             title: "Setup TTS for",
             icon: "hammer",
-            help: "Wire up spoken replies for your CLI (Claude Code or Codex) — Auto-Apply writes the hooks. Volume here sets playback loudness.",
+            help: "Wire up spoken replies for your CLI (Claude Code or Codex) — Auto-Apply writes the hooks.",
             expanded: $setupExpanded
         ) {
             OWMenuPicker(
@@ -842,20 +852,6 @@ struct MenuBarView: View {
                 }
                 // (Removed the redundant "HOOK configured" diagnostic row —
                 // the Applied pill above already conveys this state.)
-
-                OWInternalDivider()
-
-                // Volume — low-level TTS playback gain; tucked at the bottom of Setup.
-                OWPickerRow(label: "Volume", labelWidth: 62) {
-                    OWMenuPicker(selection: $selectedVolume, options: Self.volumeLevels.map { (id: $0.id, label: $0.label) })
-                        .frame(maxWidth: .infinity)
-                        .help("Spoken-reply loudness: Low is quieter, Medium is normal, High is loudest and may clip loud passages.")
-                }
-                .onChange(of: selectedVolume) { _, newValue in
-                    if let level = Self.volumeLevels.first(where: { $0.id == newValue }) {
-                        try? level.value.write(to: Paths.ttsVolume, atomically: true, encoding: .utf8)
-                    }
-                }
             }
         }
         .onChange(of: setupExpanded) { _, newValue in
