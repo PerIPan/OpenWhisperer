@@ -117,7 +117,7 @@ func voiceContextFailures() -> [String] {
         if n?.contains("`speak` tool") != true { fail("fullStyle: missing speak-tool instruction") }
     }
 
-    // --- Response mode (tts_response_mode): voice (default) | text | always ---
+    // --- Response mode (tts_response_mode): voice (default) | always ---
 
     // 10) always + typed turn → speak-tool nudge, no marker.
     do {
@@ -256,6 +256,58 @@ func voiceContextFailures() -> [String] {
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
         if n?.contains("Italian") != true { fail("italianPersona: \(n?.debugDescription ?? "nil")") }
         if n?.contains("caricature") != true { fail("italianPersona: missing persona") }
+    }
+
+    // --- Per-project voice/speed overrides (env → nudge args; flavor follows the override) ---
+
+    // 25) OW_TTS_VOICE override → nudge instructs speak with that voice arg.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
+                         sandbox: s, env: ["OW_TTS_VOICE": "ff_siwis"])
+        if nudge(r.stdout)?.contains("voice=\"ff_siwis\"") != true {
+            fail("voiceOverrideArg: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 26) OW_TTS_SPEED (numeric) override → nudge instructs speak with that speed arg.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
+                         sandbox: s, env: ["OW_TTS_SPEED": "1.2"])
+        if nudge(r.stdout)?.contains("speed=1.2") != true {
+            fail("speedOverrideArg: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 27) no override → nudge carries no voice=/speed= args (default nudge unchanged).
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let n = nudge(r.stdout)
+        if n?.contains("voice=") == true || n?.contains("speed=") == true {
+            fail("noOverrideNoArgs: unexpected arg injected: \(n?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 28) non-numeric OW_TTS_SPEED is dropped (garbage never reaches the nudge).
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
+                         sandbox: s, env: ["OW_TTS_SPEED": "fast"])
+        if nudge(r.stdout)?.contains("speed=") == true {
+            fail("badSpeedDropped: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 29) flavor follows OW_TTS_VOICE, not the global file: French override beats an English global.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("af_heart")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
+                         sandbox: s, env: ["OW_TTS_VOICE": "ff_siwis", "OW_FLAVOR_ROLL": "0"])
+        if nudge(r.stdout)?.contains("French") != true {
+            fail("flavorFollowsOverride: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
     }
 
     return failures

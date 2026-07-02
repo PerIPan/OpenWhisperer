@@ -85,7 +85,11 @@ esac
 #   2. Native words (gated ~1 in 5 turns): a rare, actual foreign word — ONLY for non-English voices
 #      (FLAVOR_NATIVE); English has no word to code-switch. OW_FLAVOR_ROLL pins the dice for tests.
 # The map lives ONLY here (unknown/no voice → nothing); HookTests is its guard.
-VOICE=$(cat "$APP_SUPPORT/tts_voice" 2>/dev/null | tr -d '[:space:]')
+# Resolved voice: per-project OW_TTS_VOICE env → global tts_voice file. Drives BOTH the
+# persona/native-tongue flavor (below) and, when it came from the env override, the speak arg.
+VOICE="$OW_TTS_VOICE"
+[ -z "$VOICE" ] && VOICE=$(cat "$APP_SUPPORT/tts_voice" 2>/dev/null)
+VOICE=$(printf '%s' "$VOICE" | tr -d '[:space:]')
 FLAVOR_LANG=""; FLAVOR_PERSONA=""; FLAVOR_NATIVE=""
 case "${VOICE:0:1}" in
   a) FLAVOR_LANG="American English"; FLAVOR_PERSONA="quietly self-assured — a light touch of Silicon Valley optimism, comfortable making the case for the upside, but low-key and never hyped or salesy" ;;
@@ -111,8 +115,18 @@ if [ -n "$FLAVOR_PERSONA" ]; then
   fi
 fi
 
+# Per-project overrides → tell the model to pass them to `speak`. Only an override needs
+# injecting; the global voice/speed are already the tool's defaults. Speed must be numeric.
+SPEAK_ARGS=""
+OVR=""
+[ -n "$OW_TTS_VOICE" ] && OVR=" voice=\"$VOICE\""
+if [ -n "$OW_TTS_SPEED" ] && printf '%s' "$OW_TTS_SPEED" | grep -Eq '^[0-9]+(\.[0-9]+)?$'; then
+  OVR="${OVR} speed=$OW_TTS_SPEED"
+fi
+[ -n "$OVR" ] && SPEAK_ARGS=" Call it with${OVR}."
+
 if [ "$IS_VOICE" -eq 1 ]; then PREFIX="This turn was dictated by voice."; else PREFIX="This reply should be spoken aloud."; fi
-NUDGE="${PREFIX} Before writing your on-screen reply, your FIRST action must be to call the \`speak\` tool exactly once, passing ${LEN} that summarizes your answer and stands alone when heard. Then write your full reply on screen as usual. Do not skip the speak call, and do not mention the tool in your written reply.${FLAVOR}"
+NUDGE="${PREFIX} Before writing your on-screen reply, your FIRST action must be to call the \`speak\` tool exactly once, passing ${LEN} that summarizes your answer and stands alone when heard.${SPEAK_ARGS} Then write your full reply on screen as usual. Do not skip the speak call, and do not mention the tool in your written reply.${FLAVOR}"
 
 jq -n --arg ctx "$NUDGE" '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $ctx}, suppressOutput: true}'
 exit 0
