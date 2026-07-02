@@ -171,7 +171,8 @@ func voiceContextFailures() -> [String] {
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        // Force the 1-in-5 flavor dice ON (OW_FLAVOR_ROLL=0) so the addendum is deterministic.
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s, env: ["OW_FLAVOR_ROLL": "0"])
         let n = nudge(r.stdout)
         if n?.contains("French") != true { fail("frenchFlavor: missing 'French': \(n?.debugDescription ?? "nil")") }
         if n?.contains("bilingual") != true { fail("frenchFlavor: missing addendum: \(n?.debugDescription ?? "nil")") }
@@ -182,7 +183,7 @@ func voiceContextFailures() -> [String] {
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("jf_alpha")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s, env: ["OW_FLAVOR_ROLL": "0"])
         if nudge(r.stdout)?.contains("Japanese") != true {
             fail("japaneseFlavor: \(nudge(r.stdout)?.debugDescription ?? "nil")")
         }
@@ -208,7 +209,7 @@ func voiceContextFailures() -> [String] {
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis"); s.writeTtsStyle("terse")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s, env: ["OW_FLAVOR_ROLL": "0"])
         let n = nudge(r.stdout)
         if n?.contains("one short, plain spoken sentence") != true { fail("terseFrenchCompose: terse length lost") }
         if n?.contains("bilingual") != true { fail("terseFrenchCompose: flavor missing") }
@@ -222,11 +223,22 @@ func voiceContextFailures() -> [String] {
         if nudge(r.stdout)?.contains("bilingual") == true { fail("ukEnglishNoFlavor: unexpected addendum") }
     }
 
-    // 22) a different non-English branch (Italian) → its language named.
+    // 22) non-English voice but a "miss" on the 1-in-5 flavor dice → NO addendum (the gate works),
+    //     while the base speak nudge is still present.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s, env: ["OW_FLAVOR_ROLL": "1"])
+        let n = nudge(r.stdout)
+        if n?.contains("bilingual") == true { fail("flavorGateMiss: addendum present on a miss roll") }
+        if n?.contains("`speak` tool") != true { fail("flavorGateMiss: base nudge lost") }
+    }
+
+    // 23) a different non-English branch (Italian) → its language named.
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("if_sara")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s, env: ["OW_FLAVOR_ROLL": "0"])
         if nudge(r.stdout)?.contains("Italian") != true { fail("italianFlavor: \(nudge(r.stdout)?.debugDescription ?? "nil")") }
     }
 

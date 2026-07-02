@@ -98,7 +98,12 @@ case "${VOICE:0:1}" in
 esac
 FLAVOR=""
 if [ -n "$FLAVOR_LANG" ]; then
-  FLAVOR=" The voice reading this aloud is ${FLAVOR_LANG}. Unless your spoken sentence is already in ${FLAVOR_LANG}, lightly flavor it the way a bilingual ${FLAVOR_LANG} speaker naturally would — an occasional ${FLAVOR_LANG} word or expression and a touch of native mannerism — kept subtle, never a caricature, and never at the expense of being understood."
+  # Occasional, NOT every turn: only ~1 in 5 voice turns carry the flavor line, so spoken
+  # replies stay mostly plain and it never becomes a tic. OW_FLAVOR_ROLL pins the dice for tests.
+  ROLL="${OW_FLAVOR_ROLL:-$((RANDOM % 5))}"
+  if [ "$ROLL" -eq 0 ]; then
+    FLAVOR=" The voice reading this aloud is ${FLAVOR_LANG}. If it feels natural, you may let a ${FLAVOR_LANG} word or expression slip into your spoken sentence the way a bilingual ${FLAVOR_LANG} speaker might — subtle, never forced, never a caricature, never at the expense of being understood. If nothing fits naturally, plain English is perfectly fine."
+  fi
 fi
 
 if [ "$IS_VOICE" -eq 1 ]; then PREFIX="This turn was dictated by voice."; else PREFIX="This reply should be spoken aloud."; fi
