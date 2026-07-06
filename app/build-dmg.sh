@@ -48,13 +48,18 @@ cp "$SCRIPT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 cp "$SCRIPT_DIR/Resources/Outfit-VariableFont_wght.ttf" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 cp "$SCRIPT_DIR/Resources/Fraunces.ttf" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 
-# Step 3: Bundle the voice hook (Claude + Codex), speak.sh, and the Pi extension
+# Step 3: Bundle the voice hooks (Claude/Codex + Antigravity), their shared logic, speak.sh,
+# and the Pi extension
 cp "$PROJECT_DIR/hooks/voice-context.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
+cp "$PROJECT_DIR/hooks/voice-shared.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
+cp "$PROJECT_DIR/hooks/agy-previnvocation.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/scripts/speak.sh" "$APP_BUNDLE/Contents/Resources/scripts/"
 cp "$PROJECT_DIR/pi/openwhisperer.ts" "$APP_BUNDLE/Contents/Resources/pi/"
 
 # Make scripts executable
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/voice-context.sh"
+chmod +x "$APP_BUNDLE/Contents/Resources/hooks/voice-shared.sh"
+chmod +x "$APP_BUNDLE/Contents/Resources/hooks/agy-previnvocation.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/scripts/speak.sh"
 
 # Step 4: Bundle jq binary (detect architecture) — the hooks use jq for JSON
