@@ -5,6 +5,7 @@ import Foundation
 /// failure). Aggregates every check group and reports all failures.
 var failures: [String] = []
 failures += voiceContextFailures()
+failures += agyPreInvocationFailures()
 
 if failures.isEmpty {
     print("✅ HookTests: all checks passed")

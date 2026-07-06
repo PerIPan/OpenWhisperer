@@ -83,6 +83,28 @@ enum Hook {
                              atomically: true, encoding: .utf8)
         }
 
+        /// Write a minimal agy `transcript_full.jsonl` fixture: one `USER_EXPLICIT` line per
+        /// entry in `userTexts`, each wrapped exactly as agy wraps a real submitted prompt
+        /// (`<USER_REQUEST>\n<text>\n</USER_REQUEST>\n<ADDITIONAL_METADATA>...`). The hook always
+        /// reads the LAST `USER_EXPLICIT` entry, so a multi-entry fixture proves it ignores
+        /// earlier turns. Returns the transcript file's path.
+        func writeAgyTranscript(_ userTexts: [String]) -> URL {
+            let path = home.appendingPathComponent("transcript_full.jsonl")
+            var lines: [String] = []
+            for (i, text) in userTexts.enumerated() {
+                let stamp = String(format: "2026-07-06T09:12:%02dZ", i)
+                let content = "<USER_REQUEST>\n\(text)\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: \(stamp).\n</ADDITIONAL_METADATA>"
+                let obj: [String: Any] = [
+                    "step_index": i, "source": "USER_EXPLICIT", "type": "text",
+                    "status": "done", "created_at": stamp, "content": content,
+                ]
+                let data = try! JSONSerialization.data(withJSONObject: obj)
+                lines.append(String(data: data, encoding: .utf8)!)
+            }
+            try? lines.joined(separator: "\n").write(to: path, atomically: true, encoding: .utf8)
+            return path
+        }
+
         /// Create a `speak_pending/<sanitized session id>` marker the Stop hook gate looks for.
         func writeMarker(session: String) {
             let dir = appSupport.appendingPathComponent("speak_pending")
