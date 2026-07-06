@@ -8,12 +8,14 @@ enum Platform: String, CaseIterable {
     case claudeCode = "claudeCode"
     case codexCLI = "codexCLI"
     case pi = "pi"
+    case antigravity = "antigravity"
 
     var label: String {
         switch self {
         case .claudeCode: return "Claude Code"
         case .codexCLI: return "Codex CLI"
         case .pi: return "Pi"
+        case .antigravity: return "Antigravity"
         }
     }
 
@@ -264,6 +266,105 @@ enum ConfigManager {
         FileManager.default.fileExists(atPath: Paths.piExtensionDest.path)
     }
 
+    // MARK: - Antigravity CLI (agy): mcp_config.json + hooks.json
+
+    static func showAntigravityInstructions() {
+        let window = InstructionWindow(
+            title: "Step 1: Antigravity CLI voice (mcp_config.json + hooks.json)",
+            instructions: """
+            OpenWhisperer adds voice to Antigravity CLI (agy) in two pieces. "Apply"
+            wires both automatically; to do it by hand:
+
+            1) The `speak` MCP tool (in ~/.gemini/config/mcp_config.json) — reuses
+               the same endpoint Claude/Codex/Pi talk to, over agy's SSE transport:
+
+               {
+                 "mcpServers": {
+                   "openwhisperer": { "serverUrl": "http://localhost:8000/mcp" }
+                 }
+               }
+
+            2) The PreInvocation hook (in ~/.gemini/config/hooks.json) — nudges the
+               model to speak a summary first on dictated turns:
+
+               {
+                 "openwhisperer": {
+                   "PreInvocation": [
+                     { "type": "command", "command": "\(Paths.agyPreInvocationHook.path)", "timeout": 10 }
+                   ]
+                 }
+               }
+
+            Start a NEW agy session afterward so it picks up both changes.
+
+            By default only voice-dictated turns are spoken; typed turns stay silent. Change this with the Response setting (text = typed turns only; always = every turn).
+            """
+        )
+        window.show()
+    }
+
+    /// Register the `speak` MCP server (SSE transport, same /mcp endpoint Claude/Codex/Pi use)
+    /// in ~/.gemini/config/mcp_config.json, and the shared PreInvocation hook in the GLOBAL
+    /// ~/.gemini/config/hooks.json (confirmed live: the global file fires for any workspace).
+    /// Merges into existing config rather than overwriting it; idempotent.
+    static func applyToAntigravity() -> (success: Bool, message: String) {
+        let fm = FileManager.default
+
+        // MCP registration.
+        try? fm.createDirectory(at: Paths.agyMCPConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var mcpRoot: [String: Any] = [:]
+        if fm.fileExists(atPath: Paths.agyMCPConfig.path),
+           let data = try? Data(contentsOf: Paths.agyMCPConfig),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            mcpRoot = json
+        }
+        var servers = mcpRoot["mcpServers"] as? [String: Any] ?? [:]
+        servers["openwhisperer"] = ["serverUrl": "http://localhost:8000/mcp"]
+        mcpRoot["mcpServers"] = servers
+        guard let mcpOut = try? JSONSerialization.data(withJSONObject: mcpRoot, options: [.prettyPrinted, .withoutEscapingSlashes]) else {
+            return (false, "Failed to serialize mcp_config.json")
+        }
+        do {
+            try mcpOut.write(to: Paths.agyMCPConfig)
+        } catch {
+            return (false, "mcp_config.json write failed: \(error.localizedDescription)")
+        }
+
+        // Hook registration.
+        try? fm.createDirectory(at: Paths.agyHooksConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var hooksRoot: [String: Any] = [:]
+        if fm.fileExists(atPath: Paths.agyHooksConfig.path),
+           let data = try? Data(contentsOf: Paths.agyHooksConfig),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            hooksRoot = json
+        }
+        hooksRoot["openwhisperer"] = [
+            "PreInvocation": [
+                ["type": "command", "command": Paths.agyPreInvocationHook.path, "timeout": 10]
+            ]
+        ]
+        guard let hooksOut = try? JSONSerialization.data(withJSONObject: hooksRoot, options: [.prettyPrinted, .withoutEscapingSlashes]) else {
+            return (false, "Failed to serialize hooks.json")
+        }
+        do {
+            try hooksOut.write(to: Paths.agyHooksConfig)
+            return (true, "MCP server + PreInvocation hook applied — start a new agy session")
+        } catch {
+            return (false, "hooks.json write failed: \(error.localizedDescription)")
+        }
+    }
+
+    static func checkAntigravityConfigured() -> Bool {
+        guard let mcpData = try? Data(contentsOf: Paths.agyMCPConfig),
+              let mcpJSON = try? JSONSerialization.jsonObject(with: mcpData) as? [String: Any],
+              let servers = mcpJSON["mcpServers"] as? [String: Any],
+              servers["openwhisperer"] != nil else { return false }
+        guard let hooksData = try? Data(contentsOf: Paths.agyHooksConfig),
+              let hooksJSON = try? JSONSerialization.jsonObject(with: hooksData) as? [String: Any],
+              hooksJSON["openwhisperer"] != nil else { return false }
+        return true
+    }
+
     // MARK: - Platform-dispatching wrappers
 
     static func applyHook(for platform: Platform) -> (success: Bool, message: String) {
@@ -271,6 +372,7 @@ enum ConfigManager {
         case .claudeCode: return applyHookToSettings()
         case .codexCLI: return applyHookToCodexConfig()
         case .pi: return applyToPi()
+        case .antigravity: return applyToAntigravity()
         }
     }
 
@@ -279,6 +381,7 @@ enum ConfigManager {
         case .claudeCode: return checkHookConfigured()
         case .codexCLI: return checkCodexHookConfigured()
         case .pi: return checkPiConfigured()
+        case .antigravity: return checkAntigravityConfigured()
         }
     }
 
@@ -287,6 +390,7 @@ enum ConfigManager {
         case .claudeCode: showClaudeMCPInstructions()
         case .codexCLI: showCodexConfigInstructions()
         case .pi: showPiInstructions()
+        case .antigravity: showAntigravityInstructions()
         }
     }
 
