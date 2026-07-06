@@ -12,18 +12,22 @@ func codexTtsHookFailures() -> [String] {
     func newSandbox() -> Hook.Sandbox { let s = Hook.Sandbox(); sandboxes.append(s); return s }
     func fail(_ s: String) { failures.append("codex-tts-hook.\(s)") }
 
-    // Codex agent-turn-complete payload (the hook reads .["last-assistant-message"]).
-    let payload: String = {
-        let d = try! JSONSerialization.data(withJSONObject: [
+    // Codex agent-turn-complete payload (the hook reads .["last-assistant-message"];
+    // newer builds also carry the turn's user messages as input_messages).
+    func makePayload(inputMessages: [String]? = nil) -> String {
+        var obj: [String: Any] = [
             "type": "agent-turn-complete",
             "last-assistant-message": "Done. The build is green.",
-        ])
+        ]
+        if let inputMessages { obj["input_messages"] = inputMessages }
+        let d = try! JSONSerialization.data(withJSONObject: obj)
         return String(data: d, encoding: .utf8)!
-    }()
+    }
+    let payload = makePayload()
 
-    func run(_ s: Hook.Sandbox, env: [String: String] = [:]) {
+    func run(_ s: Hook.Sandbox, payload override: String? = nil, env: [String: String] = [:]) {
         s.installCurlStub()
-        _ = Hook.run("codex-tts-hook.sh", args: [payload], stdin: "", sandbox: s, env: env)
+        _ = Hook.run("codex-tts-hook.sh", args: [override ?? payload], stdin: "", sandbox: s, env: env)
     }
 
     // voice (default) + dictated → speaks, signal claimed.
@@ -75,6 +79,48 @@ func codexTtsHookFailures() -> [String] {
         let s = newSandbox(); s.writeResponseMode("voice")
         run(s, env: ["OW_TTS_RESPONSE": "always"])
         if s.curlCalls().isEmpty { fail("envOverrideSpeaks: env=always did not POST a typed turn") }
+    }
+
+    // --- input_messages content-correlation (newer Codex payloads) ---
+
+    // Matching input message → dictated turn: speaks, signal claimed. Uses the real
+    // Swift-side hash via writeVoiceTurn, proving bash/Swift parity on this path too.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "fix the login bug")
+        run(s, payload: makePayload(inputMessages: ["fix the login bug"]))
+        if s.curlCalls().isEmpty { fail("inputMatchSpeaks: expected a POST") }
+        if s.voiceTurnExists() { fail("inputMatchSpeaks: voice_turn not claimed") }
+    }
+    // Non-matching input (a different/parallel turn) → silent AND the signal survives
+    // for the dictated turn's own event; that later matching event then speaks.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "fix the login bug")
+        run(s, payload: makePayload(inputMessages: ["unrelated typed prompt"]))
+        if !s.noCurlWithin() { fail("inputMismatchSilent: should not POST") }
+        if !s.voiceTurnExists() { fail("inputMismatchSilent: signal must survive a foreign turn") }
+        run(s, payload: makePayload(inputMessages: ["fix the login bug"]))
+        if s.curlCalls().isEmpty { fail("inputMismatchThenMatch: dictated turn should still speak") }
+        if s.voiceTurnExists() { fail("inputMismatchThenMatch: voice_turn not claimed") }
+    }
+    // Multi-message turn → match on any element.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "run the tests")
+        run(s, payload: makePayload(inputMessages: ["context blob", "run the tests"]))
+        if s.curlCalls().isEmpty { fail("inputAnyMatchSpeaks: expected a POST") }
+        if s.voiceTurnExists() { fail("inputAnyMatchSpeaks: voice_turn not claimed") }
+    }
+    // Whitespace parity: dictated text is trimmed on both sides before hashing.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "hello world")
+        run(s, payload: makePayload(inputMessages: ["  hello world \n"]))
+        if s.curlCalls().isEmpty { fail("inputTrimParity: trimmed message should match") }
+    }
+    // Empty input_messages array → treated as a foreign turn: silent, signal survives.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "x")
+        run(s, payload: makePayload(inputMessages: []))
+        if !s.noCurlWithin() { fail("inputEmptySilent: should not POST") }
+        if !s.voiceTurnExists() { fail("inputEmptySilent: signal must survive") }
     }
 
     return failures

@@ -24,8 +24,12 @@ if [ -z "$INPUT" ] || [ "$INPUT" = "$0" ]; then INPUT=$(cat); fi
 TYPE=$(echo "$INPUT" | jq -r '.type // empty' 2>/dev/null)
 if [ "$TYPE" != "agent-turn-complete" ] && [ -n "$TYPE" ]; then exit 0; fi
 
-# --- Voice-turn gate: Codex has no per-prompt session id, so gate on the app's voice_turn signal
-#     (presence + freshness) and clear it so future typed turns are not spoken. ---
+# --- Voice-turn gate: Codex has no per-prompt session id. When the notify payload
+#     carries the turn's user messages (input_messages, newer Codex builds), hash them
+#     against the stored signal — same content-correlation voice-context.sh does for
+#     Claude Code — so an unrelated turn completing can neither steal the signal (its
+#     reply spoken as if dictated) nor starve the dictated turn. Without the field,
+#     fall back to the legacy presence+freshness claim. ---
 # Response mode: per-project OW_TTS_RESPONSE env → global tts_response_mode → "voice".
 MODE="$OW_TTS_RESPONSE"
 [ -z "$MODE" ] && MODE=$(cat "$APP_SUPPORT/tts_response_mode" 2>/dev/null | tr -d '[:space:]')
@@ -33,16 +37,39 @@ MODE="$OW_TTS_RESPONSE"
 VOICE_TURN="$APP_SUPPORT/voice_turn"
 # voice_turn TTL (s) — kept uniform with voice-context.sh + the 15-min speak_pending sweep.
 VOICE_FRESHNESS=900
-# Is this a fresh dictated turn? Claim (consume) the signal so future turns aren't it.
+# Trim + SHA-256 — must stay byte-identical to VoiceSignal.canonicalHash (see HookTests).
+trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
+hash256() {
+  if command -v shasum >/dev/null 2>&1; then printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
+  else printf '%s' "$1" | openssl dgst -sha256 | awk '{print $NF}'; fi
+}
 IS_VOICE=0
 if [ -f "$VOICE_TURN" ]; then
+  VT_HASH=$(sed -n '1p' "$VOICE_TURN" 2>/dev/null)
   VT_TS=$(sed -n '2p' "$VOICE_TURN" 2>/dev/null)
   NOW=$(date +%s)
   if [ -n "$VT_TS" ] && [ "$((NOW - VT_TS))" -gt "$VOICE_FRESHNESS" ]; then
     rm -f "$VOICE_TURN"            # stale → treat as typed
   else
-    IS_VOICE=1
-    rm -f "$VOICE_TURN"           # claim
+    HAS_INPUTS=$(echo "$INPUT" | jq -r 'has("input_messages") or has("input-messages")' 2>/dev/null)
+    if [ "$HAS_INPUTS" = "true" ]; then
+      # Content-correlate: claim only when one of the turn's user messages hashes to
+      # the signal. base64 round-trip keeps multi-line messages intact through read.
+      while IFS= read -r MSG_B64; do
+        [ -z "$MSG_B64" ] && continue
+        MSG=$(printf '%s' "$MSG_B64" | base64 -d 2>/dev/null)
+        if [ -n "$MSG" ] && [ "$(hash256 "$(trim "$MSG")")" = "$VT_HASH" ]; then
+          IS_VOICE=1
+          rm -f "$VOICE_TURN"      # claim — this event is the dictated turn
+          break
+        fi
+      done < <(echo "$INPUT" | jq -r '(.input_messages // .["input-messages"] // [])[] | @base64' 2>/dev/null)
+      # No match → a different (typed/parallel) turn: leave the signal for the
+      # dictated turn's own completion event.
+    else
+      IS_VOICE=1
+      rm -f "$VOICE_TURN"          # claim (legacy payload: no way to correlate)
+    fi
   fi
 fi
 case "$MODE" in
