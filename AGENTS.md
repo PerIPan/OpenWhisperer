@@ -101,7 +101,7 @@ First run downloads the models; both then prefer their on-disk cache and load **
 
 - WhisperKit → `~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/<model>` (`SpeechTranscriber` explicitly loads with `download: false` when cached).
 - FluidAudio Kokoro → `~/.cache/fluidaudio` (models and voice packs).
-  - *Note on Alternative Voices:* The upstream `FluidInference/kokoro-82m-coreml` repository only hosts the default `af_heart.bin` voice file under the `ANE/` subpath. Downloading alternative voices from this repository will fail (404/silent error). To use other voices (e.g. `af_bella`, `am_michael`, `ff_siwis`, `ef_dora`, etc.), they must be manually downloaded from the `onnx-community/Kokoro-82M-v1.0-ONNX` repository under `resolve/main/voices/<voice>.bin` and placed in `~/.cache/fluidaudio/Models/kokoro-82m-coreml/ANE/<voice>.bin`.
+  - *Note on Alternative Voices:* The upstream `FluidInference/kokoro-82m-coreml` repository only hosts the default `af_heart.bin` voice under the `ANE/` subpath, so `KokoroTTS.ensureVoicePack()` auto-downloads any other selected voice (e.g. `af_bella`, `am_michael`, `ff_siwis`) from `onnx-community/Kokoro-82M-v1.0-ONNX` (`resolve/main/voices/<voice>.bin`) into `~/.cache/fluidaudio/Models/kokoro-82m-coreml/ANE/` on first use — no manual step. It re-fetches if the cached file is missing or under 1 KB, and rejects non-200 responses so an error page is never cached as a voice.
 
 This matters because the developer's firewall (Little Snitch) blocks the HuggingFace **Xet CDN**, which breaks fresh downloads — an already-cached model still loads.
 
