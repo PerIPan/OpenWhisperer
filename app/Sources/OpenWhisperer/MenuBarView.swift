@@ -790,7 +790,7 @@ struct MenuBarView: View {
         OWCollapsibleCard(
             title: "Setup TTS for",
             icon: "hammer",
-            help: "Wire up spoken replies for your CLI (Claude Code or Codex) — Auto-Apply writes the hooks.",
+            help: "Wire up spoken replies for your CLI (Claude Code, Codex, Antigravity, or Pi) — Auto-Apply writes the hooks.",
             expanded: $setupExpanded
         ) {
             OWMenuPicker(
@@ -798,7 +798,7 @@ struct MenuBarView: View {
                 options: Platform.allCases.map { (id: $0, label: $0.label) }
             )
             .frame(width: 104)
-            .help("Which coding agent you're setting up. Claude/Codex get a hook + speak tool; Pi gets an extension.")
+            .help("Which coding agent you're setting up. Claude/Codex/Antigravity get a hook + speak tool; Pi gets an extension.")
             .onChange(of: selectedPlatform) { _, newValue in
                 newValue.save()
                 refreshDiagnostics()
@@ -837,7 +837,9 @@ struct MenuBarView: View {
                         ? "Writes the UserPromptSubmit hook into ~/.claude/settings.json + the speak MCP server into ~/.claude.json. Re-applies cleanly on rebuild."
                         : selectedPlatform == .codexCLI
                         ? "Writes the speak MCP server + UserPromptSubmit hook into ~/.codex/config.toml (needs one-time hook trust). Re-applies cleanly on rebuild."
-                        : "Copies the OpenWhisperer extension into ~/.pi/agent/extensions/ (no MCP). Run /reload in Pi afterward.")
+                        : selectedPlatform == .pi
+                        ? "Copies the OpenWhisperer extension into ~/.pi/agent/extensions/ (no MCP). Run /reload in Pi afterward."
+                        : "Writes the speak MCP server into ~/.gemini/config/mcp_config.json + the PreInvocation hook into ~/.gemini/config/hooks.json. Start a new agy session afterward.")
                 }
 
                 // Apply message feedback
