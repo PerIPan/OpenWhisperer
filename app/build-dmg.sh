@@ -7,7 +7,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$SCRIPT_DIR/.build"
 APP_NAME="OpenWhisperer"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
-DMG_NAME="OpenWhisperer-1.5.1"
+DMG_NAME="OpenWhisperer-1.6.0"
 
 echo "=== Building Open Whisperer ==="
 
