@@ -36,8 +36,15 @@ actor SpeechTranscriber {
 
     private var whisperKit: WhisperKit?
     private var loadTask: Task<WhisperKit, Error>?
+    /// Called with 0…1 while the ~1.5 GB model archive downloads on first run.
+    /// Set before `prepare()`; never called when the model is already cached.
+    private var downloadProgressHandler: (@Sendable (Double) -> Void)?
 
     var isReady: Bool { whisperKit != nil }
+
+    func setDownloadProgressHandler(_ handler: (@Sendable (Double) -> Void)?) {
+        downloadProgressHandler = handler
+    }
 
     /// True when the CoreML model is already downloaded on disk. The first run downloads ~1.5 GB;
     /// the first *load* after that also pays a one-time Neural-Engine compile. Used to choose the
@@ -53,7 +60,8 @@ actor SpeechTranscriber {
         if let whisperKit { return whisperKit }
         if let loadTask { return try await loadTask.value }
 
-        let task = Task<WhisperKit, Error> { try await Self.loadWhisperKit() }
+        let progressHandler = downloadProgressHandler
+        let task = Task<WhisperKit, Error> { try await Self.loadWhisperKit(progress: progressHandler) }
         loadTask = task
         do {
             let wk = try await task.value
@@ -71,7 +79,7 @@ actor SpeechTranscriber {
     /// `download: false` with explicit `modelFolder`/`tokenizerFolder`, which avoids the
     /// network round-trip entirely. Falls back to a normal download when the model isn't
     /// cached yet (or the cache is incomplete/unloadable).
-    private static func loadWhisperKit() async throws -> WhisperKit {
+    private static func loadWhisperKit(progress: (@Sendable (Double) -> Void)? = nil) async throws -> WhisperKit {
         if FileManager.default.fileExists(atPath: cachedModelFolder.path) {
             do {
                 let config = WhisperKitConfig(
@@ -84,6 +92,20 @@ actor SpeechTranscriber {
                 return try await WhisperKit(config)
             } catch {
                 NSLog("SpeechTranscriber: offline load failed (\(error)); retrying with download")
+            }
+        } else if let progress {
+            // Pre-download explicitly so the UI can show real percent progress (the
+            // load-time download below reports nothing). Only the model archive —
+            // the tokenizer still comes from the normal load, so on failure we just
+            // fall through and let the load-time download surface its own error.
+            do {
+                _ = try await WhisperKit.download(
+                    variant: modelName,
+                    downloadBase: hubBase,
+                    progressCallback: { progress($0.fractionCompleted) }
+                )
+            } catch {
+                NSLog("SpeechTranscriber: pre-download failed (\(error)); falling back to load-time download")
             }
         }
         let config = WhisperKitConfig(model: modelName, downloadBase: hubBase)

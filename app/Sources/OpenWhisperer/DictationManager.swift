@@ -41,6 +41,8 @@ class DictationManager: ObservableObject {
     @Published var sttModelReady = false
     /// True when the speech-model load failed (offers a Retry in the UI).
     @Published var sttFailed = false
+    /// Last whole percent shown for the first-run model download (dedups UI updates).
+    private var lastReportedDownloadPct = -1
 
     private var isTyping = false  // prevent concurrent typeText
 
@@ -151,6 +153,21 @@ class DictationManager: ObservableObject {
             : "Downloading the speech model… one-time, about 1.5 GB. This can take a few minutes on first launch."
         Task { [weak self] in
             guard let self else { return }
+            // Live percent while the archive downloads (first run only — the handler
+            // is never called when the model is cached). Whole-percent granularity
+            // keeps main-thread updates cheap.
+            await self.transcriber.setDownloadProgressHandler { [weak self] fraction in
+                let pct = min(100, Int(fraction * 100))
+                Task { @MainActor in
+                    guard let self, !self.sttModelReady, !self.sttFailed else { return }
+                    if pct >= 100 {
+                        self.sttStatus = "Download done — compiling for the Neural Engine… up to a minute or two."
+                    } else if pct != self.lastReportedDownloadPct {
+                        self.lastReportedDownloadPct = pct
+                        self.sttStatus = "Downloading the speech model… \(pct)% of ~1.5 GB (one-time)."
+                    }
+                }
+            }
             do {
                 _ = try await self.transcriber.prepare()
                 await MainActor.run {
@@ -173,6 +190,7 @@ class DictationManager: ObservableObject {
     func retrySTT() {
         sttFailed = false
         sttModelReady = false
+        lastReportedDownloadPct = -1
         prepareSTT()
     }
 

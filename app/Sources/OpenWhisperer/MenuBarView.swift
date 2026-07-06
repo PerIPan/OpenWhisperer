@@ -95,6 +95,7 @@ struct MenuBarView: View {
     @State private var serverReachable = false
     @State private var deletedModelsBanner = false
     @State private var launchAtLogin = false
+    @State private var diagnosticsCopied = false
     @State private var voiceSettingsExpanded = false  // always collapsed by default on launch
     @State private var setupExpanded = false   // always collapsed by default on launch
     @State private var serverExpanded = false  // always collapsed by default on launch
@@ -355,7 +356,42 @@ struct MenuBarView: View {
     private var modelLoadingBanner: some View {
         let sttLoading = !dictationManager.sttModelReady && !dictationManager.sttFailed
         let ttsLoading = serverManager.status == .starting
-        if sttLoading || ttsLoading {
+        if dictationManager.sttFailed {
+            OWCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(OWColor.danger)
+                        Text("Speech model failed to load")
+                            .font(OWFont.body(11).weight(.semibold))
+                            .foregroundColor(OWColor.ink)
+                    }
+                    Text(dictationManager.sttStatus ?? "Speech model failed to load.")
+                        .font(OWFont.caption(11))
+                        .foregroundColor(OWColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 6) {
+                        Button(action: { dictationManager.retrySTT() }) {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(OWRowButtonStyle(tinted: true))
+                        Button(action: {
+                            Diagnostics.copyToClipboard(dictation: dictationManager, server: serverManager)
+                            diagnosticsCopied = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { diagnosticsCopied = false }
+                        }) {
+                            Label(diagnosticsCopied ? "Copied" : "Copy Diagnostics",
+                                  systemImage: diagnosticsCopied ? "checkmark" : "doc.on.doc")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(OWRowButtonStyle())
+                    }
+                }
+            }
+            .padding(.bottom, 10)
+        } else if sttLoading || ttsLoading {
             OWCard {
                 HStack(spacing: 9) {
                     ProgressView().controlSize(.small)
@@ -948,6 +984,17 @@ struct MenuBarView: View {
                     }
                     .buttonStyle(OWRowButtonStyle())
                 }
+
+                Button(action: {
+                    Diagnostics.copyToClipboard(dictation: dictationManager, server: serverManager)
+                    diagnosticsCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { diagnosticsCopied = false }
+                }) {
+                    Label(diagnosticsCopied ? "Copied to clipboard" : "Copy Diagnostics",
+                          systemImage: diagnosticsCopied ? "checkmark" : "stethoscope")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(OWRowButtonStyle())
             }
         }
         .onChange(of: serverExpanded) { _, newValue in
