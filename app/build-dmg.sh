@@ -7,7 +7,10 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$SCRIPT_DIR/.build"
 APP_NAME="OpenWhisperer"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
-DMG_NAME="OpenWhisperer-1.5.1"
+# Version is single-sourced from Info.plist (CFBundleShortVersionString) —
+# bump it there (both keys) and the DMG name follows automatically.
+VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$SCRIPT_DIR/Resources/Info.plist")
+DMG_NAME="OpenWhisperer-$VERSION"
 
 echo "=== Building Open Whisperer ==="
 
