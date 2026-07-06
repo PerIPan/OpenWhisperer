@@ -392,7 +392,6 @@ struct MenuBarView: View {
                         options: InteractionMode.allCases.map { (id: $0, label: $0.label) }
                     )
                     .frame(maxWidth: .infinity)
-                    .help("How dictation starts: Press-to-Talk taps the key on/off, Hold-to-Talk records while held, Hands-Free uses \"initiate\" and auto-submits on silence.")
                 }
                 .onChange(of: selectedMode) { _, newValue in
                     newValue.save()
@@ -414,7 +413,6 @@ struct MenuBarView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(OWRowButtonStyle())
-                    .help("Opens System Settings > Privacy & Security > Microphone. Dictation can't record until you enable it there.")
 
                     Text("Required for built-in dictation")
                         .font(OWFont.caption())
@@ -432,7 +430,6 @@ struct MenuBarView: View {
                         Text(stateLabel)
                             .font(OWFont.body(11))
                             .foregroundColor(OWColor.ink)
-                            .help("Dictation status: Standby (ready), Recording, Transcribing, Listening (Hands-Free wake word), Playing (speaking a reply), or Calibrating.")
 
                         Spacer()
 
@@ -442,7 +439,6 @@ struct MenuBarView: View {
                                 options: PTTKey.allCases.map { (id: $0.rawValue, label: $0.label) }
                             )
                             .frame(width: 76)
-                            .help("Modifier key that triggers Press/Hold-to-Talk. Tap it alone — it won't fire inside shortcuts like Ctrl-C. Restart the app after changing.")
                         }
                     }
                     .onChange(of: selectedPTTKey) { _, newValue in
@@ -468,7 +464,6 @@ struct MenuBarView: View {
                                 options: [3, 4, 5, 7, 10, 20].map { (id: $0, label: "\($0)s") }
                             )
                             .frame(width: 76)
-                            .help("Hands-Free only: how long you stay silent after speaking before the app transcribes your words and auto-submits the turn.")
                             .onChange(of: silenceThreshold) { _, newValue in
                                 let str = String(newValue)
                                 try? str.write(to: Paths.silenceThreshold, atomically: true, encoding: .utf8)
@@ -516,7 +511,6 @@ struct MenuBarView: View {
                             options: [(id: "on", label: "ON"), (id: "off", label: "OFF")]
                         )
                         .frame(width: 76)
-                        .help("Shows or hides the floating on-screen overlay with recording status and the live waveform. Visual only — it doesn't turn dictation on or off.")
                     }
 
                     // Hotkey-change notice
@@ -548,7 +542,6 @@ struct MenuBarView: View {
                 OWPickerRow(label: "Dictate in", labelWidth: 62) {
                     OWMenuPicker(selection: $selectedLanguage, options: Self.languages)
                         .frame(maxWidth: .infinity)
-                        .help("Language Whisper transcribes your dictation in. Auto-detect picks it per recording. Affects speech-to-text only, not the spoken voice.")
                 }
                 .onChange(of: selectedLanguage) { _, newValue in
                     if newValue == "auto" {
@@ -563,7 +556,6 @@ struct MenuBarView: View {
                 OWPickerRow(label: "Voice", labelWidth: 62) {
                     OWMenuPicker(selection: $selectedVoice, options: Self.voices)
                         .frame(maxWidth: .infinity)
-                        .help("Voice that speaks the AI's replies aloud. Spoken output only — it doesn't change the dictation language. Non-default voices download on first use.")
                 }
                 .onChange(of: selectedVoice) { _, newValue in
                     try? newValue.write(to: Paths.ttsVoice, atomically: true, encoding: .utf8)
@@ -580,13 +572,11 @@ struct MenuBarView: View {
                     HStack(spacing: 8) {
                         OWMenuPicker(selection: $selectedStyle, options: Self.styleLevels)
                             .frame(maxWidth: .infinity)
-                            .help("How much is spoken: Terse, Normal, and Rich read a short summary of the reply; Full reads the whole reply aloud.")
                             .onChange(of: selectedStyle) { _, newValue in
                                 try? newValue.write(to: Paths.ttsStyle, atomically: true, encoding: .utf8)
                             }
                         OWMenuPicker(selection: $selectedResponse, options: Self.responseModes)
                             .frame(maxWidth: .infinity)
-                            .help("When replies are spoken: when Voice = only dictated turns, when Text = only typed turns, Always = every turn.")
                             .onChange(of: selectedResponse) { _, newValue in
                                 try? newValue.write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
                             }
@@ -727,7 +717,6 @@ struct MenuBarView: View {
                 options: Platform.allCases.map { (id: $0, label: $0.label) }
             )
             .frame(width: 104)
-            .help("Which CLI you're setting up. Switches the hook target between ~/.claude/settings.json and ~/.codex/config.toml.")
             .onChange(of: selectedPlatform) { _, newValue in
                 newValue.save()
                 refreshDiagnostics()
@@ -746,7 +735,6 @@ struct MenuBarView: View {
                     .frame(width: 80, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture { ConfigManager.showHookInstructions(for: selectedPlatform) }
-                    .help("Tap for manual hook setup instructions.")
 
                     Button(action: {
                         let result = ConfigManager.applyHook(for: selectedPlatform)
@@ -762,9 +750,6 @@ struct MenuBarView: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(OWRowButtonStyle(tinted: hookApplied, urgent: !hookApplied))
-                    .help(selectedPlatform == .claudeCode
-                        ? "Writes the Stop and UserPromptSubmit hooks into ~/.claude/settings.json. Re-applies cleanly on rebuild."
-                        : "Writes the notify hook into ~/.codex/config.toml. Re-applies cleanly on rebuild.")
                 }
 
                 // Superpowers row — Claude Code only
@@ -780,7 +765,6 @@ struct MenuBarView: View {
                         .frame(width: 80, alignment: .leading)
                         .contentShape(Rectangle())
                         .onTapGesture { ConfigManager.showSuperpowersInstructions() }
-                        .help("obra/superpowers — agentic skills framework for Claude Code. Tap for details.")
 
                         Button(action: {
                             let result = ConfigManager.applySuperpowers()
@@ -795,7 +779,6 @@ struct MenuBarView: View {
                             .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(OWRowButtonStyle(tinted: superpowersApplied, urgent: !superpowersApplied))
-                        .help("Copies the plugin-install command to the clipboard — it doesn't install. Paste it in your terminal.")
                     }
                 }
 
@@ -817,7 +800,6 @@ struct MenuBarView: View {
                 OWPickerRow(label: "Volume", labelWidth: 62) {
                     OWMenuPicker(selection: $selectedVolume, options: Self.volumeLevels.map { (id: $0.id, label: $0.label) })
                         .frame(maxWidth: .infinity)
-                        .help("Spoken-reply loudness: Low is quieter, Medium is normal, High is loudest and may clip loud passages.")
                 }
                 .onChange(of: selectedVolume) { _, newValue in
                     if let level = Self.volumeLevels.first(where: { $0.id == newValue }) {
@@ -857,7 +839,6 @@ struct MenuBarView: View {
                         port: "local",
                         status: dictationManager.sttModelReady ? .running : .starting
                     )
-                    .help("On-device dictation model (Whisper large-v3-turbo). Runs in-process with no network — the dot is green when loaded.")
                     OWInternalDivider()
                     ModernStatusRow(
                         label: "Kokoro TTS",
@@ -865,7 +846,6 @@ struct MenuBarView: View {
                         port: "\(serverManager.port)",
                         status: serverManager.status
                     )
-                    .help("Text-to-speech voice (Kokoro), served on local port 8000. Green when running, grey when stopped.")
                 }
                 OWInternalDivider()
 
@@ -878,7 +858,6 @@ struct MenuBarView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(OWRowButtonStyle())
-                        .help("Starts the local text-to-speech server (port 8000) and loads the Kokoro voice. Needed only for spoken replies — dictation runs separately.")
                     } else {
                         Button(action: {
                             serverManager.stopAll()
@@ -891,7 +870,6 @@ struct MenuBarView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(OWRowButtonStyle())
-                        .help("Stops the text-to-speech server, so replies aren't spoken. Dictation still works.")
                     }
 
                     Button(action: {
@@ -928,10 +906,8 @@ struct MenuBarView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(OWRowButtonStyle())
-                    .help("Deletes all downloaded speech models (Whisper, Kokoro, compiled cache). They re-download automatically on next use.")
 
                     PortField(label: "", port: $serverManager.port, disabled: !serverStopped)
-                        .help("TTS server port (default 8000, range 1024–65535). Editable only while the server is stopped.")
                 }
 
                 if deletedModelsBanner {
@@ -951,7 +927,6 @@ struct MenuBarView: View {
                 }
 
                 ModernDiagnosticRow(label: "Server reachable", ok: serverReachable)
-                    .help("OK when the local TTS server answers on its port (GET /v1/models returns 200). Reflects TTS only, not dictation.")
 
                 OWInternalDivider()
 
@@ -961,7 +936,6 @@ struct MenuBarView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(OWRowButtonStyle())
-                    .help("Shows the tail of the TTS server log (server.log) for troubleshooting.")
 
                     Button(action: {
                         ConfigManager.showLog(
@@ -973,7 +947,6 @@ struct MenuBarView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(OWRowButtonStyle())
-                    .help("Shows the tail of the dictation events log (paste_debug.log) — what was typed and when.")
                 }
             }
         }
@@ -1001,11 +974,9 @@ struct MenuBarView: View {
                             NSWorkspace.shared.open(url)
                         }
                     }
-                    .help("Lets the app type dictated text into the focused app via keystrokes — the clipboard is never touched. Tap to open Settings.")
                 ModernDiagnosticRow(label: "Microphone", ok: dictationManager.recorder.micPermission)
                     .contentShape(Rectangle())
                     .onTapGesture { dictationManager.recorder.openMicSettings() }
-                    .help("Lets the app record your microphone to capture dictation. Tap to open Settings.")
                 ModernDiagnosticRow(label: "Speech Recognition", ok: dictationManager.keywordDetector.permissionGranted)
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -1013,7 +984,6 @@ struct MenuBarView: View {
                             NSWorkspace.shared.open(url)
                         }
                     }
-                    .help("Hands-Free only: Apple Speech detects the wake words \"initiate\" and \"hold on\". Normal dictation doesn't use it. Tap to open Settings.")
 
                 OWInternalDivider()
 
@@ -1021,7 +991,6 @@ struct MenuBarView: View {
                 ModernDiagnosticRow(label: "Start on startup", ok: launchAtLogin)
                     .contentShape(Rectangle())
                     .onTapGesture { launchAtLogin.toggle() }
-                    .help("Launches Open Whisperer automatically when you log in. Tap to toggle.")
                     .onChange(of: launchAtLogin) { _, enabled in
                         let service = SMAppService.mainApp
                         do {
@@ -1053,7 +1022,6 @@ struct MenuBarView: View {
                     }
                     .buttonStyle(OWRowButtonStyle())
                     .keyboardShortcut("q")
-                    .help("Quits Open Whisperer (Cmd-Q).")
                 }
             }
         }
