@@ -43,6 +43,12 @@ class DictationManager: ObservableObject {
     @Published var sttFailed = false
     /// Last whole percent shown for the first-run model download (dedups UI updates).
     private var lastReportedDownloadPct = -1
+    /// True while the next/current turn's reply is expected to be spoken: a fresh
+    /// unclaimed `voice_turn` signal (pre-submit), or a claimed turn whose reply is
+    /// still pending (`speak_pending/` marker). Drives the will-speak indicator in
+    /// the menu bar icon and the status pill.
+    @Published var speakArmed = false
+    private var speakArmedTimer: Timer?
 
     private var isTyping = false  // prevent concurrent typeText
 
@@ -622,6 +628,59 @@ class DictationManager: ObservableObject {
         NSSound(named: "Tink")?.play()
     }
 
+    // MARK: - Will-speak indicator
+
+    /// Matches the 900 s voice_turn TTL in voice-context.sh / codex-tts-hook.sh.
+    private static let voiceTurnTTL: TimeInterval = 900
+
+    /// Recompute `speakArmed` from the on-disk signals and keep a 1 s poll running
+    /// while it's on (the hooks consume the files out-of-process, so the app has to
+    /// watch for the transition). Cheap: two stat/read calls per tick, only while armed.
+    func refreshSpeakArmed() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        let armed = Self.computeSpeakArmed()
+        if speakArmed != armed { speakArmed = armed }
+        if armed, speakArmedTimer == nil {
+            speakArmedTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                self?.refreshSpeakArmed()
+            }
+        } else if !armed {
+            speakArmedTimer?.invalidate()
+            speakArmedTimer = nil
+        }
+    }
+
+    private static func computeSpeakArmed() -> Bool {
+        let fm = FileManager.default
+        let now = Date()
+        // Pre-submit: a fresh unclaimed voice_turn — except in "text" Response mode,
+        // where a dictated turn is exactly the one that will NOT be spoken.
+        let mode = (try? String(contentsOf: Paths.ttsResponseMode, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "voice"
+        if mode != "text",
+           let contents = try? String(contentsOf: Paths.voiceTurn, encoding: .utf8) {
+            let lines = contents.split(separator: "\n")
+            if lines.count >= 2, let ts = TimeInterval(lines[1]),
+               now.timeIntervalSince1970 - ts <= voiceTurnTTL {
+                return true
+            }
+        }
+        // Post-submit: a claimed turn awaiting its reply (any mode — the marker only
+        // exists for turns the hooks decided to speak). Same freshness cap so a
+        // marker orphaned by a killed session can't pin the indicator on.
+        if let entries = try? fm.contentsOfDirectory(at: Paths.speakPendingDir,
+                                                     includingPropertiesForKeys: [.contentModificationDateKey]) {
+            for entry in entries {
+                if let mtime = try? entry.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate,
+                   now.timeIntervalSince(mtime) <= voiceTurnTTL {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     /// Barge-in: stop any currently playing TTS when recording starts. Playback is in-process
     /// (Phase 3) — a direct actor call stops audio and cancels pending synthesis (freeing the ANE
     /// for STT). The controller removes `tts_playing.lock`; we also remove it directly so the
@@ -647,6 +706,7 @@ class DictationManager: ObservableObject {
         let voiceTS = Int(Date().timeIntervalSince1970)
         try? VoiceSignal.signalContents(hash: voiceHash, timestamp: voiceTS)
             .write(to: Paths.voiceTurn, atomically: true, encoding: .utf8)
+        refreshSpeakArmed()
 
         // Resolve which app to focus: Auto-Focus target overrides captured PID
         let focusPID = resolveAutoFocusPID() ?? pid

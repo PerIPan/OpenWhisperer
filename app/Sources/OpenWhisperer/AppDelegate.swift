@@ -41,6 +41,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // isn't blocked on it. Independent of the in-process TTS server (`TTSHTTPServer` on :8000).
         dictationManager.prepareSTT()
 
+        // Seed the will-speak indicator (an armed voice_turn / pending marker can
+        // survive an app restart).
+        dictationManager.refreshSpeakArmed()
+
         if setupManager.isSetupComplete {
             serverManager.startAll()
         } else {

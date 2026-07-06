@@ -1103,7 +1103,7 @@ struct MenuBarView: View {
         case .recording: return "Recording..."
         case .uploading: return "Transcribing..."
         case .listening: return "Listening..."
-        case .idle: return "Standby"
+        case .idle: return dictationManager.speakArmed ? "Standby · will speak" : "Standby"
         }
     }
 
