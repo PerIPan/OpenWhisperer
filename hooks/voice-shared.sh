@@ -77,20 +77,20 @@ resolve_flavor() {
   local voice="$OW_TTS_VOICE"
   [ -z "$voice" ] && voice=$(cat "$APP_SUPPORT/tts_voice" 2>/dev/null)
   voice=$(printf '%s' "$voice" | tr -d '[:space:]')
-  local lang="" persona=""
+  local accent="" persona="" desc=""
   case "${voice:0:1}" in
-    a) lang="American English"; persona="quietly self-assured, with a light touch of Silicon Valley hype" ;;
-    b) lang="British English"; persona="dry and unflappable, with a streak of deadpan wit and gentle irony" ;;
-    f) lang="French"; persona="dry and faintly unimpressed, given to the occasional philosophical shrug" ;;
-    i) lang="Italian"; persona="warm and expressive; things are either wonderful or a small catastrophe, rarely in between" ;;
-    e) lang="Spanish"; persona="relaxed and direct; there's always time, and it'll all be fine" ;;
-    p) lang="Brazilian Portuguese"; persona="sunny and easygoing, unbothered, always a friendly way around things" ;;
-    h) lang="Hindi"; persona="warm and irrepressibly helpful, the eternal problem-solver, assuring you it's no trouble at all" ;;
-    j) lang="Japanese"; persona="courteous and understated, meticulous, softening things, quietly prizing care and subtlety" ;;
-    z) lang="Mandarin Chinese"; persona="pragmatic and modest, understated, fond of a proverb, unfussed by small things" ;;
+    a) accent="American English";     persona="American";  desc="quietly self-assured, with a light touch of Silicon Valley hype" ;;
+    b) accent="British English";      persona="British";   desc="dry and unflappable, with a streak of deadpan wit and gentle irony" ;;
+    f) accent="French";               persona="French";    desc="dry and faintly unimpressed, given to the occasional philosophical shrug" ;;
+    i) accent="Italian";              persona="Italian";   desc="warm and expressive; things are either wonderful or a small catastrophe, rarely in between" ;;
+    e) accent="Spanish";              persona="Spanish";   desc="relaxed and direct; there's always time, and it'll all be fine" ;;
+    p) accent="Brazilian Portuguese"; persona="Brazilian"; desc="sunny and easygoing, unbothered, always a friendly way around things" ;;
+    h) accent="Hindi";                persona="Hindi";     desc="warm and irrepressibly helpful, the eternal problem-solver, assuring you it's no trouble at all" ;;
+    j) accent="Japanese";             persona="Japanese";  desc="courteous and understated, meticulous, softening things, quietly prizing care and subtlety" ;;
+    z) accent="Mandarin Chinese";     persona="Chinese";   desc="pragmatic and modest, understated, fond of a proverb, unfussed by small things" ;;
   esac
   if [ -n "$persona" ]; then
-    echo " The voice reading this aloud is ${lang}. Play it ${persona}."
+    echo " The voice speaking your reply has a ${accent} accent. Adopt a ${persona} persona: ${desc}."
   else
     echo ""
   fi
