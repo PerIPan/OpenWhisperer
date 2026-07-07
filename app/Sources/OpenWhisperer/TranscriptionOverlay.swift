@@ -239,6 +239,7 @@ struct OverlayView: View {
     /// We do NOT take recorder as a direct init parameter anymore — doing so
     /// would freeze the reference at the moment NSHostingView was constructed.
     @ObservedObject var overlay: TranscriptionOverlay
+    @State private var copiedLineId: Int? = nil
 
     /// Hard cap on the transcript scroll area. The window auto-sizes to this view
     /// (sizingOptions in show()), so the transcript MUST live inside a fixed-height
@@ -299,12 +300,38 @@ struct OverlayView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(overlay.lines.reversed().enumerated()), id: \.element.id) { index, line in
                             if index > 0 { Divider() }
-                            Text(line.text)
-                                .font(.custom("Outfit", size: 11))
-                                .foregroundColor(OWColor.ink)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .id(line.id)
+                            let isCopied = copiedLineId == line.id
+                            HStack(alignment: .center, spacing: 4) {
+                                Text(line.text)
+                                    .font(.custom("Outfit", size: 11))
+                                    .foregroundColor(isCopied ? OWColor.accent : OWColor.ink)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .layoutPriority(1)
+                                
+                                if isCopied {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(OWColor.accent)
+                                        .transition(.opacity)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(line.text, forType: .string)
+                                withAnimation(.easeIn(duration: 0.1)) {
+                                    copiedLineId = line.id
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                    withAnimation(.easeOut(duration: 0.2)) {
+                                        if copiedLineId == line.id {
+                                            copiedLineId = nil
+                                        }
+                                    }
+                                }
+                            }
+                            .help("Click to copy transcription")
+                            .id(line.id)
                         }
                     }
                     .padding(.top, 2)
