@@ -4,10 +4,8 @@ import Foundation
 /// Swift port of the deleted pytest suite. Run with: `swift run HookTests` (exits non-zero on any
 /// failure). Aggregates every check group and reports all failures.
 var failures: [String] = []
-failures += speakableTextFailures()
 failures += voiceContextFailures()
-failures += ttsHookGateFailures()
-failures += codexTtsHookFailures()
+failures += agyPreInvocationFailures()
 
 if failures.isEmpty {
     print("✅ HookTests: all checks passed")

@@ -7,11 +7,15 @@ import OpenWhispererKit
 enum Platform: String, CaseIterable {
     case claudeCode = "claudeCode"
     case codexCLI = "codexCLI"
+    case pi = "pi"
+    case antigravity = "antigravity"
 
     var label: String {
         switch self {
         case .claudeCode: return "Claude Code"
         case .codexCLI: return "Codex CLI"
+        case .pi: return "Pi"
+        case .antigravity: return "Antigravity"
         }
     }
 
@@ -31,43 +35,30 @@ enum ConfigManager {
 
     // MARK: - Claude Code: settings.json
 
-    static func showClaudeSettingsInstructions() {
-        let hookPath = Paths.ttsHook.path
-        let upsPath = Paths.voiceContextHook.path
+    static func showClaudeMCPInstructions() {
         let window = InstructionWindow(
-            title: "Claude Code Hooks (settings.json)",
+            title: "Step 1: Claude Code voice (hook + speak tool)",
             instructions: """
-            Open Whisperer uses two Claude Code hooks. Auto-Apply writes both for you; do this only if you prefer to edit settings by hand.
+            OpenWhisperer adds voice to Claude Code in two pieces. "Apply" wires
+            both automatically; to do it by hand:
 
-            1. Open ~/.claude/settings.json
-               (or your project's .claude/settings.json)
+            1) UserPromptSubmit hook (in ~/.claude/settings.json) — nudges Claude to
+               speak a summary first on dictated turns:
 
-            2. Add the following:
+               {
+                 "hooks": {
+                   "UserPromptSubmit": [{
+                     "hooks": [{ "type": "command", "command": "\(Paths.voiceContextHook.path)" }]
+                   }]
+                 }
+               }
 
-            {
-              "hooks": {
-                "UserPromptSubmit": [{
-                  "hooks": [{
-                    "type": "command",
-                    "command": "\(upsPath)"
-                  }]
-                }],
-                "Stop": [{
-                  "hooks": [{
-                    "type": "command",
-                    "command": "\(hookPath)",
-                    "timeout": 60,
-                    "async": true
-                  }]
-                }]
-              }
-            }
+            2) The `speak` MCP tool (in ~/.claude.json) — lets Claude play that summary:
 
-            UserPromptSubmit (voice-context.sh) marks each turn and, when it should be spoken, nudges the reply to open with a short spoken summary. Stop (tts-hook.sh) then speaks that reply.
+               claude mcp add --scope user --transport http \\
+                 OpenWhisperer http://localhost:8000/mcp
 
-            By default only voice-dictated turns are spoken (Response mode 'voice'); typed turns stay silent. Change this with the Response setting (text = speak typed turns; always = speak every turn).
-
-            The Auto-Apply button writes both hooks automatically, and updates them on rebuild.
+            Then RESTART Claude Code so it loads the tool. Verify with:  /mcp
             """
         )
         window.show()
@@ -143,68 +134,30 @@ enum ConfigManager {
         }
     }
 
-    // MARK: - Superpowers (obra/superpowers plugin)
-
-    static func showSuperpowersInstructions() {
-        let window = InstructionWindow(
-            title: "Superpowers — obra/superpowers",
-            instructions: """
-            Superpowers is an agentic skills framework that
-            gives your coding agent a structured workflow:
-
-            • Spec-first design before coding
-            • Subagent-driven development
-            • True red/green TDD, YAGNI, DRY
-            • Autonomous multi-hour work sessions
-
-            Auto-Apply runs:
-              claude /plugin install superpowers@claude-plugins-official
-
-            Or install manually in Claude Code:
-              /plugin install superpowers@claude-plugins-official
-
-            GitHub: https://github.com/obra/superpowers
-            """
-        )
-        window.show()
-    }
-
-    static func applySuperpowers() -> (success: Bool, message: String) {
-        let command = "claude '/plugin install superpowers@claude-plugins-official'"
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(command, forType: .string)
-        return (true, "Copied! Paste in terminal, or ask Claude: 'install superpowers plugin'")
-    }
-
-    static func checkSuperpowersInstalled() -> Bool {
-        // Check installed_plugins.json for any superpowers entry
-        let installedPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/plugins/installed_plugins.json")
-        guard let data = try? Data(contentsOf: installedPath),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let plugins = json["plugins"] as? [String: Any] else { return false }
-        return plugins.keys.contains { $0.lowercased().contains("superpowers") }
-    }
-
     // MARK: - Codex CLI: config.toml
 
     static func showCodexConfigInstructions() {
-        let hookPath = Paths.codexTtsHook.path
         let window = InstructionWindow(
-            title: "Codex CLI Hook (config.toml)",
+            title: "Step 1: Codex voice (config.toml + hook trust)",
             instructions: """
-            Open Whisperer speaks Codex replies via a notify hook. Auto-Apply writes this for you; do this only if you prefer to edit the config by hand.
+            "Apply" wires these into ~/.codex/config.toml automatically. To do it
+            by hand, add:
 
-            1. Open ~/.codex/config.toml
-               (create it if it doesn't exist)
+            [mcp_servers.OpenWhisperer]
+            url = "http://localhost:8000/mcp"
 
-            2. Add the following line:
+            [[hooks.UserPromptSubmit]]
 
-            notify = ["\(hookPath)"]
+            [[hooks.UserPromptSubmit.hooks]]
+            type = "command"
+            command = "\(Paths.voiceContextHook.path)"
+            timeout = 30
+
+            IMPORTANT — hook trust: Codex silently ignores untrusted hooks. The
+            first time you run `codex` after this, approve trusting the
+            OpenWhisperer hook when prompted, or the spoken summary won't fire.
 
             By default only voice-dictated turns are spoken; typed turns stay silent. Change this with the Response setting (text = typed turns only; always = every turn).
-
-            The Auto-Apply button writes (or updates) this line automatically.
             """
         )
         window.show()
@@ -212,48 +165,49 @@ enum ConfigManager {
 
     // MARK: - Auto-apply hook to Codex config.toml
 
+    /// Register the `speak` MCP server + the shared `voice-context.sh` UserPromptSubmit hook in
+    /// ~/.codex/config.toml, and drop the obsolete `notify` (Stop-style) line. Idempotent
+    /// append-if-absent; preserves the user's other config. NB: Codex silently skips *untrusted*
+    /// hooks, so the user must approve the hook once in Codex (see showCodexConfigInstructions).
     static func applyHookToCodexConfig() -> (success: Bool, message: String) {
-        let hookPath = Paths.codexTtsHook.path
         let configURL = Paths.codexConfig
         let fm = FileManager.default
-
-        // Ensure ~/.codex/ exists
         try? fm.createDirectory(at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
-        var lines: [String] = []
-        if fm.fileExists(atPath: configURL.path),
-           let content = try? String(contentsOf: configURL, encoding: .utf8) {
-            lines = content.components(separatedBy: "\n")
+        var content = ""
+        if fm.fileExists(atPath: configURL.path), let existing = try? String(contentsOf: configURL, encoding: .utf8) {
+            content = existing
         }
 
-        // Find and replace existing `notify = ...` line, or append
-        // Match exactly "notify" followed by optional whitespace and "=" to avoid
-        // corrupting other keys like "notify_on_error"
-        var found = false
-        let newNotifyLine = "notify = [\"\(hookPath)\"]"
-        for i in lines.indices {
-            let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
-            // Exact key match: "notify" followed by whitespace or "="
-            if trimmed.hasPrefix("notify") {
-                let rest = trimmed.dropFirst("notify".count)
-                guard let first = rest.first, first == " " || first == "=" || first == "\t" else { continue }
-                lines[i] = newNotifyLine
-                found = true
-                break
-            }
-        }
-        if !found {
-            // Add under existing content, ensure newline separation
-            if !lines.isEmpty && !(lines.last?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
-                lines.append("")
-            }
-            lines.append(newNotifyLine)
+        // Drop our obsolete `notify = [...]` line (matched exactly to avoid keys like notify_on_error;
+        // only ours — referencing our hook — so a user's unrelated notify is left alone).
+        var lines = content.components(separatedBy: "\n").filter { line in
+            let t = line.trimmingCharacters(in: .whitespaces)
+            guard t.hasPrefix("notify") else { return true }
+            let rest = t.dropFirst("notify".count)
+            guard let f = rest.first, f == " " || f == "=" || f == "\t" else { return true }
+            return !(line.contains("codex-tts-hook") || line.contains("OpenWhisperer"))
         }
 
-        let result = lines.joined(separator: "\n")
+        var added: [String] = []
+        if !content.contains("[mcp_servers.OpenWhisperer]") {
+            added += ["", "[mcp_servers.OpenWhisperer]", "url = \"http://localhost:8000/mcp\""]
+        }
+        if !content.contains("voice-context.sh") {
+            added += ["", "[[hooks.UserPromptSubmit]]", "",
+                      "[[hooks.UserPromptSubmit.hooks]]",
+                      "type = \"command\"",
+                      "command = \"\(Paths.voiceContextHook.path)\"",
+                      "timeout = 30"]
+        }
+        if !added.isEmpty {
+            if let last = lines.last, !last.trimmingCharacters(in: .whitespaces).isEmpty { lines.append("") }
+            lines += added
+        }
+
         do {
-            try result.write(to: configURL, atomically: true, encoding: .utf8)
-            return (true, found ? "Hook updated" : "Hook applied")
+            try lines.joined(separator: "\n").write(to: configURL, atomically: true, encoding: .utf8)
+            return (true, added.isEmpty ? "Already configured" : "Configured — approve the hook once in Codex to enable it")
         } catch {
             return (false, "Write failed: \(error.localizedDescription)")
         }
@@ -263,7 +217,152 @@ enum ConfigManager {
 
     static func checkCodexHookConfigured() -> Bool {
         guard let content = try? String(contentsOf: Paths.codexConfig, encoding: .utf8) else { return false }
-        return content.contains("codex-tts-hook") || content.contains("OpenWhisperer")
+        return content.contains("[mcp_servers.OpenWhisperer]") && content.contains("voice-context.sh")
+    }
+
+    // MARK: - Pi: extension (no MCP)
+
+    static func showPiInstructions() {
+        let window = InstructionWindow(
+            title: "Step 1: Pi voice (extension — no MCP)",
+            instructions: """
+            Pi has no MCP. "Apply" copies one extension into Pi's extensions
+            folder; it registers an `openwhisperer_speak` tool and a per-turn
+            voice nudge, talking to OpenWhisperer's local TTS server over HTTP.
+
+            To do it by hand, copy the extension:
+
+              cp "\(Paths.piExtensionSource.path)" \\
+                 "\(Paths.piExtensionDest.path)"
+
+            Then run /reload in Pi (or restart it) to load it.
+
+            By default only voice-dictated turns are spoken; typed turns stay silent. Change this with the Response setting (text = typed turns only; always = every turn).
+            """
+        )
+        window.show()
+    }
+
+    /// Install the Pi extension: copy the bundled `openwhisperer.ts` into
+    /// ~/.pi/agent/extensions/. Idempotent (overwrites). Pi loads it on /reload.
+    static func applyToPi() -> (success: Bool, message: String) {
+        let fm = FileManager.default
+        let src = Paths.piExtensionSource
+        let dest = Paths.piExtensionDest
+        guard fm.fileExists(atPath: src.path) else {
+            return (false, "Bundled extension missing (\(src.lastPathComponent))")
+        }
+        do {
+            try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
+            try fm.copyItem(at: src, to: dest)
+            return (true, "Extension installed — run /reload in Pi to load it")
+        } catch {
+            return (false, "Copy failed: \(error.localizedDescription)")
+        }
+    }
+
+    static func checkPiConfigured() -> Bool {
+        FileManager.default.fileExists(atPath: Paths.piExtensionDest.path)
+    }
+
+    // MARK: - Antigravity CLI (agy): mcp_config.json + hooks.json
+
+    static func showAntigravityInstructions() {
+        let window = InstructionWindow(
+            title: "Step 1: Antigravity CLI voice (mcp_config.json + hooks.json)",
+            instructions: """
+            OpenWhisperer adds voice to Antigravity CLI (agy) in two pieces. "Apply"
+            wires both automatically; to do it by hand:
+
+            1) The `speak` MCP tool (in ~/.gemini/config/mcp_config.json) — reuses
+               the same endpoint Claude/Codex/Pi talk to, over agy's SSE transport:
+
+               {
+                 "mcpServers": {
+                   "openwhisperer": { "serverUrl": "http://localhost:8000/mcp" }
+                 }
+               }
+
+            2) The PreInvocation hook (in ~/.gemini/config/hooks.json) — nudges the
+               model to speak a summary first on dictated turns:
+
+               {
+                 "openwhisperer": {
+                   "PreInvocation": [
+                     { "type": "command", "command": "\(Paths.agyPreInvocationHook.path)", "timeout": 10 }
+                   ]
+                 }
+               }
+
+            Start a NEW agy session afterward so it picks up both changes.
+
+            By default only voice-dictated turns are spoken; typed turns stay silent. Change this with the Response setting (text = typed turns only; always = every turn).
+            """
+        )
+        window.show()
+    }
+
+    /// Register the `speak` MCP server (SSE transport, same /mcp endpoint Claude/Codex/Pi use)
+    /// in ~/.gemini/config/mcp_config.json, and the shared PreInvocation hook in the GLOBAL
+    /// ~/.gemini/config/hooks.json (confirmed live: the global file fires for any workspace).
+    /// Merges into existing config rather than overwriting it; idempotent.
+    static func applyToAntigravity() -> (success: Bool, message: String) {
+        let fm = FileManager.default
+
+        // MCP registration.
+        try? fm.createDirectory(at: Paths.agyMCPConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var mcpRoot: [String: Any] = [:]
+        if fm.fileExists(atPath: Paths.agyMCPConfig.path),
+           let data = try? Data(contentsOf: Paths.agyMCPConfig),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            mcpRoot = json
+        }
+        var servers = mcpRoot["mcpServers"] as? [String: Any] ?? [:]
+        servers["openwhisperer"] = ["serverUrl": "http://localhost:8000/mcp"]
+        mcpRoot["mcpServers"] = servers
+        guard let mcpOut = try? JSONSerialization.data(withJSONObject: mcpRoot, options: [.prettyPrinted, .withoutEscapingSlashes]) else {
+            return (false, "Failed to serialize mcp_config.json")
+        }
+        do {
+            try mcpOut.write(to: Paths.agyMCPConfig)
+        } catch {
+            return (false, "mcp_config.json write failed: \(error.localizedDescription)")
+        }
+
+        // Hook registration.
+        try? fm.createDirectory(at: Paths.agyHooksConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var hooksRoot: [String: Any] = [:]
+        if fm.fileExists(atPath: Paths.agyHooksConfig.path),
+           let data = try? Data(contentsOf: Paths.agyHooksConfig),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            hooksRoot = json
+        }
+        hooksRoot["openwhisperer"] = [
+            "PreInvocation": [
+                ["type": "command", "command": Paths.agyPreInvocationHook.path, "timeout": 10]
+            ]
+        ]
+        guard let hooksOut = try? JSONSerialization.data(withJSONObject: hooksRoot, options: [.prettyPrinted, .withoutEscapingSlashes]) else {
+            return (false, "Failed to serialize hooks.json")
+        }
+        do {
+            try hooksOut.write(to: Paths.agyHooksConfig)
+            return (true, "MCP server + PreInvocation hook applied — start a new agy session")
+        } catch {
+            return (false, "hooks.json write failed: \(error.localizedDescription)")
+        }
+    }
+
+    static func checkAntigravityConfigured() -> Bool {
+        guard let mcpData = try? Data(contentsOf: Paths.agyMCPConfig),
+              let mcpJSON = try? JSONSerialization.jsonObject(with: mcpData) as? [String: Any],
+              let servers = mcpJSON["mcpServers"] as? [String: Any],
+              servers["openwhisperer"] != nil else { return false }
+        guard let hooksData = try? Data(contentsOf: Paths.agyHooksConfig),
+              let hooksJSON = try? JSONSerialization.jsonObject(with: hooksData) as? [String: Any],
+              hooksJSON["openwhisperer"] != nil else { return false }
+        return true
     }
 
     // MARK: - Platform-dispatching wrappers
@@ -272,6 +371,8 @@ enum ConfigManager {
         switch platform {
         case .claudeCode: return applyHookToSettings()
         case .codexCLI: return applyHookToCodexConfig()
+        case .pi: return applyToPi()
+        case .antigravity: return applyToAntigravity()
         }
     }
 
@@ -279,13 +380,17 @@ enum ConfigManager {
         switch platform {
         case .claudeCode: return checkHookConfigured()
         case .codexCLI: return checkCodexHookConfigured()
+        case .pi: return checkPiConfigured()
+        case .antigravity: return checkAntigravityConfigured()
         }
     }
 
     static func showHookInstructions(for platform: Platform) {
         switch platform {
-        case .claudeCode: showClaudeSettingsInstructions()
+        case .claudeCode: showClaudeMCPInstructions()
         case .codexCLI: showCodexConfigInstructions()
+        case .pi: showPiInstructions()
+        case .antigravity: showAntigravityInstructions()
         }
     }
 
@@ -306,7 +411,6 @@ enum ConfigManager {
     }
 
     static func applyHookToSettings() -> (success: Bool, message: String) {
-        let hookPath = Paths.ttsHook.path
         let settingsDir = Paths.claudeSettings.deletingLastPathComponent()
         let fm = FileManager.default
 
@@ -320,27 +424,16 @@ enum ConfigManager {
             settings = json
         }
 
-        // Get or create hooks.Stop array
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
-        var stopArray = hooks["Stop"] as? [[String: Any]] ?? []
 
-        // Remove ALL existing Claude Whisper/Whisperer hooks (any path variant)
-        let countBefore = stopArray.count
-        stopArray.removeAll { entry in
-            guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
-            return innerHooks.contains { hook in
-                guard let cmd = hook["command"] as? String else { return false }
-                return isOurHook(cmd)
+        // Drop any obsolete Stop hook of ours — the `speak` MCP tool replaced it.
+        if var stopArray = hooks["Stop"] as? [[String: Any]] {
+            stopArray.removeAll { entry in
+                guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
+                return inner.contains { (($0["command"] as? String).map(isOurHook) ?? false) }
             }
+            if stopArray.isEmpty { hooks.removeValue(forKey: "Stop") } else { hooks["Stop"] = stopArray }
         }
-        let removed = countBefore - stopArray.count
-
-        // Add exactly one hook with the current path
-        let hookEntry: [String: Any] = ["type": "command", "command": hookPath, "timeout": 60, "async": true]
-        let stopEntry: [String: Any] = ["hooks": [hookEntry]]
-        stopArray.append(stopEntry)
-
-        hooks["Stop"] = stopArray
 
         // Register the UserPromptSubmit voice-turn hook (idempotent: drop our old entries first).
         var upsArray = hooks["UserPromptSubmit"] as? [[String: Any]] ?? []
@@ -372,11 +465,32 @@ enum ConfigManager {
 
         do {
             try jsonString.write(to: Paths.claudeSettings, atomically: true, encoding: .utf8)
-            let msg = removed > 0 ? "Replaced \(removed) old hook(s)" : "Hook applied"
-            return (true, msg)
+            let mcp = registerClaudeMCPServer()
+            return (true, mcp.success ? "Hook + speak tool applied" : "Hook applied (\(mcp.message))")
         } catch {
             return (false, "Write failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Register the in-app `speak` MCP server in ~/.claude.json (user scope). Read-modify-write so
+    /// the rest of the (large, Claude-Code-managed) file is preserved. Idempotent.
+    @discardableResult
+    static func registerClaudeMCPServer() -> (success: Bool, message: String) {
+        let fm = FileManager.default
+        var root: [String: Any] = [:]
+        if fm.fileExists(atPath: Paths.claudeJSON.path),
+           let data = try? Data(contentsOf: Paths.claudeJSON),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            root = json
+        }
+        var servers = root["mcpServers"] as? [String: Any] ?? [:]
+        servers["OpenWhisperer"] = ["type": "http", "url": "http://localhost:8000/mcp"]
+        root["mcpServers"] = servers
+        guard let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .withoutEscapingSlashes]) else {
+            return (false, "Failed to serialize ~/.claude.json")
+        }
+        do { try out.write(to: Paths.claudeJSON); return (true, "speak tool registered") }
+        catch { return (false, "Write failed: \(error.localizedDescription)") }
     }
 
     // MARK: - Migration
@@ -405,20 +519,47 @@ enum ConfigManager {
         try? fm.moveItem(at: Paths.legacyVoiceDetail, to: Paths.ttsStyle)
     }
 
+    /// One-shot: the `text` response mode was removed (no sensible use case). Rewrite any
+    /// persisted `tts_response_mode` == "text" to the default "voice" so the picker and hook agree.
+    static func migrateRemoveTextResponseMode() {
+        guard let raw = try? String(contentsOf: Paths.ttsResponseMode, encoding: .utf8),
+              raw.trimmingCharacters(in: .whitespacesAndNewlines) == "text" else { return }
+        try? "voice".write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
+    }
+
+    /// One-shot upgrade cleanup: remove our obsolete Stop hook from ~/.claude/settings.json so an
+    /// old install doesn't keep a dead `tts-hook.sh` entry (the script no longer ships).
+    static func migrateRemoveClaudeStopHook() {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: Paths.claudeSettings.path),
+              let data = try? Data(contentsOf: Paths.claudeSettings),
+              var settings = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              var hooks = settings["hooks"] as? [String: Any],
+              var stop = hooks["Stop"] as? [[String: Any]] else { return }
+        let before = stop.count
+        stop.removeAll { entry in
+            guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
+            return inner.contains { (($0["command"] as? String).map(isOurHook) ?? false) }
+        }
+        guard stop.count != before else { return }
+        if stop.isEmpty { hooks.removeValue(forKey: "Stop") } else { hooks["Stop"] = stop }
+        settings["hooks"] = hooks
+        if let out = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) {
+            try? out.write(to: Paths.claudeSettings)
+        }
+    }
+
     // MARK: - Diagnostics
 
     static func checkHookConfigured() -> Bool {
         guard let data = try? Data(contentsOf: Paths.claudeSettings),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let hooks = json["hooks"] as? [String: Any],
-              let stopArray = hooks["Stop"] as? [[String: Any]] else { return false }
+              let ups = hooks["UserPromptSubmit"] as? [[String: Any]] else { return false }
         // Accept any Claude Whisper hook variant as "configured"
-        return stopArray.contains { entry in
-            guard let innerHooks = entry["hooks"] as? [[String: Any]] else { return false }
-            return innerHooks.contains { hook in
-                guard let cmd = hook["command"] as? String else { return false }
-                return isOurHook(cmd)
-            }
+        return ups.contains { entry in
+            guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
+            return inner.contains { (($0["command"] as? String).map(isOurHook) ?? false) }
         }
     }
 

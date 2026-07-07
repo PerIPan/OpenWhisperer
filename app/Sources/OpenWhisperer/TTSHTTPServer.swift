@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import OpenWhispererKit
 
 /// Tiny embedded HTTP/1.1 server (Network.framework, zero deps) ported from the former Python
 /// TTS server for the bash hook. Loopback-only. Serves exactly what the hook + health
@@ -7,6 +8,7 @@ import Network
 ///   GET  /v1/models        -> 200 minimal models JSON
 ///   POST /v1/audio/speech  -> 200 WAV (FluidAudio Kokoro) | 500 on failure
 ///   POST /v1/audio/play    -> 202 Accepted; plays sentence-by-sentence via the in-app player
+///   POST /mcp              -> MCP (Streamable HTTP) JSON-RPC; exposes the `speak` tool to agents
 ///
 /// One request per connection (`Connection: close`), which is all `curl` (the hook) needs.
 final class TTSHTTPServer {
@@ -107,10 +109,13 @@ final class TTSHTTPServer {
         case ("POST", "/v1/audio/speech"):
             let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any]
             let input = json?["input"] as? String ?? ""
-            let voice = json?["voice"] as? String ?? "af_heart"
+            let voice = json?["voice"] as? String ?? Self.userVoice()
+            // Guard finiteness so a non-finite override can't slip a NaN past clamp into synthesis
+            // (JSON can't carry NaN/Inf today, but don't rely on the serializer for that safety).
+            let speed = (json?["speed"] as? Double).flatMap { $0.isFinite ? TTSSpeed.clamp(Float($0)) : nil } ?? Self.userSpeed()
             Task { [tts] in
                 do {
-                    let wav = try await tts.synthesize(input, voice: voice)
+                    let wav = try await tts.synthesize(input, voice: voice, speed: speed)
                     self.respond(conn, "200 OK", wav, contentType: "audio/wav")
                 } catch {
                     self.respond(conn, "500 Internal Server Error",
@@ -123,14 +128,47 @@ final class TTSHTTPServer {
             // player synthesizes sentence-by-sentence and supersedes any current playback.
             let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any]
             let input = json?["input"] as? String ?? ""
-            let voice = json?["voice"] as? String ?? "af_heart"
-            Task { [playback] in await playback.play(text: input, voice: voice) }
+            let voice = json?["voice"] as? String ?? Self.userVoice()
+            let speed = (json?["speed"] as? Double).flatMap { $0.isFinite ? TTSSpeed.clamp(Float($0)) : nil } ?? Self.userSpeed()
+            Task { [playback] in await playback.play(text: input, voice: voice, speed: speed) }
             respond(conn, "202 Accepted",
                     Data(#"{"status":"accepted"}"#.utf8), contentType: "application/json")
+
+        case ("POST", "/mcp"):
+            // Minimal MCP over Streamable HTTP. All JSON-RPC shaping is pure (OpenWhispererKit);
+            // here we only map the outcome onto HTTP and perform the one side effect (playback).
+            switch MCPServer().handle(req.body) {
+            case .json(let data):
+                respond(conn, "200 OK", data, contentType: "application/json")
+            case .accepted:
+                respond(conn, "202 Accepted", Data())
+            case .speak(let response, let text, let voice, let speed):
+                let resolvedSpeed = speed.flatMap { $0.isFinite ? TTSSpeed.clamp(Float($0)) : nil } ?? Self.userSpeed()
+                Task { [playback] in await playback.play(text: text, voice: voice ?? Self.userVoice(), speed: resolvedSpeed) }
+                respond(conn, "200 OK", response, contentType: "application/json")
+            }
+
+        case ("GET", "/mcp"):
+            // We don't offer the optional server→client SSE stream; say so rather than 404.
+            respond(conn, "405 Method Not Allowed", Data())
 
         default:
             respond(conn, "404 Not Found", Data())
         }
+    }
+
+    /// The user's selected TTS voice (global `tts_voice` pref), or the Kokoro default. Used when a
+    /// request omits a voice — notably the `speak` MCP tool, which the model calls with text only.
+    private static func userVoice() -> String {
+        let v = (try? String(contentsOf: Paths.ttsVoice, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (v?.isEmpty == false) ? v! : "af_heart"
+    }
+
+    /// The user's global TTS speed (`tts_speed`), clamped, or 1.0. Used by the
+    /// blocking WAV path when the request omits a `speed`.
+    private static func userSpeed() -> Float {
+        TTSSpeed.parse(try? String(contentsOf: Paths.ttsSpeed, encoding: .utf8))
     }
 
     private func respond(_ conn: NWConnection, _ status: String, _ body: Data, contentType: String = "text/plain") {

@@ -81,8 +81,9 @@ struct MenuBarView: View {
     @State private var selectedPTTKey = "ctrl"
     @State private var selectedMode: InteractionMode = .holdToTalk
     @State private var silenceThreshold: Int = 3
-    @State private var selectedVolume = "medium"
+    @State private var selectedVolume: Double = 1.0
     @State private var selectedVoice = "af_heart"
+    @State private var selectedSpeed: Double = 1.0
     @State private var selectedLanguage = "en"
     @State private var selectedStyle = "normal"
     @State private var selectedResponse = "voice"
@@ -90,7 +91,6 @@ struct MenuBarView: View {
     @State private var pttKeyChanged = false
     @State private var selectedPlatform: Platform = .claudeCode
     @State private var hookApplied = false
-    @State private var superpowersApplied = false
     @State private var applyMessage = ""
     @State private var serverReachable = false
     @State private var deletedModelsBanner = false
@@ -102,17 +102,50 @@ struct MenuBarView: View {
     // logsExpanded removed — merged into serverExpanded
     @ObservedObject private var overlay = TranscriptionOverlay.shared
 
-    private static let voices: [(id: String, label: String)] = [
-        // English
-        ("af_heart", "Heart (English F)"),
-        ("af_bella", "Bella (English F)"),
-        ("am_michael", "Michael (English M)"),
-        // French
-        ("ff_siwis", "Siwis (French F)"),
-        // Italian
-        ("if_sara", "Sara (Italian F)"),
-        ("im_nicola", "Nicola (Italian M)"),
+    // Full Kokoro-82M v1.0 roster (verified against onnx-community/Kokoro-82M-v1.0-ONNX
+    // on 2026-07-01). Grouped by language for the nested-submenu picker. Non-default
+    // voices download on first selection via KokoroTTS.ensureVoicePack. The bare `af`
+    // alias is intentionally omitted (it is a default mix, not a named voice).
+    private static let voiceGroups: [(group: String, options: [(id: String, label: String)])] = [
+        ("English (US)", [
+            ("af_heart", "Heart (F)"), ("af_bella", "Bella (F)"), ("af_alloy", "Alloy (F)"),
+            ("af_aoede", "Aoede (F)"), ("af_jessica", "Jessica (F)"), ("af_kore", "Kore (F)"),
+            ("af_nicole", "Nicole (F)"), ("af_nova", "Nova (F)"), ("af_river", "River (F)"),
+            ("af_sarah", "Sarah (F)"), ("af_sky", "Sky (F)"),
+            ("am_adam", "Adam (M)"), ("am_echo", "Echo (M)"), ("am_eric", "Eric (M)"),
+            ("am_fenrir", "Fenrir (M)"), ("am_liam", "Liam (M)"), ("am_michael", "Michael (M)"),
+            ("am_onyx", "Onyx (M)"), ("am_puck", "Puck (M)"), ("am_santa", "Santa (M)"),
+        ]),
+        ("English (UK)", [
+            ("bf_alice", "Alice (F)"), ("bf_emma", "Emma (F)"), ("bf_isabella", "Isabella (F)"),
+            ("bf_lily", "Lily (F)"),
+            ("bm_daniel", "Daniel (M)"), ("bm_fable", "Fable (M)"), ("bm_george", "George (M)"),
+            ("bm_lewis", "Lewis (M)"),
+        ]),
+        ("French", [("ff_siwis", "Siwis (F)")]),
+        ("Italian", [("if_sara", "Sara (F)"), ("im_nicola", "Nicola (M)")]),
+        ("Spanish", [("ef_dora", "Dora (F)"), ("em_alex", "Alex (M)"), ("em_santa", "Santa (M)")]),
+        ("Portuguese (BR)", [("pf_dora", "Dora (F)"), ("pm_alex", "Alex (M)"), ("pm_santa", "Santa (M)")]),
+        ("Hindi", [
+            ("hf_alpha", "Alpha (F)"), ("hf_beta", "Beta (F)"),
+            ("hm_omega", "Omega (M)"), ("hm_psi", "Psi (M)"),
+        ]),
+        ("Japanese", [
+            ("jf_alpha", "Alpha (F)"), ("jf_gongitsune", "Gongitsune (F)"), ("jf_nezumi", "Nezumi (F)"),
+            ("jf_tebukuro", "Tebukuro (F)"), ("jm_kumo", "Kumo (M)"),
+        ]),
+        ("Chinese", [
+            ("zf_xiaobei", "Xiaobei (F)"), ("zf_xiaoni", "Xiaoni (F)"), ("zf_xiaoxiao", "Xiaoxiao (F)"),
+            ("zf_xiaoyi", "Xiaoyi (F)"),
+            ("zm_yunjian", "Yunjian (M)"), ("zm_yunxi", "Yunxi (M)"),
+            ("zm_yunxia", "Yunxia (M)"), ("zm_yunyang", "Yunyang (M)"),
+        ]),
     ]
+
+    /// Flattened roster for collapsed-label lookup and load-time validation.
+    private static var allVoices: [(id: String, label: String)] {
+        voiceGroups.flatMap { $0.options }
+    }
 
     private static let languages: [(id: String, label: String)] = [
         ("auto", "Auto-detect"),
@@ -146,14 +179,7 @@ struct MenuBarView: View {
     // the tts_response_mode values read by voice-context.sh / codex-tts-hook.sh.
     private static let responseModes: [(id: String, label: String)] = [
         ("voice", "when Voice"),
-        ("text", "when Text"),
         ("always", "Always"),
-    ]
-
-    private static let volumeLevels: [(id: String, label: String, value: String)] = [
-        ("low", "Low", "0.3"),
-        ("medium", "Medium", "1"),
-        ("high", "High", "4"),
     ]
 
     private static let focusApps: [(id: String, label: String)] = [
@@ -255,7 +281,7 @@ struct MenuBarView: View {
             if let savedVoice = try? String(contentsOf: Paths.ttsVoice, encoding: .utf8),
                !savedVoice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let voice = savedVoice.trimmingCharacters(in: .whitespacesAndNewlines)
-                if Self.voices.contains(where: { $0.id == voice }) {
+                if Self.allVoices.contains(where: { $0.id == voice }) {
                     selectedVoice = voice
                 }
             }
@@ -280,13 +306,8 @@ struct MenuBarView: View {
                     selectedResponse = mode
                 }
             }
-            if let savedVolume = try? String(contentsOf: Paths.ttsVolume, encoding: .utf8),
-               !savedVolume.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let val = savedVolume.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let match = Self.volumeLevels.first(where: { $0.value == val }) {
-                    selectedVolume = match.id
-                }
-            }
+            selectedVolume = Double(TTSVolume.parse(try? String(contentsOf: Paths.ttsVolume, encoding: .utf8)))
+            selectedSpeed = Double(TTSSpeed.parse(try? String(contentsOf: Paths.ttsSpeed, encoding: .utf8)))
             selectedMode = InteractionMode.load()
             if let savedStr = try? String(contentsOf: Paths.silenceThreshold, encoding: .utf8),
                let saved = Int(savedStr.trimmingCharacters(in: .whitespacesAndNewlines)) {
@@ -294,6 +315,14 @@ struct MenuBarView: View {
             }
             refreshDiagnostics()
         }
+    }
+
+    /// "1×", "1.15×", "1.2×" — trims trailing zeros so the slider readout stays tidy.
+    /// Formats a playback multiplier (speed or volume) as a trimmed "1.5×" / "1×".
+    private func multiplierLabel(_ v: Double) -> String {
+        var s = String(format: "%.2f", v)
+        while s.contains(".") && (s.hasSuffix("0") || s.hasSuffix(".")) { s.removeLast() }
+        return s + "×"
     }
 
     // MARK: - Header
@@ -579,7 +608,7 @@ struct MenuBarView: View {
         OWCollapsibleCard(
             title: "Voice Settings",
             icon: "slider.horizontal.3",
-            help: "Dictation language, the voice that reads replies aloud, and Response — how much of a reply is spoken, and when.",
+            help: "Dictation language, the voice that reads replies aloud, how fast it's read, and Response — how much of a reply is spoken, and when.",
             expanded: $voiceSettingsExpanded
         ) {
             EmptyView()
@@ -600,14 +629,56 @@ struct MenuBarView: View {
                 OWInternalDivider()
 
                 OWPickerRow(label: "Voice", labelWidth: 62) {
-                    OWMenuPicker(selection: $selectedVoice, options: Self.voices)
+                    OWGroupedMenuPicker(selection: $selectedVoice, groups: Self.voiceGroups)
                         .frame(maxWidth: .infinity)
                 }
                 .onChange(of: selectedVoice) { _, newValue in
                     try? newValue.write(to: Paths.ttsVoice, atomically: true, encoding: .utf8)
                 }
 
-                // No visible separator between Voice and Response, but keep the same
+                OWInternalDivider()
+
+                OWPickerRow(label: "Speed", labelWidth: 62) {
+                    HStack(spacing: 8) {
+                        // Bounds MUST equal TTSSpeed.min/max (see TTSSpeed.swift).
+                        Slider(value: $selectedSpeed, in: 0.7...1.5, step: 0.05)
+                            .tint(OWColor.accent)
+                            .help("How fast replies are read aloud. 1× is the default Kokoro rate; higher is faster. Spoken output only.")
+                        Text(multiplierLabel(selectedSpeed))
+                            .font(OWFont.body(11))
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 34, alignment: .trailing)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .onChange(of: selectedSpeed) { _, newValue in
+                    try? String(format: "%.2f", newValue)
+                        .write(to: Paths.ttsSpeed, atomically: true, encoding: .utf8)
+                }
+
+                OWInternalDivider()
+
+                OWPickerRow(label: "Volume", labelWidth: 62) {
+                    HStack(spacing: 8) {
+                        // Bounds MUST equal TTSVolume.min/max (see TTSVolume.swift).
+                        Slider(value: $selectedVolume, in: 0.3...2.0, step: 0.05)
+                            .tint(OWColor.accent)
+                            .help("How loud replies are read aloud. 1× is normal; higher is louder and may clip. Spoken output only.")
+                        Text(multiplierLabel(selectedVolume))
+                            .font(OWFont.body(11))
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 34, alignment: .trailing)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .onChange(of: selectedVolume) { _, newValue in
+                    try? String(format: "%.2f", newValue)
+                        .write(to: Paths.ttsVolume, atomically: true, encoding: .utf8)
+                }
+
+                // No visible separator between Volume and Response, but keep the same
                 // gap (the divider was 0.5pt) so the rows don't move closer.
                 Color.clear.frame(height: 0.5)
 
@@ -623,6 +694,7 @@ struct MenuBarView: View {
                             }
                         OWMenuPicker(selection: $selectedResponse, options: Self.responseModes)
                             .frame(maxWidth: .infinity)
+                            .help("When replies are spoken: when Voice = only dictated turns, Always = every turn.")
                             .onChange(of: selectedResponse) { _, newValue in
                                 try? newValue.write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
                             }
@@ -755,7 +827,7 @@ struct MenuBarView: View {
         OWCollapsibleCard(
             title: "Setup TTS for",
             icon: "hammer",
-            help: "Wire up spoken replies for your CLI (Claude Code or Codex) — Auto-Apply writes the hooks. Volume here sets playback loudness.",
+            help: "Wire up spoken replies for your CLI (Claude Code, Codex, Antigravity, or Pi) — Auto-Apply writes the hooks.",
             expanded: $setupExpanded
         ) {
             OWMenuPicker(
@@ -763,6 +835,7 @@ struct MenuBarView: View {
                 options: Platform.allCases.map { (id: $0, label: $0.label) }
             )
             .frame(width: 104)
+            .help("Which coding agent you're setting up. Claude/Codex/Antigravity get a hook + speak tool; Pi gets an extension.")
             .onChange(of: selectedPlatform) { _, newValue in
                 newValue.save()
                 refreshDiagnostics()
@@ -796,36 +869,13 @@ struct MenuBarView: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(OWRowButtonStyle(tinted: hookApplied, urgent: !hookApplied))
-                }
-
-                // Superpowers row — Claude Code only
-                if selectedPlatform == .claudeCode {
-                    HStack(spacing: 6) {
-                        HStack(spacing: 4) {
-                            Text("Superpowers")
-                                .font(OWFont.body(11))
-                            Image(systemName: "info.circle")
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(width: 80, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture { ConfigManager.showSuperpowersInstructions() }
-
-                        Button(action: {
-                            let result = ConfigManager.applySuperpowers()
-                            superpowersApplied = ConfigManager.checkSuperpowersInstalled()
-                            applyMessage = result.message
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { applyMessage = "" }
-                        }) {
-                            Label(
-                                superpowersApplied ? "Installed" : "Copy Install",
-                                systemImage: superpowersApplied ? "checkmark.circle.fill" : "doc.on.clipboard"
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(OWRowButtonStyle(tinted: superpowersApplied, urgent: !superpowersApplied))
-                    }
+                    .help(selectedPlatform == .claudeCode
+                        ? "Writes the UserPromptSubmit hook into ~/.claude/settings.json + the speak MCP server into ~/.claude.json. Re-applies cleanly on rebuild."
+                        : selectedPlatform == .codexCLI
+                        ? "Writes the speak MCP server + UserPromptSubmit hook into ~/.codex/config.toml (needs one-time hook trust). Re-applies cleanly on rebuild."
+                        : selectedPlatform == .pi
+                        ? "Copies the OpenWhisperer extension into ~/.pi/agent/extensions/ (no MCP). Run /reload in Pi afterward."
+                        : "Writes the speak MCP server into ~/.gemini/config/mcp_config.json + the PreInvocation hook into ~/.gemini/config/hooks.json. Start a new agy session afterward.")
                 }
 
                 // Apply message feedback
@@ -837,21 +887,8 @@ struct MenuBarView: View {
                         )
                         .transition(.opacity)
                 }
-                // (Removed the redundant "HOOK configured" / "superpowers installed" diagnostic
-                // rows — the Applied/Installed pills above already convey this state.)
-
-                OWInternalDivider()
-
-                // Volume — low-level TTS playback gain; tucked at the bottom of Setup.
-                OWPickerRow(label: "Volume", labelWidth: 62) {
-                    OWMenuPicker(selection: $selectedVolume, options: Self.volumeLevels.map { (id: $0.id, label: $0.label) })
-                        .frame(maxWidth: .infinity)
-                }
-                .onChange(of: selectedVolume) { _, newValue in
-                    if let level = Self.volumeLevels.first(where: { $0.id == newValue }) {
-                        try? level.value.write(to: Paths.ttsVolume, atomically: true, encoding: .utf8)
-                    }
-                }
+                // (Removed the redundant "HOOK configured" diagnostic row —
+                // the Applied pill above already conveys this state.)
             }
         }
         .onChange(of: setupExpanded) { _, newValue in
@@ -1018,31 +1055,54 @@ struct MenuBarView: View {
 
     // MARK: - Footer
 
+    /// Speech Recognition is hands-free-only, so it counts toward "all granted" only in that
+    /// mode — otherwise a hold-to-talk user who (correctly) never granted it could never reach
+    /// the collapsed state. Drives whether the "Permissions Required" block is shown at all.
+    private var allPermissionsGranted: Bool {
+        let speechNeeded = selectedMode == .handsFree
+        return accessibilityManager.isGranted
+            && dictationManager.recorder.micPermission
+            && (!speechNeeded || dictationManager.keywordDetector.permissionGranted)
+    }
+
     private var footerSection: some View {
         OWCard {
             VStack(alignment: .leading, spacing: 8) {
-                OWCardHeader(title: "Permissions Required", icon: "lock.shield",
-                             help: "macOS grants Open Whisperer needs: Accessibility (type into the focused app), Microphone (record dictation), and Speech Recognition (hands-free wake words). Tap a row to open Settings.")
+                // Only surfaced while something is actually missing — a card titled "Required"
+                // showing three green checks is noise. The live re-checks (Accessibility poll +
+                // refreshDiagnostics) flip this back on if a permission is revoked mid-session.
+                if !allPermissionsGranted {
+                    OWCardHeader(title: "Permissions Required", icon: "lock.shield",
+                                 help: "macOS grants Open Whisperer needs: Accessibility (type into the focused app), Microphone (record dictation), and Speech Recognition (hands-free wake words). Tap a row to open Settings.")
 
-                ModernDiagnosticRow(label: "Accessibility", ok: accessibilityManager.isGranted)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                            NSWorkspace.shared.open(url)
+                    ModernDiagnosticRow(label: "Accessibility", ok: accessibilityManager.isGranted)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                NSWorkspace.shared.open(url)
+                            }
                         }
-                    }
-                ModernDiagnosticRow(label: "Microphone", ok: dictationManager.recorder.micPermission)
-                    .contentShape(Rectangle())
-                    .onTapGesture { dictationManager.recorder.openMicSettings() }
-                ModernDiagnosticRow(label: "Speech Recognition", ok: dictationManager.keywordDetector.permissionGranted)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition") {
-                            NSWorkspace.shared.open(url)
-                        }
+                        .help("Lets the app type dictated text into the focused app via keystrokes — the clipboard is never touched. Tap to open Settings.")
+                    ModernDiagnosticRow(label: "Microphone", ok: dictationManager.recorder.micPermission)
+                        .contentShape(Rectangle())
+                        .onTapGesture { dictationManager.recorder.openMicSettings() }
+                        .help("Lets the app record your microphone to capture dictation. Tap to open Settings.")
+                    // Only relevant in hands-free — hidden otherwise so we don't nag for a
+                    // permission the current mode never uses.
+                    if selectedMode == .handsFree {
+                        ModernDiagnosticRow(label: "Speech Recognition", ok: dictationManager.keywordDetector.permissionGranted)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                            .help("Hands-Free only: Apple Speech detects the wake words \"initiate\" and \"hold on\". Normal dictation doesn't use it. Tap to open Settings.")
                     }
 
-                OWInternalDivider()
+
+                    OWInternalDivider()
+                }
 
                 // Launch at login
                 ModernDiagnosticRow(label: "Start on startup", ok: launchAtLogin)
@@ -1119,7 +1179,14 @@ struct MenuBarView: View {
 
     private func refreshDiagnostics() {
         hookApplied = ConfigManager.checkHookConfigured(for: selectedPlatform)
-        superpowersApplied = ConfigManager.checkSuperpowersInstalled()
+        // Re-read mic/speech authorization each time the menu opens so a revocation (or a
+        // grant made in System Settings after launch) shows up without relaunching. Accessibility
+        // has its own continuous poll. Speech only when hands-free — otherwise we'd re-request
+        // (and could re-prompt) a permission that mode never uses.
+        dictationManager.recorder.checkPermission()
+        if selectedMode == .handsFree {
+            dictationManager.keywordDetector.checkPermission()
+        }
         ConfigManager.testTTS(port: serverManager.port) { ok in
             DispatchQueue.main.async { serverReachable = ok }
         }
@@ -1372,6 +1439,65 @@ struct OWMenuPicker<T: Hashable>: View {
 
     private var currentLabel: String {
         options.first(where: { $0.id == selection })?.label ?? ""
+    }
+}
+
+// MARK: - OWGroupedMenuPicker (OWMenuPicker with one nested submenu per group)
+
+/// Like `OWMenuPicker`, but renders `groups` as nested submenus (a `Menu` per
+/// group) so a long option list (e.g. ~50 voices) stays navigable instead of one
+/// flat scroll. Same collapsed control/styling as `OWMenuPicker`.
+struct OWGroupedMenuPicker<T: Hashable>: View {
+    @Binding var selection: T
+    let groups: [(group: String, options: [(id: T, label: String)])]
+
+    var body: some View {
+        Menu {
+            ForEach(groups, id: \.group) { group in
+                Menu(group.group) {
+                    ForEach(group.options, id: \.id) { option in
+                        Button {
+                            selection = option.id
+                        } label: {
+                            if option.id == selection {
+                                Label(option.label, systemImage: "checkmark")
+                            } else {
+                                Text(option.label)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(currentLabel)
+                    .font(OWFont.body(11))
+                    .foregroundColor(OWColor.ink)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundColor(OWColor.accent.opacity(0.6))
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(OWColor.pickerBg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(OWColor.checkboxBorder, lineWidth: 1)
+                    )
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+    }
+
+    private var currentLabel: String {
+        for g in groups {
+            if let m = g.options.first(where: { $0.id == selection }) { return m.label }
+        }
+        return ""
     }
 }
 

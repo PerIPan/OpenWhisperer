@@ -49,21 +49,21 @@ actor KokoroTTS {
     /// Synthesize `text` → 24 kHz mono WAV `Data`. Expands numerics to spoken words first
     /// (the engine mishandles raw `$5.99`/`15%`), then runs FluidAudio's Kokoro. Loads the
     /// model on first use if `prepare()` hasn't run.
-    func synthesize(_ text: String, voice: String = "af_heart") async throws -> Data {
+    func synthesize(_ text: String, voice: String = "af_heart", speed: Float = 1.0) async throws -> Data {
         if !loaded { try await prepare() }
         await ensureVoicePack(voice)
         let spoken = NumberNormalizer.normalize(text)
-        return try await manager.synthesize(text: spoken, voice: voice)
+        return try await manager.synthesize(text: spoken, voice: voice, speed: speed)
     }
 
     /// Synthesize `text` → raw 24 kHz mono fp32 PCM samples (no WAV wrapper), for in-process
     /// streaming playback via `AVAudioPlayerNode`. Same numeric pre-pass as `synthesize`.
-    func synthesizeSamples(_ text: String, voice: String = "af_heart") async throws
+    func synthesizeSamples(_ text: String, voice: String = "af_heart", speed: Float = 1.0) async throws
         -> (samples: [Float], sampleRate: Int) {
         if !loaded { try await prepare() }
         await ensureVoicePack(voice)
         let spoken = NumberNormalizer.normalize(text)
-        let result = try await manager.synthesizeDetailed(text: spoken, voice: voice)
+        let result = try await manager.synthesizeDetailed(text: spoken, voice: voice, speed: speed)
         return (result.samples, result.sampleRate)
     }
 

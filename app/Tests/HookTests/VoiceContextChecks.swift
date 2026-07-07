@@ -1,8 +1,8 @@
 import Foundation
 
-/// Port of the former `tests/test_voice_context.py` (now deleted). `voice-context.sh` is the UserPromptSubmit hook: it
-/// matches the submitted prompt against the app's `voice_turn` signal and, on a match, marks the
-/// session (`speak_pending/<id>`) and emits a nudge. Returns failures.
+/// `voice-context.sh` (UserPromptSubmit, shared by Claude Code + Codex): classify the turn against
+/// the `voice_turn` signal, apply the response mode, and on a "speak" decision nudge the model to
+/// call the `speak` MCP tool first. No `speak_pending` marker is written (the Stop hooks are gone).
 func voiceContextFailures() -> [String] {
     var failures: [String] = []
     var sandboxes: [Hook.Sandbox] = []
@@ -21,44 +21,42 @@ func voiceContextFailures() -> [String] {
     }
     func fail(_ s: String) { failures.append("voice-context.\(s)") }
 
-    // 1) Matching prompt → session marked, signal claimed, nudge emitted.
+    // 1) Matching prompt → signal claimed, speak-tool nudge emitted, NO marker written.
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "fix the login bug")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "fix the login bug", session: "abc-123"), sandbox: s)
-        if !s.markerExists(session: "abc-123") { fail("matchClaimsAndMarks: session not marked") }
-        if s.voiceTurnExists() { fail("matchClaimsAndMarks: signal not claimed") }
+        if s.voiceTurnExists() { fail("matchClaims: signal not claimed") }
+        if s.markerExists(session: "abc-123") { fail("matchClaims: should NOT write a speak_pending marker") }
         if let d = r.stdout.data(using: .utf8),
            let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
-            if o["suppressOutput"] as? Bool != true { fail("matchClaimsAndMarks: suppressOutput not true") }
+            if o["suppressOutput"] as? Bool != true { fail("matchClaims: suppressOutput not true") }
             if (o["hookSpecificOutput"] as? [String: Any])?["hookEventName"] as? String != "UserPromptSubmit" {
-                fail("matchClaimsAndMarks: wrong hookEventName")
+                fail("matchClaims: wrong hookEventName")
             }
-            if nudge(r.stdout)?.contains("read aloud") != true { fail("matchClaimsAndMarks: nudge missing 'read aloud'") }
+            if nudge(r.stdout)?.contains("`speak` tool") != true { fail("matchClaims: nudge missing '`speak` tool'") }
         } else {
-            fail("matchClaimsAndMarks: stdout not JSON: \(r.stdout.debugDescription)")
+            fail("matchClaims: stdout not JSON: \(r.stdout.debugDescription)")
         }
     }
 
-    // 2) Non-matching prompt → silent, marker absent, signal preserved for the real session.
+    // 2) Non-matching prompt → silent, signal preserved.
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "fix the login bug")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "something I typed", session: "abc-123"), sandbox: s)
         if !r.stdout.isEmpty { fail("noMatchSilent: expected no nudge, got \(r.stdout.debugDescription)") }
-        if s.markerExists(session: "abc-123") { fail("noMatchSilent: should not mark session") }
         if !s.voiceTurnExists() { fail("noMatchSilent: signal should be preserved") }
     }
 
-    // 3) No signal at all → silent.
+    // 3) No signal → silent.
     do {
         let s = newSandbox()
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "anything", session: "abc-123"), sandbox: s)
         if !r.stdout.isEmpty { fail("noSignalSilent: expected silence") }
-        if s.markerExists(session: "abc-123") { fail("noSignalSilent: should not mark") }
     }
 
-    // 4) Stale signal (ancient timestamp) → swept and rejected.
+    // 4) Stale signal → swept and rejected.
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "fix the login bug", timestamp: 1)
@@ -67,144 +65,226 @@ func voiceContextFailures() -> [String] {
         if s.voiceTurnExists() { fail("staleRejected: stale signal should be swept") }
     }
 
-    // 5) Session id with unsafe chars → marker filename sanitized.
-    do {
-        let s = newSandbox()
-        s.writeVoiceTurn(forPrompt: "go")
-        _ = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "a/b c:d"), sandbox: s)
-        if !s.markerExists(session: "a/b c:d") { fail("sessionIdSanitized: expected speak_pending/a_b_c_d") }
-    }
-
-    // 6) terse style → terser nudge.
+    // 5) terse style → terser length phrase in the nudge.
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsStyle("terse")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         if nudge(r.stdout)?.contains("one short, plain spoken sentence") != true {
-            fail("terseStyle: nudge not terse: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+            fail("terseStyle: \(nudge(r.stdout)?.debugDescription ?? "nil")")
         }
     }
 
-    // 7) rich style → richer nudge.
+    // 6) rich style → richer length phrase.
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsStyle("rich")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         if nudge(r.stdout)?.contains("a sentence or two") != true {
-            fail("richStyle: nudge not rich: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+            fail("richStyle: \(nudge(r.stdout)?.debugDescription ?? "nil")")
         }
     }
 
-    // 8) per-project OW_TTS_STYLE env overrides the global tts_style file.
+    // 7) per-project OW_TTS_STYLE env overrides the global file.
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsStyle("rich")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
                          sandbox: s, env: ["OW_TTS_STYLE": "terse"])
         if nudge(r.stdout)?.contains("one short, plain spoken sentence") != true {
-            fail("envStyleOverride: env did not win over file: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+            fail("envStyleOverride: \(nudge(r.stdout)?.debugDescription ?? "nil")")
         }
     }
 
-    // 9) legacy voice_detail still honored when tts_style is absent (migration safety net).
+    // 8) legacy voice_detail still honored when tts_style absent.
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeLegacyVoiceDetail("rich")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         if nudge(r.stdout)?.contains("a sentence or two") != true {
-            fail("legacyDetailFallback: legacy voice_detail not honored: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+            fail("legacyDetailFallback: \(nudge(r.stdout)?.debugDescription ?? "nil")")
         }
     }
 
-    // 10) full style → "speak the whole reply" nudge, not a summary opener.
+    // 9) full style → folds into the richest summary tier (a sentence or two), NOT a whole-reply nudge.
     do {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsStyle("full")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         let n = nudge(r.stdout)
-        if n?.contains("entire reply") != true {
-            fail("fullStyle: nudge missing 'entire reply': \(n?.debugDescription ?? "nil")")
-        }
-        if n?.contains("read aloud") != true {
-            fail("fullStyle: nudge missing 'read aloud': \(n?.debugDescription ?? "nil")")
-        }
-        if n?.contains("Open with") == true {
-            fail("fullStyle: nudge should not ask for a summary opener: \(n?.debugDescription ?? "nil")")
-        }
+        if n?.contains("a sentence or two") != true { fail("fullStyle: not richest tier: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("entire reply") == true { fail("fullStyle: should not ask for whole reply") }
+        if n?.contains("`speak` tool") != true { fail("fullStyle: missing speak-tool instruction") }
     }
 
-    // --- Response mode (tts_response_mode): voice (default) | text | always ---
+    // --- Response mode (tts_response_mode): voice (default) | always ---
 
-    // 11) always mode + typed turn (no signal) → speaks (marked + nudge).
+    // 10) always + typed turn → speak-tool nudge, no marker.
     do {
         let s = newSandbox(); s.writeResponseMode("always")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed thing", session: "s-always-typed"), sandbox: s)
-        if !s.markerExists(session: "s-always-typed") { fail("alwaysSpeaksTyped: session not marked") }
-        if nudge(r.stdout)?.contains("read aloud") != true {
-            fail("alwaysSpeaksTyped: nudge missing 'read aloud': \(nudge(r.stdout)?.debugDescription ?? "nil")")
-        }
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed thing", session: "s-at"), sandbox: s)
+        if nudge(r.stdout)?.contains("`speak` tool") != true { fail("alwaysTyped: \(nudge(r.stdout)?.debugDescription ?? "nil")") }
+        if s.markerExists(session: "s-at") { fail("alwaysTyped: no marker expected") }
     }
 
-    // 12) always mode + dictated turn → speaks AND claims the signal.
+    // 11) always + dictated turn → nudge AND signal claimed.
     do {
         let s = newSandbox(); s.writeResponseMode("always"); s.writeVoiceTurn(forPrompt: "do it")
-        _ = Hook.run("voice-context.sh", stdin: input(prompt: "do it", session: "s-always-voice"), sandbox: s)
-        if !s.markerExists(session: "s-always-voice") { fail("alwaysSpeaksVoice: session not marked") }
-        if s.voiceTurnExists() { fail("alwaysSpeaksVoice: voice_turn should be claimed") }
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "do it", session: "s-av"), sandbox: s)
+        if nudge(r.stdout)?.contains("`speak` tool") != true { fail("alwaysVoice: missing nudge") }
+        if s.voiceTurnExists() { fail("alwaysVoice: voice_turn should be claimed") }
     }
 
-    // 13) text mode + typed turn → speaks.
-    do {
-        let s = newSandbox(); s.writeResponseMode("text")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed thing", session: "s-text-typed"), sandbox: s)
-        if !s.markerExists(session: "s-text-typed") { fail("textSpeaksTyped: session not marked") }
-        if nudge(r.stdout)?.contains("read aloud") != true {
-            fail("textSpeaksTyped: nudge missing 'read aloud': \(nudge(r.stdout)?.debugDescription ?? "nil")")
-        }
-    }
-
-    // 14) text mode + dictated turn → silent (not marked), signal still consumed.
+    // 12) removed `text` mode + dictated turn → behaves as voice: speaks and claims the signal.
     do {
         let s = newSandbox(); s.writeResponseMode("text"); s.writeVoiceTurn(forPrompt: "spoke this")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "spoke this", session: "s-text-voice"), sandbox: s)
-        if s.markerExists(session: "s-text-voice") { fail("textSilentOnVoice: should not mark a dictated turn") }
-        if !r.stdout.isEmpty { fail("textSilentOnVoice: expected no nudge, got \(r.stdout.debugDescription)") }
-        if s.voiceTurnExists() { fail("textSilentOnVoice: voice_turn should be consumed") }
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "spoke this", session: "s-tv"), sandbox: s)
+        if nudge(r.stdout)?.contains("`speak` tool") != true { fail("textIsVoiceDictated: expected nudge, got \(r.stdout.debugDescription)") }
+        if s.voiceTurnExists() { fail("textIsVoiceDictated: voice_turn should be claimed") }
     }
 
-    // 15) per-project OW_TTS_RESPONSE env overrides the global file.
+    // 13) removed `text` mode + typed turn → behaves as voice: stays silent.
+    do {
+        let s = newSandbox(); s.writeResponseMode("text")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed thing", session: "s-tt"), sandbox: s)
+        if !r.stdout.isEmpty { fail("textIsVoiceTyped: expected silence, got \(r.stdout.debugDescription)") }
+    }
+
+    // 14) per-project OW_TTS_RESPONSE env overrides the global file.
     do {
         let s = newSandbox(); s.writeResponseMode("voice")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed", session: "s-env"),
                          sandbox: s, env: ["OW_TTS_RESPONSE": "always"])
-        if !s.markerExists(session: "s-env") { fail("envResponseOverride: env=always did not speak a typed turn") }
-        _ = r
+        if nudge(r.stdout)?.contains("`speak` tool") != true { fail("envResponse: env=always did not speak a typed turn") }
     }
 
-    // 16) always mode + stale signal → speaks, stale signal swept.
-    do {
-        let s = newSandbox(); s.writeResponseMode("always"); s.writeVoiceTurn(forPrompt: "old", timestamp: 1)
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed now", session: "s-always-stale"), sandbox: s)
-        if !s.markerExists(session: "s-always-stale") { fail("alwaysStaleSpeaks: session not marked") }
-        if s.voiceTurnExists() { fail("alwaysStaleSpeaks: stale signal should be swept") }
-        _ = r
-    }
-
-    // 17) unknown/corrupt mode → safe voice-fallback (typed turn stays silent).
+    // 15) unknown/corrupt mode → safe voice-fallback (typed turn stays silent).
     do {
         let s = newSandbox(); s.writeResponseMode("garbage")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed", session: "s-unknown"), sandbox: s)
-        if !r.stdout.isEmpty { fail("unknownModeFallsBackToVoice: expected silence, got \(r.stdout.debugDescription)") }
-        if s.markerExists(session: "s-unknown") { fail("unknownModeFallsBackToVoice: should not mark a typed turn") }
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed", session: "s-unk"), sandbox: s)
+        if !r.stdout.isEmpty { fail("unknownMode: expected silence, got \(r.stdout.debugDescription)") }
     }
 
-    // 18) inverse env override: file=always, env=voice → a typed turn stays silent.
+    // --- Native-tongue flavor: an ungated per-nation persona, personality only ---
+    // Persona is present on EVERY voiced turn for a mapped voice (sentinel: "voice reading
+    // this aloud"); there is no vocabulary steering and no native-word layer.
+
+    // 16) non-English voice (French) → persona present (ungated), naming the language.
     do {
-        let s = newSandbox(); s.writeResponseMode("always")
-        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed", session: "s-env-inv"),
-                         sandbox: s, env: ["OW_TTS_RESPONSE": "voice"])
-        if !r.stdout.isEmpty { fail("envInverseOverride: env=voice should silence a typed turn") }
-        if s.markerExists(session: "s-env-inv") { fail("envInverseOverride: should not mark") }
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let n = nudge(r.stdout)
+        if n?.contains("French") != true { fail("frenchPersona: missing 'French': \(n?.debugDescription ?? "nil")") }
+        if n?.contains("voice reading this aloud") != true { fail("frenchPersona: missing persona: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("`speak` tool") != true { fail("frenchPersona: base nudge lost") }
+    }
+
+    // 17) another non-English voice (Japanese) → persona present, its language named.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("jf_alpha")
+        let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
+        if n?.contains("Japanese") != true { fail("japanesePersona: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("voice reading this aloud") != true { fail("japanesePersona: missing persona") }
+    }
+
+    // 18) American English voice (af_heart, the default) → persona present (US).
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("af_heart")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let n = nudge(r.stdout)
+        if n?.contains("American") != true { fail("americanPersona: missing 'American': \(n?.debugDescription ?? "nil")") }
+        if n?.contains("voice reading this aloud") != true { fail("americanPersona: missing persona") }
+    }
+
+    // 19) no voice set → NO flavor (safe default).
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("voice reading this aloud") == true { fail("noVoiceNoFlavor: unexpected persona") }
+    }
+
+    // 20) persona composes with a non-default length style: terse + a French voice → both present.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis"); s.writeTtsStyle("terse")
+        let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
+        if n?.contains("one short, plain spoken sentence") != true { fail("terseFrenchCompose: terse length lost") }
+        if n?.contains("voice reading this aloud") != true { fail("terseFrenchCompose: persona missing") }
+    }
+
+    // 21) British English voice (b-prefix) → persona present (UK).
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("bf_alice")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let n = nudge(r.stdout)
+        if n?.contains("British") != true { fail("britishPersona: missing 'British'") }
+        if n?.contains("voice reading this aloud") != true { fail("britishPersona: missing persona") }
+    }
+
+    // 22) a different non-English branch (Italian) → persona present, its language named.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("if_sara")
+        let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
+        if n?.contains("Italian") != true { fail("italianPersona: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("voice reading this aloud") != true { fail("italianPersona: missing persona") }
+    }
+
+    // --- Per-project voice/speed overrides (env → nudge args; flavor follows the override) ---
+
+    // 23) OW_TTS_VOICE override → nudge instructs speak with that voice arg.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
+                         sandbox: s, env: ["OW_TTS_VOICE": "ff_siwis"])
+        if nudge(r.stdout)?.contains("voice=\"ff_siwis\"") != true {
+            fail("voiceOverrideArg: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 24) OW_TTS_SPEED (numeric) override → nudge instructs speak with that speed arg.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
+                         sandbox: s, env: ["OW_TTS_SPEED": "1.2"])
+        if nudge(r.stdout)?.contains("speed=1.2") != true {
+            fail("speedOverrideArg: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 25) no override → nudge carries no voice=/speed= args (default nudge unchanged).
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let n = nudge(r.stdout)
+        if n?.contains("voice=") == true || n?.contains("speed=") == true {
+            fail("noOverrideNoArgs: unexpected arg injected: \(n?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 26) non-numeric OW_TTS_SPEED is dropped (garbage never reaches the nudge).
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
+                         sandbox: s, env: ["OW_TTS_SPEED": "fast"])
+        if nudge(r.stdout)?.contains("speed=") == true {
+            fail("badSpeedDropped: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 27) flavor follows OW_TTS_VOICE, not the global file: French override beats an English global.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("af_heart")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
+                         sandbox: s, env: ["OW_TTS_VOICE": "ff_siwis"])
+        if nudge(r.stdout)?.contains("French") != true {
+            fail("flavorFollowsOverride: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
     }
 
     return failures

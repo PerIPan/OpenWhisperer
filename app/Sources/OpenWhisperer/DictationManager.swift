@@ -57,8 +57,8 @@ class DictationManager: ObservableObject {
 
     private var isTyping = false  // prevent concurrent typeText
 
-    /// Minimum sample count to bother transcribing (~0.3s at 16kHz mono).
-    private static let minSampleCount = 4800
+    /// Minimum sample count to bother transcribing (~0.1s at 16kHz mono).
+    private static let minSampleCount = 1600
 
     /// The PID of the app that was frontmost when the user pressed the hotkey.
     /// Captured on the main thread at press-time, before any focus shifts.
@@ -397,7 +397,7 @@ class DictationManager: ObservableObject {
             return
         }
 
-        // Skip very short recordings (~0.3s at 16kHz)
+        // Skip very short recordings (~0.1s at 16kHz)
         if samples.count < Self.minSampleCount {
             recorder.resumeListening()
             keywordDetector.start()
@@ -574,7 +574,7 @@ class DictationManager: ObservableObject {
             return
         }
 
-        // Skip very short recordings (~0.3s at 16kHz)
+        // Skip very short recordings (~0.1s at 16kHz)
         if samples.count < Self.minSampleCount {
             uploadWatchdog?.cancel()
             uploadWatchdog = nil

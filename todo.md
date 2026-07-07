@@ -30,3 +30,13 @@ Branch: `v1.5-native` · Plan: `docs/superpowers/plans/2026-06-24-v1.5.md`
 - [ ] Apple Developer credentials → notarize + staple + cut the public v1.5 release
 - [ ] Decide site update timing (after notarized DMG)
 - [ ] Switch live hooks to tagless, then the `[VOICE:]` mandate in `~/.claude/CLAUDE.md` can go
+
+## Dependency pins to revisit
+- [ ] **Unpin FluidAudio** once a release *later than* `v0.15.4` includes commit `313feb4b`.
+      It's currently pinned by `revision:` in `app/Package.swift` to the merge commit of
+      [PR #730](https://github.com/FluidInference/FluidAudio/pull/730) (fixes garbled Kokoro on
+      M3 — root cause [issue #727](https://github.com/FluidInference/FluidAudio/issues/727)).
+      Both are merged/closed (2026-06-23) but **not yet in any tagged release** — latest tag
+      `v0.15.4` (2026-06-16) predates the fix by ~12 commits. When a newer tag lands, revert
+      `Package.swift` from `revision:` back to `from: "<new version>"` + `swift package resolve`.
+      Check: `gh release list --repo FluidInference/FluidAudio --limit 5`.

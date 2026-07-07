@@ -3,6 +3,13 @@ import SwiftUI
 import CoreText
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    static private(set) var shared: AppDelegate?
+
+    override init() {
+        super.init()
+        Self.shared = self
+    }
+
     let serverManager = ServerManager()
     let setupManager = SetupManager()
     let dictationManager = DictationManager()
@@ -13,6 +20,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Rename legacy voice_detail → tts_style before the menubar UI reads it.
         ConfigManager.migrateVoiceDetailToTtsStyle()
+        // The `text` response mode was removed — coerce any persisted value to the default.
+        ConfigManager.migrateRemoveTextResponseMode()
+        // Strip the obsolete Stop hook (replaced by the speak MCP tool) from existing installs.
+        ConfigManager.migrateRemoveClaudeStopHook()
         // Prompt for Accessibility permission if not already granted
         accessibilityManager.requestIfNeeded()
         // Clean stale temp/lock/pid files from previous sessions (background, delayed)
@@ -54,7 +65,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async {
                     self?.serverManager.startAll()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                        ConfigManager.showClaudeSettingsInstructions()
+                        ConfigManager.showHookInstructions(for: Platform.load())
                     }
                 }
             }

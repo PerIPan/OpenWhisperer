@@ -121,9 +121,19 @@ actor SpeechTranscriber {
         } else {
             wk = try await prepare()
         }
+
+        // Pad very short audio with silence to ensure WhisperKit's feature extractor
+        // and decoding options can process it reliably (prevents empty transcripts).
+        var processedSamples = samples
+        let minSamples = 24000 // 1.5 seconds at 16kHz
+        if processedSamples.count < minSamples {
+            let paddingCount = minSamples - processedSamples.count
+            processedSamples.append(contentsOf: [Float](repeating: 0.0, count: paddingCount))
+        }
+
         let lang = (language?.isEmpty == false && language != "auto") ? language : nil
         let options = DecodingOptions(language: lang)
-        let results = try await wk.transcribe(audioArray: samples, decodeOptions: options)
+        let results = try await wk.transcribe(audioArray: processedSamples, decodeOptions: options)
         return results
             .map(\.text)
             .joined(separator: " ")

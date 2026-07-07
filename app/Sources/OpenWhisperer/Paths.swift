@@ -13,14 +13,8 @@ enum Paths {
         Bundle.main.resourceURL ?? Bundle.main.bundleURL.appendingPathComponent("Contents/Resources")
     }()
 
-    /// Bundled hook script
-    static let ttsHook = resources.appendingPathComponent("hooks").appendingPathComponent("tts-hook.sh")
-
-    /// Bundled UserPromptSubmit hook (Claude Code voice-turn detection)
+    /// Bundled UserPromptSubmit hook (Claude Code + Codex voice-turn detection)
     static let voiceContextHook = resources.appendingPathComponent("hooks").appendingPathComponent("voice-context.sh")
-
-    /// Bundled spoken-text extractor used by the Stop hooks
-    static let speakableTextScript = resources.appendingPathComponent("hooks").appendingPathComponent("speakable-text.sh")
 
     /// Bundled speak script
     static let speakScript = resources.appendingPathComponent("scripts").appendingPathComponent("speak.sh")
@@ -79,6 +73,9 @@ enum Paths {
     /// TTS volume file (tts-hook.sh reads volume level from this)
     static let ttsVolume = appSupport.appendingPathComponent("tts_volume")
 
+    /// TTS speed file
+    static let ttsSpeed = appSupport.appendingPathComponent("tts_speed")
+
     /// Card expanded states (persisted so user's collapse/expand survives restarts)
     static let setupCardExpanded = appSupport.appendingPathComponent("setup_expanded")
     static let voiceSettingsCardExpanded = appSupport.appendingPathComponent("voice_settings_expanded")
@@ -93,14 +90,44 @@ enum Paths {
             .appendingPathComponent(".claude").appendingPathComponent("settings.json")
     }()
 
+    /// Claude Code user config (~/.claude.json) — holds user-scope MCP servers under `mcpServers`.
+    static let claudeJSON: URL = {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude.json")
+    }()
+
     /// Codex CLI config (~/.codex/config.toml)
     static let codexConfig: URL = {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex").appendingPathComponent("config.toml")
     }()
 
-    /// Codex TTS hook (bundled in app Resources)
-    static let codexTtsHook = resources.appendingPathComponent("hooks").appendingPathComponent("codex-tts-hook.sh")
+    /// Pi coding agent — bundled extension source (Resources/pi/openwhisperer.ts).
+    static let piExtensionSource = resources.appendingPathComponent("pi").appendingPathComponent("openwhisperer.ts")
+
+    /// Pi coding agent — install destination (~/.pi/agent/extensions/openwhisperer.ts).
+    static let piExtensionDest: URL = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".pi").appendingPathComponent("agent")
+            .appendingPathComponent("extensions").appendingPathComponent("openwhisperer.ts")
+    }()
+
+    /// Bundled PreInvocation hook (Antigravity CLI voice-turn detection).
+    static let agyPreInvocationHook = resources.appendingPathComponent("hooks").appendingPathComponent("agy-previnvocation.sh")
+
+    /// Antigravity CLI global MCP config (~/.gemini/config/mcp_config.json) — holds the
+    /// `speak` tool registration over its SSE (serverUrl) transport.
+    static let agyMCPConfig: URL = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".gemini").appendingPathComponent("config").appendingPathComponent("mcp_config.json")
+    }()
+
+    /// Antigravity CLI global hooks config (~/.gemini/config/hooks.json) — holds the
+    /// PreInvocation early-speak hook. Global, not per-workspace: confirmed live to fire for
+    /// any workspace, matching how Claude/Codex/Pi are one-time, not per-project, installs.
+    static let agyHooksConfig: URL = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".gemini").appendingPathComponent("config").appendingPathComponent("hooks.json")
+    }()
 
     /// Ensure directories exist
     static func ensureDirectories() {
