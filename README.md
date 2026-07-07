@@ -4,7 +4,7 @@
 
 # Open Whisperer
 
-Full interactive Voice mode for [Claude Code](https://claude.ai/claude-code) and [Codex CLI](https://github.com/openai/codex) on Apple Silicon. Talk to your AI, hear it talk back — all running locally on your Mac. Three voice input modes, Auto-Focus & easy setup. Open Source.
+Full interactive Voice mode for [Claude Code](https://claude.ai/claude-code), [Codex CLI](https://github.com/openai/codex), Antigravity, and Pi on Apple Silicon. Talk to your AI, hear it talk back — all running locally on your Mac. Three voice input modes, voice personas, Auto-Focus & easy setup. Open Source.
 
 <p align="center">
   <img src="screenshot.png" width="320" alt="Open Whisperer menubar app">
@@ -16,16 +16,28 @@ The command to bypass Gatekeeper for the DMG:
 xattr -cr /Applications/OpenWhisperer.app
 
 If you want to do it on the DMG itself before opening:
-xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.5.2.dmg
+xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.6.0.dmg
 
 
 ## What It Does
 
-You use Claude Code or Codex CLI normally. After a turn you dictated by voice, the AI's reply is automatically spoken aloud through your Mac's speakers using a local TTS model (you can also set replies to always speak — see Response mode). Three voice input modes: **Press-to-Talk** (press hotkey to start/stop), **Hold-to-Talk** (hold hotkey to record, release to transcribe), or **Hands-Free** (say "initiate" to start recording, 3s silence auto-transcribes, say "hold on" to interrupt TTS).
+You use your coding agent — **Claude Code, Codex, Antigravity, or Pi** — normally. After a turn you dictated by voice, the AI's reply is automatically spoken aloud through your Mac's speakers using a local TTS model, in a persona that matches your chosen voice (you can also set replies to always speak — see Response mode). Three voice input modes: **Press-to-Talk** (press hotkey to start/stop), **Hold-to-Talk** (hold hotkey to record, release to transcribe), or **Hands-Free** (say "initiate" to start recording, 3s silence auto-transcribes, say "hold on" to interrupt TTS).
 
 Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
-## What's New in 1.5.x
+## What's New
+
+### 1.6.0
+
+- **Two more agents — Antigravity & Pi** — spoken replies now work beyond Claude Code and Codex in the **Antigravity** CLI (`agy`) and **Pi**. Pick your agent in the **Setup** card and **Auto-Apply** wires it up: Claude Code, Codex, and Antigravity get a hook plus a `speak` tool; Pi gets a drop-in extension.
+- **Voice personas** — pick a voice with a national accent and the reply is written to match its character: the British voice turns dry and deadpan, the Italian voice warm and expressive, the Japanese voice courteous and understated, and so on across nine accents. It colors tone only — it never changes the facts.
+- **Mid-turn speaking** — replies are spoken through an in-app `speak` tool the agent calls, so speech can start mid-turn instead of only after the whole reply lands. (Pi uses an equivalent extension.)
+- **Adjustable speaking speed** — a **Speed** slider in Voice Settings sets how fast replies are spoken (0.7×–1.5×, default 1.1×). Per-project override via `OW_TTS_SPEED`.
+- **Simpler Response modes** — the little-used "when Text" option is gone; **Response** is now **when Voice** (dictated turns only, the default) or **Always**.
+- **Steadier voice handling** — an invalid voice name from the model is ignored (it falls back to your selected voice) instead of erroring, and the transcription overlay now takes the first click even when the app is in the background — click any line to copy it.
+
+<details>
+<summary><strong>Earlier releases — 1.5.x</strong> (native rewrite, streaming TTS, app-focus automation, first-run UX)</summary>
 
 ### 1.5.2
 
@@ -56,9 +68,11 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 - **Garbled-speech fix on Apple Silicon** — on some chips (notably M3 / macOS 15) a strided CoreML array was mis-read, producing fluent-but-*wrong*, "foreign-sounding" speech regardless of the text; updated to the upstream fix so synthesis is correct across Apple Silicon generations.
 - **Delete downloaded models** — a maintenance button in **Server & Logs** clears the STT/TTS model caches after a confirmation that shows how much space it frees; the models re-download automatically on next use.
 
+</details>
+
 ## Install
 
-[**Download OpenWhisperer-1.5.2.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.5.2/OpenWhisperer-1.5.2.dmg) — drag to Applications and launch.
+[**Download OpenWhisperer-1.6.0.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.6.0/OpenWhisperer-1.6.0.dmg) — drag to Applications and launch.
 
 On first launch, the app:
 - Downloads the Whisper (speech-to-text) and Kokoro (text-to-speech) CoreML models
@@ -231,7 +245,7 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-This produces `OpenWhisperer.app` and `OpenWhisperer-1.5.2.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
+This produces `OpenWhisperer.app` and `OpenWhisperer-1.6.0.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
 
 ### Step 2: Wire up the hooks
 
