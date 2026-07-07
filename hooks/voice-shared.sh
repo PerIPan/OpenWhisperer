@@ -96,18 +96,19 @@ resolve_flavor() {
   fi
 }
 
-# Per-project overrides → tell the model to pass them to `speak`. Only an override needs
-# injecting; the global voice/speed are already the tool's defaults. Speed must be numeric.
+# Speak tool args → tell the model the exact voice/speed to pass to `speak` to prevent guesswork.
+# We always explicitly instruct the model to pass the active voice (global or overridden).
 resolve_speak_args() {
   local voice="$OW_TTS_VOICE"
   [ -z "$voice" ] && voice=$(cat "$APP_SUPPORT/tts_voice" 2>/dev/null)
   voice=$(printf '%s' "$voice" | tr -d '[:space:]')
-  local ovr=""
-  [ -n "$OW_TTS_VOICE" ] && ovr=" voice=\"$voice\""
+  [ -z "$voice" ] && voice="af_heart"
+
+  local ovr=" voice=\"$voice\""
   if [ -n "$OW_TTS_SPEED" ] && printf '%s' "$OW_TTS_SPEED" | grep -Eq '^[0-9]+(\.[0-9]+)?$'; then
     ovr="${ovr} speed=$OW_TTS_SPEED"
   fi
-  if [ -n "$ovr" ]; then echo " Call it with${ovr}."; else echo ""; fi
+  echo " Call it with${ovr}."
 }
 
 # Build the full nudge sentence. $1 = IS_VOICE (0/1).

@@ -257,13 +257,16 @@ func voiceContextFailures() -> [String] {
         }
     }
 
-    // 25) no override → nudge carries no voice=/speed= args (default nudge unchanged).
+    // 25) no override → nudge carries voice="af_heart" fallback arg but no speed arg.
     do {
         let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         let n = nudge(r.stdout)
-        if n?.contains("voice=") == true || n?.contains("speed=") == true {
-            fail("noOverrideNoArgs: unexpected arg injected: \(n?.debugDescription ?? "nil")")
+        if n?.contains("voice=\"af_heart\"") != true {
+            fail("noOverrideFallbackVoice: expected voice=\"af_heart\" fallback: \(n?.debugDescription ?? "nil")")
+        }
+        if n?.contains("speed=") == true {
+            fail("noOverrideNoSpeed: unexpected speed arg injected: \(n?.debugDescription ?? "nil")")
         }
     }
 
