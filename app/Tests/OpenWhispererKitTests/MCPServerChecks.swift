@@ -77,8 +77,30 @@ func mcpServerFailures() -> [String] {
         failures.append("tools/call(no voice): expected .speak outcome")
     }
 
+    // tools/call speak with a persona/display voice name → ignore it so playback falls back to
+    // the user's configured Kokoro voice instead of forwarding an invalid synthesis voice.
+    switch req(#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"speak","arguments":{"text":"hello","voice":"British English"}}}"#) {
+    case let .speak(_, text, voice, _):
+        if text != "hello" { failures.append("tools/call(display voice): text wrong") }
+        if voice != nil { failures.append("tools/call(display voice): voice should be nil") }
+    default:
+        failures.append("tools/call(display voice): expected .speak outcome")
+    }
+    switch req(#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"speak","arguments":{"text":"hello","voice":"british_english"}}}"#) {
+    case let .speak(_, _, voice, _):
+        if voice != nil { failures.append("tools/call(display voice slug): voice should be nil") }
+    default:
+        failures.append("tools/call(display voice slug): expected .speak outcome")
+    }
+    switch req(#"{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"speak","arguments":{"text":"hello","voice":"12_voice"}}}"#) {
+    case let .speak(_, _, voice, _):
+        if voice != nil { failures.append("tools/call(invalid voice prefix): voice should be nil") }
+    default:
+        failures.append("tools/call(invalid voice prefix): expected .speak outcome")
+    }
+
     // tools/call speak with missing text → tool error, and crucially NOT a playback.
-    switch req(#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"speak","arguments":{}}}"#) {
+    switch req(#"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"speak","arguments":{}}}"#) {
     case let .json(data):
         if ((decode(data)?["result"] as? [String: Any])?["isError"] as? Bool) != true { failures.append("tools/call(missing text): expected isError true") }
     case .speak:
@@ -88,7 +110,7 @@ func mcpServerFailures() -> [String] {
     }
 
     // tools/call unknown tool → tool error.
-    switch req(#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"nope","arguments":{"text":"x"}}}"#) {
+    switch req(#"{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"nope","arguments":{"text":"x"}}}"#) {
     case let .json(data):
         if ((decode(data)?["result"] as? [String: Any])?["isError"] as? Bool) != true { failures.append("tools/call(unknown tool): expected isError true") }
     default:
@@ -96,9 +118,9 @@ func mcpServerFailures() -> [String] {
     }
 
     // unknown method → JSON-RPC error -32601, id echoed.
-    if case let .json(data) = req(#"{"jsonrpc":"2.0","id":8,"method":"resources/list","params":{}}"#),
+    if case let .json(data) = req(#"{"jsonrpc":"2.0","id":11,"method":"resources/list","params":{}}"#),
        let r = decode(data) {
-        if (r["id"] as? Int) != 8 { failures.append("unknown method: id not echoed") }
+        if (r["id"] as? Int) != 11 { failures.append("unknown method: id not echoed") }
         if ((r["error"] as? [String: Any])?["code"] as? Int) != -32601 { failures.append("unknown method: code != -32601") }
     } else {
         failures.append("unknown method: expected .json error")

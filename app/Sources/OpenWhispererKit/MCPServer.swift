@@ -57,7 +57,7 @@ public struct MCPServer {
                     "type": "object",
                     "properties": [
                         "text": ["type": "string", "description": "The text to speak aloud."],
-                        "voice": ["type": "string", "description": "Optional voice name; defaults to the user's selected voice."],
+                        "voice": ["type": "string", "description": "Optional Kokoro voice id; defaults to the user's selected voice."],
                         "speed": ["type": "number", "description": "Optional playback speed, 0.7–1.5; defaults to the user's setting."],
                     ],
                     "required": ["text"],
@@ -74,7 +74,7 @@ public struct MCPServer {
             guard let text = args["text"] as? String, !text.isEmpty else {
                 return .json(Self.toolError(id: requestID, message: "Missing required argument: text"))
             }
-            let voice = args["voice"] as? String
+            let voice = Self.validVoiceID(args["voice"] as? String)
             let speed = args["speed"] as? Double
             let response = Self.resultResponse(id: requestID, result: [
                 "content": [["type": "text", "text": "Speaking."]],
@@ -100,6 +100,20 @@ public struct MCPServer {
     /// A tool-level failure: a successful JSON-RPC result whose payload is flagged `isError`.
     private static func toolError(id: Any, message: String) -> Data {
         resultResponse(id: id, result: ["content": [["type": "text", "text": message]], "isError": true])
+    }
+
+    private static func validVoiceID(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let voice = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !voice.isEmpty else { return nil }
+        let chars = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789_")
+        guard voice.rangeOfCharacter(from: chars.inverted) == nil,
+              let underscore = voice.firstIndex(of: "_"),
+              voice.distance(from: voice.startIndex, to: underscore) == 2,
+              underscore < voice.index(before: voice.endIndex) else { return nil }
+        let prefix = voice[..<underscore]
+        guard prefix.allSatisfy(\.isLetter) else { return nil }
+        return voice
     }
 
     private static func encode(_ obj: [String: Any]) -> Data {
