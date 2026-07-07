@@ -49,6 +49,11 @@ class DictationManager: ObservableObject {
     /// the menu bar icon and the status pill.
     @Published var speakArmed = false
     private var speakArmedTimer: Timer?
+    /// True when the last dictation landed in a plausible CLI host (terminal/IDE)
+    /// — an app where a hooked Claude Code / Codex prompt could actually claim the
+    /// voice_turn signal. Gates the pre-submit will-speak indicator; false means a
+    /// bare voice_turn never lights the icon (post-submit speak_pending still does).
+    private var lastDictationTargetIsCLIHost = false
 
     private var isTyping = false  // prevent concurrent typeText
 
@@ -634,12 +639,34 @@ class DictationManager: ObservableObject {
     /// Matches the 900 s voice_turn TTL in voice-context.sh / codex-tts-hook.sh.
     private static let voiceTurnTTL: TimeInterval = 900
 
+    /// Apps where a hooked CLI prompt could plausibly live — the curated auto-focus
+    /// list (terminals + editors) plus common extra terminals. Lowercased names.
+    private static let cliHostNames: Set<String> = [
+        "code", "code - insiders", "cursor", "windsurf", "zed", "xcode",
+        "sublime text", "nova", "fleet", "claude", "terminal", "iterm2",
+        "warp", "alacritty", "ghostty", "kitty", "wezterm", "hyper", "tabby",
+    ]
+
+    private static func isCLIHost(pid: pid_t) -> Bool {
+        guard pid != 0, let app = NSRunningApplication(processIdentifier: pid),
+              let name = app.localizedName?.lowercased() else { return false }
+        if cliHostNames.contains(name) { return true }
+        // A user-configured auto-focus target is a deliberate CLI destination
+        // even when it isn't on the curated list.
+        if let focus = (try? String(contentsOf: Paths.autoFocusApp, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+           !focus.isEmpty, name == focus {
+            return true
+        }
+        return false
+    }
+
     /// Recompute `speakArmed` from the on-disk signals and keep a 1 s poll running
     /// while it's on (the hooks consume the files out-of-process, so the app has to
     /// watch for the transition). Cheap: two stat/read calls per tick, only while armed.
     func refreshSpeakArmed() {
         dispatchPrecondition(condition: .onQueue(.main))
-        let armed = Self.computeSpeakArmed()
+        let armed = Self.computeSpeakArmed(voiceTurnEligible: lastDictationTargetIsCLIHost)
         if speakArmed != armed { speakArmed = armed }
         if armed, speakArmedTimer == nil {
             speakArmedTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -651,14 +678,16 @@ class DictationManager: ObservableObject {
         }
     }
 
-    private static func computeSpeakArmed() -> Bool {
+    private static func computeSpeakArmed(voiceTurnEligible: Bool) -> Bool {
         let fm = FileManager.default
         let now = Date()
         // Pre-submit: a fresh unclaimed voice_turn — except in "text" Response mode,
-        // where a dictated turn is exactly the one that will NOT be spoken.
+        // where a dictated turn is exactly the one that will NOT be spoken, and only
+        // when the dictation landed in a CLI host (voiceTurnEligible) — otherwise the
+        // signal can never be claimed and the icon would pin for the full TTL.
         let mode = (try? String(contentsOf: Paths.ttsResponseMode, encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? "voice"
-        if mode != "text",
+        if voiceTurnEligible, mode != "text",
            let contents = try? String(contentsOf: Paths.voiceTurn, encoding: .utf8) {
             let lines = contents.split(separator: "\n")
             if lines.count >= 2, let ts = TimeInterval(lines[1]),
@@ -707,11 +736,17 @@ class DictationManager: ObservableObject {
         let voiceTS = Int(Date().timeIntervalSince1970)
         try? VoiceSignal.signalContents(hash: voiceHash, timestamp: voiceTS)
             .write(to: Paths.voiceTurn, atomically: true, encoding: .utf8)
-        refreshSpeakArmed()
 
         // Resolve which app to focus: Auto-Focus target overrides captured PID
         let focusPID = resolveAutoFocusPID() ?? pid
         let targetPID = focusPID != 0 ? focusPID : pid
+
+        // Arm the will-speak indicator only when the dictation landed in a
+        // plausible CLI host — dictating into WhatsApp/Safari/Mail writes the
+        // signal too (the handshake can't know where you'll submit), but nothing
+        // there will ever claim it, so the icon would sit lit for the full TTL.
+        lastDictationTargetIsCLIHost = Self.isCLIHost(pid: targetPID)
+        refreshSpeakArmed()
 
         // Capture current frontmost app as origin (for "with return")
         let currentFront = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
