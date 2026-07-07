@@ -8,9 +8,10 @@ All Swift commands run from the `app/` directory (it's the SwiftPM package root)
 
 ```bash
 cd app
-swift build                          # debug build
-swift build -c release               # release build
-./build-dmg.sh                       # build .app bundle + .dmg (release) into app/.build/
+swift build                                           # debug build
+swift build -c release                                # release build
+OW_SIGN_IDENTITY="OpenWhisperer Dev" ./build-dmg.sh   # build signed bundle + .dmg for local dev (keeps TCC grants)
+./build-dmg.sh                                        # build ad-hoc bundle + .dmg (release) into app/.build/
 
 swift run OpenWhispererKitTests      # pure-logic unit tests (exits non-zero on failure)
 swift run HookTests                  # bash-hook integration tests (stubbed curl + temp HOME)
@@ -39,7 +40,7 @@ Pick the lightest safe path:
 - **Local (commit straight to `main`, no PR)** — docs/CLAUDE.md/comment edits, or a small, self-contained, low-risk code fix where a PR adds ceremony without safety. Stay on `main`, make the smallest edit, verify (readback for docs; the test targets for code), commit, push. If it unexpectedly grows beyond small/isolated, switch to the PR path before committing.
 - **PR** — multiple files, real logic, a dependency change, or user-visible behavior:
   1. **Worktree off `main`:** `git worktree add .claude/worktrees/<slug> -b <slug>` (or `EnterWorktree` in Claude Code).
-  2. **Build + test** from `app/`: `swift run OpenWhispererKitTests` and `swift run HookTests` (both `exit(1)` on failure). For a packaged `.app`/`.dmg`, `./build-dmg.sh` — set `OW_SIGN_IDENTITY` so TCC grants survive the rebuild (see Conventions).
+  2. **Build + test** from `app/`: `swift run OpenWhispererKitTests` and `swift run HookTests` (both `exit(1)` on failure). For a packaged `.app`/`.dmg`, use `OW_SIGN_IDENTITY="OpenWhisperer Dev" ./build-dmg.sh` locally so TCC grants survive the rebuild (see Conventions).
   3. **PR:** rebase onto `origin/main` if it moved, push, `gh pr create`.
   4. **After merge:** sync `main` (`git pull --ff-only`), `git worktree remove .claude/worktrees/<slug>`, delete the branch. Leave no orphaned worktree dir — a stale bundle holding `:8000` is a known foot-gun.
 
