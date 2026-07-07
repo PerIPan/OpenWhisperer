@@ -65,6 +65,14 @@ On first launch, the app:
 - Loads both models on the Apple Neural Engine
 - Starts the in-app TTS server automatically (loopback only, port 8000)
 
+While that one-time download and Neural-Engine compile runs, the menu and the floating overlay both show live progress so you know it isn't stuck:
+
+<p align="center">
+  <img src="screenshot-loading-menu.png" width="340" alt="Open Whisperer menu preparing the models on first launch">
+  &nbsp;
+  <img src="screenshot-loading-overlay.png" width="300" alt="Open Whisperer overlay showing model-preparation progress">
+</p>
+
 The menubar icon gives you:
 - Start/Stop/Restart server with configurable port
 - **Push-to-Talk** — configurable hotkey (Ctrl, fn, Option, Cmd) to record
@@ -113,10 +121,6 @@ No button press needed. Uses on-device keyword detection (Apple Speech framework
 5. say **"hold on"** during TTS playback — interrupts audio and starts recording
 
 > **Tip:** "Hold on" barge-in works best with headphones — without them the mic may pick up the TTS audio instead of your voice.
-
-<p align="center">
-  <img src="screenshot2.png" width="480" alt="Open Whisperer transcription overlay">
-</p>
 
 ### Requirements
 
