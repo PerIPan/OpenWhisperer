@@ -176,7 +176,7 @@ func voiceContextFailures() -> [String] {
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         let n = nudge(r.stdout)
         if n?.contains("French") != true { fail("frenchPersona: missing 'French': \(n?.debugDescription ?? "nil")") }
-        if n?.contains("voice reading this aloud") != true { fail("frenchPersona: missing persona: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("voice speaking your reply") != true { fail("frenchPersona: missing persona: \(n?.debugDescription ?? "nil")") }
         if n?.contains("`speak` tool") != true { fail("frenchPersona: base nudge lost") }
     }
 
@@ -186,7 +186,7 @@ func voiceContextFailures() -> [String] {
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("jf_alpha")
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
         if n?.contains("Japanese") != true { fail("japanesePersona: \(n?.debugDescription ?? "nil")") }
-        if n?.contains("voice reading this aloud") != true { fail("japanesePersona: missing persona") }
+        if n?.contains("voice speaking your reply") != true { fail("japanesePersona: missing persona") }
     }
 
     // 18) American English voice (af_heart, the default) → persona present (US).
@@ -196,7 +196,7 @@ func voiceContextFailures() -> [String] {
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         let n = nudge(r.stdout)
         if n?.contains("American") != true { fail("americanPersona: missing 'American': \(n?.debugDescription ?? "nil")") }
-        if n?.contains("voice reading this aloud") != true { fail("americanPersona: missing persona") }
+        if n?.contains("voice speaking your reply") != true { fail("americanPersona: missing persona") }
     }
 
     // 19) no voice set → NO flavor (safe default).
@@ -204,7 +204,7 @@ func voiceContextFailures() -> [String] {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
-        if nudge(r.stdout)?.contains("voice reading this aloud") == true { fail("noVoiceNoFlavor: unexpected persona") }
+        if nudge(r.stdout)?.contains("voice speaking your reply") == true { fail("noVoiceNoFlavor: unexpected persona") }
     }
 
     // 20) persona composes with a non-default length style: terse + a French voice → both present.
@@ -213,7 +213,7 @@ func voiceContextFailures() -> [String] {
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis"); s.writeTtsStyle("terse")
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
         if n?.contains("one short, plain spoken sentence") != true { fail("terseFrenchCompose: terse length lost") }
-        if n?.contains("voice reading this aloud") != true { fail("terseFrenchCompose: persona missing") }
+        if n?.contains("voice speaking your reply") != true { fail("terseFrenchCompose: persona missing") }
     }
 
     // 21) British English voice (b-prefix) → persona present (UK).
@@ -223,7 +223,7 @@ func voiceContextFailures() -> [String] {
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         let n = nudge(r.stdout)
         if n?.contains("British") != true { fail("britishPersona: missing 'British'") }
-        if n?.contains("voice reading this aloud") != true { fail("britishPersona: missing persona") }
+        if n?.contains("voice speaking your reply") != true { fail("britishPersona: missing persona") }
     }
 
     // 22) a different non-English branch (Italian) → persona present, its language named.
@@ -232,7 +232,7 @@ func voiceContextFailures() -> [String] {
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("if_sara")
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
         if n?.contains("Italian") != true { fail("italianPersona: \(n?.debugDescription ?? "nil")") }
-        if n?.contains("voice reading this aloud") != true { fail("italianPersona: missing persona") }
+        if n?.contains("voice speaking your reply") != true { fail("italianPersona: missing persona") }
     }
 
     // --- Per-project voice/speed overrides (env → nudge args; flavor follows the override) ---
