@@ -3,6 +3,13 @@ import SwiftUI
 import CoreText
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    static private(set) var shared: AppDelegate?
+
+    override init() {
+        super.init()
+        Self.shared = self
+    }
+
     let serverManager = ServerManager()
     let setupManager = SetupManager()
     let dictationManager = DictationManager()

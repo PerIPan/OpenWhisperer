@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import OpenWhispererKit
 
 /// Orchestrates in-process TTS playback: splits text into sentences, synthesizes each via
@@ -30,7 +31,6 @@ actor TTSPlaybackController {
         let sentences = SentenceSplitter.split(text)
         guard !sentences.isEmpty else { removeLock(); return }
         let volume = Self.readVolume()
-        writeLock()
 
         engine.onDrained = { [weak self] in
             Task { await self?.handleDrain(gen: gen) }
@@ -40,6 +40,15 @@ actor TTSPlaybackController {
         }
 
         playTask = Task {
+            // Hold off playing if the user is currently speaking/recording.
+            while await self.isUserRecording() {
+                if Task.isCancelled || gen != generation { return }
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
+
+            if Task.isCancelled || gen != generation { return }
+            self.writeLock()
+
             for sentence in sentences {
                 if Task.isCancelled || gen != generation { break }
                 do {
@@ -100,5 +109,12 @@ actor TTSPlaybackController {
 
     private static func readVolume() -> Float {
         TTSVolume.parse(try? String(contentsOf: Paths.ttsVolume, encoding: .utf8))
+    }
+
+    private func isUserRecording() async -> Bool {
+        await MainActor.run {
+            guard let delegate = AppDelegate.shared else { return false }
+            return delegate.dictationManager.recorder.state == .recording
+        }
     }
 }
