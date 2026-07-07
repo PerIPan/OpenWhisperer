@@ -92,8 +92,14 @@ actor KokoroTTS {
 
         do {
             try fileManager.createDirectory(at: localDir, withIntermediateDirectories: true)
-            let (data, _) = try await URLSession.shared.data(from: url)
-            guard data.count > 1000 else { return }
+            let (data, response) = try await URLSession.shared.data(from: url)
+            // Status check matters: a 404/error body over 1000 bytes would otherwise be
+            // written as a .bin and pass the size check forever after.
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  data.count > 1000 else {
+                NSLog("KokoroTTS: voice pack fetch for \(sanitized) returned no usable data")
+                return
+            }
             try data.write(to: localURL, options: .atomic)
         } catch {
             // Non-fatal: KokoroAneManager handles the missing asset downstream. Log so a failed

@@ -11,12 +11,6 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     static let shared = TranscriptionOverlay()
 
     private var window: NSWindow?
-    private var fileHandle: FileHandle?
-    private var source: DispatchSourceFileSystemObject?
-    /// Serial queue for the log-tailing source. A serial target queue guarantees the
-    /// event handler and the cancel handler (which closes the FileHandle) never run
-    /// concurrently, so a queued read can't hit a closed handle during teardown (T1.1/H-4).
-    private let tailQueue = DispatchQueue(label: "com.openwhisperer.overlay.tail", qos: .utility)
 
     struct Line: Identifiable {
         let id: Int
@@ -141,12 +135,10 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.orderFront(nil)
         self.window = w
         isVisible = true
-        startTailing()
         startTTSPolling()
     }
 
     func hide() {
-        stopTailing()
         stopTTSPolling()
         window?.close()
         window = nil
@@ -154,7 +146,6 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     }
 
     func windowWillClose(_ notification: Notification) {
-        stopTailing()
         stopTTSPolling()
         window = nil
         isVisible = false
@@ -179,69 +170,6 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         isTTSPlaying = false
     }
 
-    private func startTailing() {
-        stopTailing()
-
-        let logPath = Paths.serverLog.path
-        guard FileManager.default.fileExists(atPath: logPath) else { return }
-
-        guard let fh = FileHandle(forReadingAtPath: logPath) else { return }
-        fh.seekToEndOfFile()
-        fileHandle = fh
-
-        let fd = fh.fileDescriptor
-        let src = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .extend],
-            queue: tailQueue
-        )
-
-        src.setEventHandler { [weak self] in
-            guard let self else { return }
-            let data = fh.availableData
-            guard !data.isEmpty,
-                  let text = String(data: data, encoding: .utf8) else { return }
-
-            let newLines = text.components(separatedBy: "\n")
-                .filter { $0.contains("Transcribed:") }
-                .compactMap { line -> String? in
-                    guard let range = line.range(of: "Transcribed: ") else { return nil }
-                    return String(line[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-                .filter { !$0.isEmpty }
-
-            if !newLines.isEmpty {
-                DispatchQueue.main.async {
-                    let tagged = newLines.map { text -> Line in
-                        self.nextLineId += 1
-                        return Line(id: self.nextLineId, text: text)
-                    }
-                    self.lines.append(contentsOf: tagged)
-                    // Keep a scrollable history (the overlay caps its visible height and
-                    // scrolls internally), but bound memory so it can't grow unbounded.
-                    if self.lines.count > 50 {
-                        self.lines = Array(self.lines.suffix(50))
-                    }
-                }
-            }
-        }
-
-        src.setCancelHandler {
-            try? fh.close()
-        }
-
-        src.resume()
-        source = src
-    }
-
-    private func stopTailing() {
-        // Cancel source first — its cancel handler exclusively closes the file handle (H-4)
-        let src = source
-        source = nil
-        fileHandle = nil
-        src?.cancel()
-    }
-
     // MARK: - Status mirroring
 
     /// Subscribe to the managers' published state so the overlay headline stays in sync.
@@ -256,6 +184,22 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
             dm.$sttModelReady.sink { _ in recompute() }.store(in: &statusCancellables)
             dm.$sttFailed.sink { _ in recompute() }.store(in: &statusCancellables)
             dm.$sttStatus.sink { _ in recompute() }.store(in: &statusCancellables)
+            // Transcript history straight from the in-process pipeline. (The overlay
+            // used to tail server.log for "Transcribed:" lines — a format only the
+            // deleted Python server wrote, so the pane had been empty since the port.)
+            dm.$lastTranscription
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] text in
+                    guard let self, !text.isEmpty else { return }
+                    self.nextLineId += 1
+                    self.lines.append(Line(id: self.nextLineId, text: text))
+                    // Scrollable history, memory-bounded.
+                    if self.lines.count > 50 {
+                        self.lines = Array(self.lines.suffix(50))
+                    }
+                }
+                .store(in: &statusCancellables)
         }
         if let sm = setupManager {
             sm.$state.sink { _ in recompute() }.store(in: &statusCancellables)

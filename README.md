@@ -16,7 +16,7 @@ The command to bypass Gatekeeper for the DMG:
 xattr -cr /Applications/OpenWhisperer.app
 
 If you want to do it on the DMG itself before opening:
-xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.5.1.dmg
+xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.5.2.dmg
 
 
 ## What It Does
@@ -26,6 +26,15 @@ You use Claude Code or Codex CLI normally. After a turn you dictated by voice, t
 Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## What's New in 1.5.x
+
+### 1.5.2
+
+- **Will-speak indicator** — the menubar icon turns into a speaker (and the status pill reads **Standby · will speak**) whenever your next dictated turn's reply is set to be spoken, so a turn that silently *won't* speak (you edited the prompt, or dictated twice into one input) no longer looks like a bug. It only lights up when you dictate into a terminal or editor — dictating into WhatsApp, Safari, or Mail leaves it dark.
+- **Overlay transcription history** — the floating overlay's transcript pane now shows each dictation as it happens (it had been silently empty since the native rewrite, watching a log the old Python server used to write).
+- **First-run download progress** — the menu shows a live percentage while the speech model downloads, then a clear "compiling for the Neural Engine" message. If a model fails to load, a banner explains why with **Retry** and **Copy Diagnostics** buttons.
+- **Copy Diagnostics** — a button in **Server & Logs** copies a support-ready report (app/macOS versions, permission states, model/cache status, free disk space, recent log lines) to the clipboard.
+- **More reliable Codex replies** — spoken replies on Codex CLI are now matched to your dictated turn by content, so a parallel or typed turn can't steal or silence the reply you meant to hear.
+- **Voice-download hardening** — alternative Kokoro voices (Bella, Michael, Siwis, …) reject a bad server response instead of caching an error page in place of the voice.
 
 ### 1.5.1
 
@@ -49,12 +58,20 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## Install
 
-[**Download OpenWhisperer-1.5.1.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.5.1/OpenWhisperer-1.5.1.dmg) — drag to Applications and launch.
+[**Download OpenWhisperer-1.5.2.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.5.2/OpenWhisperer-1.5.2.dmg) — drag to Applications and launch.
 
 On first launch, the app:
 - Downloads the Whisper (speech-to-text) and Kokoro (text-to-speech) CoreML models
 - Loads both models on the Apple Neural Engine
 - Starts the in-app TTS server automatically (loopback only, port 8000)
+
+While that one-time download and Neural-Engine compile runs, the menu and the floating overlay both show live progress so you know it isn't stuck:
+
+<p align="center">
+  <img src="screenshot-loading-menu.png" width="460" alt="Open Whisperer menu preparing the models on first launch">
+  <br><br>
+  <img src="screenshot-loading-overlay.png" width="460" alt="Open Whisperer overlay showing model-preparation progress">
+</p>
 
 The menubar icon gives you:
 - Start/Stop/Restart server with configurable port
@@ -104,10 +121,6 @@ No button press needed. Uses on-device keyword detection (Apple Speech framework
 5. say **"hold on"** during TTS playback — interrupts audio and starts recording
 
 > **Tip:** "Hold on" barge-in works best with headphones — without them the mic may pick up the TTS audio instead of your voice.
-
-<p align="center">
-  <img src="screenshot2.png" width="480" alt="Open Whisperer transcription overlay">
-</p>
 
 ### Requirements
 
@@ -218,7 +231,7 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-This produces `OpenWhisperer.app` and `OpenWhisperer-1.5.1.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
+This produces `OpenWhisperer.app` and `OpenWhisperer-1.5.2.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
 
 ### Step 2: Wire up the hooks
 

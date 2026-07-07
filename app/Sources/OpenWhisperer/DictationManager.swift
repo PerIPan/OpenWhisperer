@@ -41,6 +41,19 @@ class DictationManager: ObservableObject {
     @Published var sttModelReady = false
     /// True when the speech-model load failed (offers a Retry in the UI).
     @Published var sttFailed = false
+    /// Last whole percent shown for the first-run model download (dedups UI updates).
+    private var lastReportedDownloadPct = -1
+    /// True while the next/current turn's reply is expected to be spoken: a fresh
+    /// unclaimed `voice_turn` signal (pre-submit), or a claimed turn whose reply is
+    /// still pending (`speak_pending/` marker). Drives the will-speak indicator in
+    /// the menu bar icon and the status pill.
+    @Published var speakArmed = false
+    private var speakArmedTimer: Timer?
+    /// True when the last dictation landed in a plausible CLI host (terminal/IDE)
+    /// — an app where a hooked Claude Code / Codex prompt could actually claim the
+    /// voice_turn signal. Gates the pre-submit will-speak indicator; false means a
+    /// bare voice_turn never lights the icon (post-submit speak_pending still does).
+    private var lastDictationTargetIsCLIHost = false
 
     private var isTyping = false  // prevent concurrent typeText
 
@@ -138,6 +151,7 @@ class DictationManager: ObservableObject {
         if let activationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
         }
+        speakArmedTimer?.invalidate()
     }
 
     /// Kick off the one-time WhisperKit model download + load. Call at launch so the
@@ -151,6 +165,21 @@ class DictationManager: ObservableObject {
             : "Downloading the speech model… one-time, about 1.5 GB. This can take a few minutes on first launch."
         Task { [weak self] in
             guard let self else { return }
+            // Live percent while the archive downloads (first run only — the handler
+            // is never called when the model is cached). Whole-percent granularity
+            // keeps main-thread updates cheap.
+            await self.transcriber.setDownloadProgressHandler { [weak self] fraction in
+                let pct = min(100, Int(fraction * 100))
+                Task { @MainActor in
+                    guard let self, !self.sttModelReady, !self.sttFailed else { return }
+                    if pct >= 100 {
+                        self.sttStatus = "Download done — compiling for the Neural Engine… up to a minute or two."
+                    } else if pct != self.lastReportedDownloadPct {
+                        self.lastReportedDownloadPct = pct
+                        self.sttStatus = "Downloading the speech model… \(pct)% of ~1.5 GB (one-time)."
+                    }
+                }
+            }
             do {
                 _ = try await self.transcriber.prepare()
                 await MainActor.run {
@@ -173,6 +202,7 @@ class DictationManager: ObservableObject {
     func retrySTT() {
         sttFailed = false
         sttModelReady = false
+        lastReportedDownloadPct = -1
         prepareSTT()
     }
 
@@ -604,6 +634,83 @@ class DictationManager: ObservableObject {
         NSSound(named: "Tink")?.play()
     }
 
+    // MARK: - Will-speak indicator
+
+    /// Matches the 900 s voice_turn TTL in voice-context.sh / codex-tts-hook.sh.
+    private static let voiceTurnTTL: TimeInterval = 900
+
+    /// Apps where a hooked CLI prompt could plausibly live — the curated auto-focus
+    /// list (terminals + editors) plus common extra terminals. Lowercased names.
+    private static let cliHostNames: Set<String> = [
+        "code", "code - insiders", "cursor", "windsurf", "zed", "xcode",
+        "sublime text", "nova", "fleet", "claude", "terminal", "iterm2",
+        "warp", "alacritty", "ghostty", "kitty", "wezterm", "hyper", "tabby",
+    ]
+
+    private static func isCLIHost(pid: pid_t) -> Bool {
+        guard pid != 0, let app = NSRunningApplication(processIdentifier: pid),
+              let name = app.localizedName?.lowercased() else { return false }
+        if cliHostNames.contains(name) { return true }
+        // A user-configured auto-focus target is a deliberate CLI destination
+        // even when it isn't on the curated list.
+        if let focus = (try? String(contentsOf: Paths.autoFocusApp, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+           !focus.isEmpty, name == focus {
+            return true
+        }
+        return false
+    }
+
+    /// Recompute `speakArmed` from the on-disk signals and keep a 1 s poll running
+    /// while it's on (the hooks consume the files out-of-process, so the app has to
+    /// watch for the transition). Cheap: two stat/read calls per tick, only while armed.
+    func refreshSpeakArmed() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        let armed = Self.computeSpeakArmed(voiceTurnEligible: lastDictationTargetIsCLIHost)
+        if speakArmed != armed { speakArmed = armed }
+        if armed, speakArmedTimer == nil {
+            speakArmedTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                self?.refreshSpeakArmed()
+            }
+        } else if !armed {
+            speakArmedTimer?.invalidate()
+            speakArmedTimer = nil
+        }
+    }
+
+    private static func computeSpeakArmed(voiceTurnEligible: Bool) -> Bool {
+        let fm = FileManager.default
+        let now = Date()
+        // Pre-submit: a fresh unclaimed voice_turn — except in "text" Response mode,
+        // where a dictated turn is exactly the one that will NOT be spoken, and only
+        // when the dictation landed in a CLI host (voiceTurnEligible) — otherwise the
+        // signal can never be claimed and the icon would pin for the full TTL.
+        let mode = (try? String(contentsOf: Paths.ttsResponseMode, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "voice"
+        if voiceTurnEligible, mode != "text",
+           let contents = try? String(contentsOf: Paths.voiceTurn, encoding: .utf8) {
+            let lines = contents.split(separator: "\n")
+            if lines.count >= 2, let ts = TimeInterval(lines[1]),
+               now.timeIntervalSince1970 - ts <= voiceTurnTTL {
+                return true
+            }
+        }
+        // Post-submit: a claimed turn awaiting its reply (any mode — the marker only
+        // exists for turns the hooks decided to speak). Same freshness cap so a
+        // marker orphaned by a killed session can't pin the indicator on.
+        if let entries = try? fm.contentsOfDirectory(at: Paths.speakPendingDir,
+                                                     includingPropertiesForKeys: [.contentModificationDateKey]) {
+            for entry in entries {
+                if let mtime = try? entry.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate,
+                   now.timeIntervalSince(mtime) <= voiceTurnTTL {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     /// Barge-in: stop any currently playing TTS when recording starts. Playback is in-process
     /// (Phase 3) — a direct actor call stops audio and cancels pending synthesis (freeing the ANE
     /// for STT). The controller removes `tts_playing.lock`; we also remove it directly so the
@@ -633,6 +740,13 @@ class DictationManager: ObservableObject {
         // Resolve which app to focus: Auto-Focus target overrides captured PID
         let focusPID = resolveAutoFocusPID() ?? pid
         let targetPID = focusPID != 0 ? focusPID : pid
+
+        // Arm the will-speak indicator only when the dictation landed in a
+        // plausible CLI host — dictating into WhatsApp/Safari/Mail writes the
+        // signal too (the handshake can't know where you'll submit), but nothing
+        // there will ever claim it, so the icon would sit lit for the full TTL.
+        lastDictationTargetIsCLIHost = Self.isCLIHost(pid: targetPID)
+        refreshSpeakArmed()
 
         // Capture current frontmost app as origin (for "with return")
         let currentFront = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0

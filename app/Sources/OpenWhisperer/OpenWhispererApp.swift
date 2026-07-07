@@ -61,13 +61,14 @@ struct OpenWhispererApp: App {
 }
 
 /// The menu-bar icon. Shows an hourglass while a model is still loading (most visible on the
-/// very first launch), then the waveform once everything is ready.
+/// very first launch), a speaker while a dictated turn is armed to be spoken (the will-speak
+/// indicator), and the waveform otherwise.
 private struct MenuBarStatusIcon: View {
     @ObservedObject var dictation: DictationManager
     @ObservedObject var server: ServerManager
 
     var body: some View {
         let loading = (!dictation.sttModelReady && !dictation.sttFailed) || server.status == .starting
-        Image(systemName: loading ? "hourglass" : "waveform")
+        Image(systemName: loading ? "hourglass" : (dictation.speakArmed ? "speaker.wave.2" : "waveform"))
     }
 }
