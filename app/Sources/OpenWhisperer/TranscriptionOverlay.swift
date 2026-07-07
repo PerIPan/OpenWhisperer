@@ -246,42 +246,45 @@ struct OverlayLineRow: View {
     @State private var isHovered = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 4) {
-            Text(line.text)
-                .font(.custom("Outfit", size: 11))
-                .foregroundColor(isCopied ? OWColor.accent : OWColor.ink)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(1)
+        Button(action: onTap) {
+            HStack(alignment: .center, spacing: 4) {
+                Text(line.text)
+                    .font(.custom("Outfit", size: 11))
+                    .foregroundColor(isCopied ? OWColor.accent : OWColor.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
 
-            if isCopied {
-                ZStack(alignment: .bottomTrailing) {
+                if isCopied {
+                    ZStack(alignment: .bottomTrailing) {
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.system(size: 8))
+                            .foregroundColor(OWColor.accent)
+                        
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 5, weight: .black))
+                            .foregroundColor(OWColor.accent)
+                            .background(
+                                Circle()
+                                    .fill(OWColor.page)
+                                    .frame(width: 7, height: 7)
+                            )
+                            .offset(x: 2, y: 2)
+                    }
+                    .transition(.opacity)
+                } else if isHovered {
                     Image(systemName: "doc.on.clipboard")
                         .font(.system(size: 8))
-                        .foregroundColor(OWColor.accent)
-                    
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 5, weight: .black))
-                        .foregroundColor(OWColor.accent)
-                        .background(
-                            Circle()
-                                .fill(OWColor.page)
-                                .frame(width: 7, height: 7)
-                        )
-                        .offset(x: 2, y: 2)
+                        .foregroundColor(OWColor.inkSoft)
+                        .transition(.opacity)
                 }
-                .transition(.opacity)
-            } else if isHovered {
-                Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: 8))
-                    .foregroundColor(OWColor.inkSoft)
-                    .transition(.opacity)
             }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(isHovered ? OWColor.pillFill.opacity(0.5) : Color.clear)
+            .cornerRadius(6)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(isHovered ? OWColor.pillFill.opacity(0.5) : Color.clear)
-        .cornerRadius(6)
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) {
                 isHovered = hovering
@@ -292,7 +295,6 @@ struct OverlayLineRow: View {
                 NSCursor.pop()
             }
         }
-        .onTapGesture(perform: onTap)
     }
 }
 
