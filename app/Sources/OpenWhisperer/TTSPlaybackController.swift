@@ -16,14 +16,16 @@ actor TTSPlaybackController {
         let text: String
         let voice: String
         let speed: Float
-        let generation: Int
+        let parentGeneration: Int
     }
 
     private var playQueue: [QueueItem] = []
     private var currentItem: QueueItem?
 
-    /// Bumped on every `play`/`bargeIn` so stale drain/synth callbacks are ignored.
+    /// Bumped on barge-in or non-queued supersede to invalidate the entire queue and any active playback.
     private var generation = 0
+    /// Bumped on starting any item to identify the currently active item's task/callbacks.
+    private var activeItemGen = 0
     private var synthDone = false
 
     init(tts: KokoroTTS) {
@@ -33,8 +35,7 @@ actor TTSPlaybackController {
     /// Speak `text`, superseding any current playback or queueing it depending on the setting.
     func play(text: String, voice: String, speed: Float) {
         if Self.isQueueEnabled() {
-            generation += 1
-            let item = QueueItem(text: text, voice: voice, speed: speed, generation: generation)
+            let item = QueueItem(text: text, voice: voice, speed: speed, parentGeneration: generation)
             playQueue.append(item)
             if currentItem == nil {
                 startNext()
@@ -48,7 +49,7 @@ actor TTSPlaybackController {
             playTask?.cancel()
             engine.stop()
 
-            let item = QueueItem(text: text, voice: voice, speed: speed, generation: gen)
+            let item = QueueItem(text: text, voice: voice, speed: speed, parentGeneration: gen)
             startItem(item)
         }
     }
@@ -63,49 +64,50 @@ actor TTSPlaybackController {
     }
 
     private func startItem(_ item: QueueItem) {
+        guard item.parentGeneration == generation else { return }
+        activeItemGen += 1
+        let itemGen = activeItemGen
+        let parentGen = item.parentGeneration
+
         currentItem = item
         synthDone = false
 
         let sentences = SentenceSplitter.split(item.text)
         guard !sentences.isEmpty else {
-            itemFinished(gen: item.generation)
+            itemFinished(itemGen: itemGen, parentGen: parentGen)
             return
         }
         let volume = Self.readVolume()
-        let gen = item.generation
 
         engine.onDrained = { [weak self] in
-            Task { await self?.handleDrain(gen: gen) }
+            Task { await self?.handleDrain(itemGen: itemGen, parentGen: parentGen) }
         }
         engine.onPlaybackError = { [weak self] in
-            Task { await self?.handlePlaybackError(gen: gen) }
+            Task { await self?.handlePlaybackError(itemGen: itemGen, parentGen: parentGen) }
         }
 
         playTask = Task {
             // Hold off playing if the user is currently speaking/recording.
             while await self.isUserRecording() {
-                if Task.isCancelled || gen != generation { return }
+                if Task.isCancelled || parentGen != self.generation || itemGen != self.activeItemGen { return }
                 try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
             }
 
-            if Task.isCancelled || gen != generation { return }
+            if Task.isCancelled || parentGen != self.generation || itemGen != self.activeItemGen { return }
             self.writeLock()
 
             for sentence in sentences {
-                if Task.isCancelled || gen != generation { break }
+                if Task.isCancelled || parentGen != self.generation || itemGen != self.activeItemGen { break }
                 do {
                     let (samples, _) = try await self.tts.synthesizeSamples(sentence, voice: item.voice, speed: item.speed)
-                    // Generation guard in addition to Task.isCancelled: immune to a synthesize
-                    // call that returns after a barge-in/supersede already bumped the generation
-                    // (e.g. if cooperative cancellation is swallowed by the CoreML pipeline).
-                    if Task.isCancelled || gen != generation { break }
+                    if Task.isCancelled || parentGen != self.generation || itemGen != self.activeItemGen { break }
                     self.engine.schedule(samples, volume: volume)
                 } catch {
                     NSLog("TTSPlaybackController: synthesis failed: \(error)")
                     break
                 }
             }
-            self.synthFinished(gen: gen)
+            self.synthFinished(itemGen: itemGen, parentGen: parentGen)
         }
     }
 
@@ -122,31 +124,31 @@ actor TTSPlaybackController {
 
     // MARK: - Completion coordination
 
-    private func itemFinished(gen: Int) {
-        guard gen == generation else { return }
+    private func itemFinished(itemGen: Int, parentGen: Int) {
+        guard parentGen == generation && itemGen == activeItemGen else { return }
         currentItem = nil
         startNext()
-    }
+  }
 
     /// The audio queue drained. Finish only if synthesis is also done — otherwise more sentences
     /// are still on the way and will re-fill the queue.
-    private func handleDrain(gen: Int) {
-        guard gen == generation, synthDone else { return }
-        itemFinished(gen: gen)
+    private func handleDrain(itemGen: Int, parentGen: Int) {
+        guard parentGen == generation && itemGen == activeItemGen && synthDone else { return }
+        itemFinished(itemGen: itemGen, parentGen: parentGen)
     }
 
     /// The synthesis loop ended. Finish now if the queue is already empty; otherwise the final
     /// drain callback will.
-    private func synthFinished(gen: Int) {
-        guard gen == generation else { return }
+    private func synthFinished(itemGen: Int, parentGen: Int) {
+        guard parentGen == generation && itemGen == activeItemGen else { return }
         synthDone = true
-        if engine.isIdle { itemFinished(gen: gen) }
+        if engine.isIdle { itemFinished(itemGen: itemGen, parentGen: parentGen) }
     }
 
     /// The audio engine failed to start (e.g. the output device was removed mid-reply). Drop the
     /// lock so the UI doesn't hang in "Speaking…", and stop any further synthesis.
-    private func handlePlaybackError(gen: Int) {
-        guard gen == generation else { return }
+    private func handlePlaybackError(itemGen: Int, parentGen: Int) {
+        guard parentGen == generation && itemGen == activeItemGen else { return }
         playTask?.cancel()
         playQueue.removeAll()
         currentItem = nil
