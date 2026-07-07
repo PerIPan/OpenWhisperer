@@ -1073,8 +1073,8 @@ struct MenuBarView: View {
     // MARK: - Footer
 
     /// Speech Recognition is hands-free-only, so it counts toward "all granted" only in that
-    /// mode — otherwise a hold-to-talk user who (correctly) never granted it could never reach
-    /// the collapsed state. Drives whether the "Permissions Required" block is shown at all.
+    /// mode — otherwise a hold-to-talk user who (correctly) never granted it would never read
+    /// as fully granted. Drives the Permissions header title ("Permissions" vs. "…Required").
     private var allPermissionsGranted: Bool {
         let speechNeeded = selectedMode == .handsFree
         return accessibilityManager.isGranted
@@ -1085,11 +1085,12 @@ struct MenuBarView: View {
     private var footerSection: some View {
         OWCard {
             VStack(alignment: .leading, spacing: 8) {
-                // Only surfaced while something is actually missing — a card titled "Required"
-                // showing three green checks is noise. The live re-checks (Accessibility poll +
-                // refreshDiagnostics) flip this back on if a permission is revoked mid-session.
-                if !allPermissionsGranted {
-                    OWCardHeader(title: "Permissions Required", icon: "lock.shield",
+                // Always show the permission rows so grant status is visible at a glance;
+                // the header title adapts once everything is granted. The live re-checks
+                // (Accessibility poll + refreshDiagnostics) keep the rows accurate if a
+                // permission is revoked mid-session.
+                Group {
+                    OWCardHeader(title: allPermissionsGranted ? "Permissions" : "Permissions Required", icon: "lock.shield",
                                  help: "macOS grants Open Whisperer needs: Accessibility (type into the focused app), Microphone (record dictation), and Speech Recognition (hands-free wake words). Tap a row to open Settings.")
 
                     ModernDiagnosticRow(label: "Accessibility", ok: accessibilityManager.isGranted)
