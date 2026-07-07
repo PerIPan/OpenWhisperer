@@ -54,7 +54,21 @@ if [ -f "$VOICE_TURN" ]; then
     HAS_INPUTS=$(echo "$INPUT" | jq -r 'has("input_messages") or has("input-messages")' 2>/dev/null)
     if [ "$HAS_INPUTS" = "true" ]; then
       # Content-correlate: claim only when one of the turn's user messages hashes to
-      # the signal. base64 round-trip keeps multi-line messages intact through read.
+      # the signal. Entries may be plain strings OR objects ({role, content} with
+      # content as a string or a parts array) depending on the Codex build — extract
+      # the text either way, else the whole-object hash could never match and dictated
+      # Codex turns would silently stop speaking. base64 keeps multi-line text intact.
+      EXTRACT='(.input_messages // .["input-messages"] // [])[]
+        | if type == "string" then .
+          elif type == "object" then
+            (.content // .text // empty
+             | if type == "string" then .
+               elif type == "array" then
+                 ([ .[] | (.text? // .content? // empty) | select(type == "string") ] | join(" "))
+               else empty end)
+          else empty end
+        | select(type == "string" and length > 0)
+        | @base64'
       while IFS= read -r MSG_B64; do
         [ -z "$MSG_B64" ] && continue
         MSG=$(printf '%s' "$MSG_B64" | base64 -d 2>/dev/null)
@@ -63,7 +77,7 @@ if [ -f "$VOICE_TURN" ]; then
           rm -f "$VOICE_TURN"      # claim — this event is the dictated turn
           break
         fi
-      done < <(echo "$INPUT" | jq -r '(.input_messages // .["input-messages"] // [])[] | @base64' 2>/dev/null)
+      done < <(echo "$INPUT" | jq -r "$EXTRACT" 2>/dev/null)
       # No match → a different (typed/parallel) turn: leave the signal for the
       # dictated turn's own completion event.
     else

@@ -14,7 +14,7 @@ func codexTtsHookFailures() -> [String] {
 
     // Codex agent-turn-complete payload (the hook reads .["last-assistant-message"];
     // newer builds also carry the turn's user messages as input_messages).
-    func makePayload(inputMessages: [String]? = nil) -> String {
+    func makePayload(inputMessages: [Any]? = nil) -> String {
         var obj: [String: Any] = [
             "type": "agent-turn-complete",
             "last-assistant-message": "Done. The build is green.",
@@ -121,6 +121,29 @@ func codexTtsHookFailures() -> [String] {
         run(s, payload: makePayload(inputMessages: []))
         if !s.noCurlWithin() { fail("inputEmptySilent: should not POST") }
         if !s.voiceTurnExists() { fail("inputEmptySilent: signal must survive") }
+    }
+    // Object-shaped entries ({role, content: String}) — the OpenAI-style schema.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "fix the login bug")
+        run(s, payload: makePayload(inputMessages: [["role": "user", "content": "fix the login bug"]]))
+        if s.curlCalls().isEmpty { fail("objectContentSpeaks: expected a POST") }
+        if s.voiceTurnExists() { fail("objectContentSpeaks: voice_turn not claimed") }
+    }
+    // Object entries with a content-parts array ({content: [{type, text}]}).
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "fix the login bug")
+        run(s, payload: makePayload(inputMessages: [
+            ["role": "user", "content": [["type": "input_text", "text": "fix the login bug"]]],
+        ]))
+        if s.curlCalls().isEmpty { fail("objectPartsSpeaks: expected a POST") }
+        if s.voiceTurnExists() { fail("objectPartsSpeaks: voice_turn not claimed") }
+    }
+    // Object entry that doesn't match → foreign turn: silent, signal survives.
+    do {
+        let s = newSandbox(); s.writeVoiceTurn(forPrompt: "fix the login bug")
+        run(s, payload: makePayload(inputMessages: [["role": "user", "content": "something else"]]))
+        if !s.noCurlWithin() { fail("objectMismatchSilent: should not POST") }
+        if !s.voiceTurnExists() { fail("objectMismatchSilent: signal must survive") }
     }
 
     return failures

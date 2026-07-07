@@ -146,6 +146,7 @@ class DictationManager: ObservableObject {
         if let activationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
         }
+        speakArmedTimer?.invalidate()
     }
 
     /// Kick off the one-time WhisperKit model download + load. Call at launch so the

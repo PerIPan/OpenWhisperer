@@ -388,6 +388,16 @@ struct MenuBarView: View {
                         }
                         .buttonStyle(OWRowButtonStyle())
                     }
+                    // The failure card replaces the loading banner, so keep the
+                    // still-loading TTS state visible rather than hiding it.
+                    if ttsLoading {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Voice model still loading…")
+                                .font(OWFont.caption(11))
+                                .foregroundColor(OWColor.inkSoft)
+                        }
+                    }
                 }
             }
             .padding(.bottom, 10)
