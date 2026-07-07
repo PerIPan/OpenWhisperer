@@ -68,9 +68,9 @@ On first launch, the app:
 While that one-time download and Neural-Engine compile runs, the menu and the floating overlay both show live progress so you know it isn't stuck:
 
 <p align="center">
-  <img src="screenshot-loading-menu.png" width="340" alt="Open Whisperer menu preparing the models on first launch">
-  &nbsp;
-  <img src="screenshot-loading-overlay.png" width="300" alt="Open Whisperer overlay showing model-preparation progress">
+  <img src="screenshot-loading-menu.png" width="460" alt="Open Whisperer menu preparing the models on first launch">
+  <br><br>
+  <img src="screenshot-loading-overlay.png" width="460" alt="Open Whisperer overlay showing model-preparation progress">
 </p>
 
 The menubar icon gives you:
