@@ -87,6 +87,7 @@ struct MenuBarView: View {
     @State private var selectedLanguage = "en"
     @State private var selectedStyle = "normal"
     @State private var selectedResponse = "voice"
+    @State private var queueSpokenReplies = false
     @State private var showStoppedBanner = false
     @State private var pttKeyChanged = false
     @State private var selectedPlatform: Platform = .claudeCode
@@ -313,6 +314,8 @@ struct MenuBarView: View {
                let saved = Int(savedStr.trimmingCharacters(in: .whitespacesAndNewlines)) {
                 silenceThreshold = saved
             }
+            queueSpokenReplies = (try? String(contentsOf: Paths.ttsQueue, encoding: .utf8))?
+                .trimmingCharacters(in: .whitespacesAndNewlines) == "on"
             refreshDiagnostics()
         }
     }
@@ -698,6 +701,20 @@ struct MenuBarView: View {
                             .onChange(of: selectedResponse) { _, newValue in
                                 try? newValue.write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
                             }
+                    }
+                }
+
+                OWInternalDivider()
+
+                HStack(spacing: 8) {
+                    Spacer(minLength: 70)
+                    OWCheckbox(label: "queue spoken replies", isOn: $queueSpokenReplies)
+                }
+                .onChange(of: queueSpokenReplies) { _, newValue in
+                    if newValue {
+                        try? "on".write(to: Paths.ttsQueue, atomically: true, encoding: .utf8)
+                    } else {
+                        try? "off".write(to: Paths.ttsQueue, atomically: true, encoding: .utf8)
                     }
                 }
 
