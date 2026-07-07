@@ -7,6 +7,11 @@ private class KeyableWindow: NSWindow {
     override var canBecomeKey: Bool { true }
 }
 
+/// Custom hosting view that forwards the very first mouse click to active elements even when the window is inactive.
+private class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     static let shared = TranscriptionOverlay()
 
@@ -93,7 +98,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         // view will derive its recorder from overlay.currentRecorder. This way,
         // when the recorder changes, SwiftUI's normal @ObservedObject diffing handles
         // the update inside the existing live view tree — no NSHostingView rebuild needed.
-        let hostingView = NSHostingView(rootView: OverlayView(overlay: self))
+        let hostingView = FirstMouseHostingView(rootView: OverlayView(overlay: self))
 
         // FIX: sizingOptions ensures the hosting view participates in layout
         // and does not clip the SwiftUI render layer, which can suppress CA commits.
@@ -231,6 +236,66 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     }
 }
 
+// MARK: - Overlay Line Row
+
+struct OverlayLineRow: View {
+    let line: TranscriptionOverlay.Line
+    let isCopied: Bool
+    let onTap: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 4) {
+            Text(line.text)
+                .font(.custom("Outfit", size: 11))
+                .foregroundColor(isCopied ? OWColor.accent : OWColor.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+
+            if isCopied {
+                ZStack(alignment: .bottomTrailing) {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: 8))
+                        .foregroundColor(OWColor.accent)
+                    
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 5, weight: .black))
+                        .foregroundColor(OWColor.accent)
+                        .background(
+                            Circle()
+                                .fill(OWColor.page)
+                                .frame(width: 7, height: 7)
+                        )
+                        .offset(x: 2, y: 2)
+                }
+                .transition(.opacity)
+            } else if isHovered {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: 8))
+                    .foregroundColor(OWColor.inkSoft)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(isHovered ? OWColor.pillFill.opacity(0.5) : Color.clear)
+        .cornerRadius(6)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onTapGesture(perform: onTap)
+    }
+}
+
 // MARK: - Overlay View
 
 struct OverlayView: View {
@@ -300,36 +365,24 @@ struct OverlayView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(overlay.lines.reversed().enumerated()), id: \.element.id) { index, line in
                             if index > 0 { Divider() }
-                            let isCopied = copiedLineId == line.id
-                            HStack(alignment: .center, spacing: 4) {
-                                Text(line.text)
-                                    .font(.custom("Outfit", size: 11))
-                                    .foregroundColor(isCopied ? OWColor.accent : OWColor.ink)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .layoutPriority(1)
-                                
-                                if isCopied {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundColor(OWColor.accent)
-                                        .transition(.opacity)
-                                }
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(line.text, forType: .string)
-                                withAnimation(.easeIn(duration: 0.1)) {
-                                    copiedLineId = line.id
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                                    withAnimation(.easeOut(duration: 0.2)) {
-                                        if copiedLineId == line.id {
-                                            copiedLineId = nil
+                            OverlayLineRow(
+                                line: line,
+                                isCopied: copiedLineId == line.id,
+                                onTap: {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(line.text, forType: .string)
+                                    withAnimation(.easeIn(duration: 0.1)) {
+                                        copiedLineId = line.id
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                        withAnimation(.easeOut(duration: 0.2)) {
+                                            if copiedLineId == line.id {
+                                                copiedLineId = nil
+                                            }
                                         }
                                     }
                                 }
-                            }
+                            )
                             .help("Click to copy transcription")
                             .id(line.id)
                         }
