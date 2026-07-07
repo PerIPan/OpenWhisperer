@@ -694,10 +694,7 @@ struct MenuBarView: View {
                             }
                         OWMenuPicker(selection: $selectedResponse, options: Self.responseModes)
                             .frame(maxWidth: .infinity)
-<<<<<<< HEAD
                             .help("When replies are spoken: when Voice = only dictated turns, Always = every turn.")
-=======
->>>>>>> upstream/main
                             .onChange(of: selectedResponse) { _, newValue in
                                 try? newValue.write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
                             }
@@ -838,10 +835,7 @@ struct MenuBarView: View {
                 options: Platform.allCases.map { (id: $0, label: $0.label) }
             )
             .frame(width: 104)
-<<<<<<< HEAD
             .help("Which coding agent you're setting up. Claude/Codex/Antigravity get a hook + speak tool; Pi gets an extension.")
-=======
->>>>>>> upstream/main
             .onChange(of: selectedPlatform) { _, newValue in
                 newValue.save()
                 refreshDiagnostics()
