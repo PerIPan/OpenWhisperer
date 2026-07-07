@@ -83,7 +83,7 @@ struct MenuBarView: View {
     @State private var silenceThreshold: Int = 3
     @State private var selectedVolume: Double = 1.0
     @State private var selectedVoice = "af_heart"
-    @State private var selectedSpeed: Double = 1.0
+    @State private var selectedSpeed: Double = Double(TTSSpeed.default)
     @State private var selectedLanguage = "en"
     @State private var selectedStyle = "normal"
     @State private var selectedResponse = "voice"

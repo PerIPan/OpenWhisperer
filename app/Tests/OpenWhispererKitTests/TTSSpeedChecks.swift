@@ -13,11 +13,12 @@ func ttsSpeedFailures() -> [String] {
         }
     }
 
-    // Absent / empty / garbage → default.
-    expect(nil, 1.0, "nilDefault")
-    expect("", 1.0, "emptyDefault")
-    expect("   \n", 1.0, "whitespaceDefault")
-    expect("fast", 1.0, "garbageDefault")
+    // Absent / empty / garbage → default (single-sourced so the value can't drift).
+    let def = TTSSpeed.default
+    expect(nil, def, "nilDefault")
+    expect("", def, "emptyDefault")
+    expect("   \n", def, "whitespaceDefault")
+    expect("fast", def, "garbageDefault")
     // In-range values pass through (whitespace trimmed).
     expect("1.15", 1.15, "inRange")
     expect("  0.90\n", 0.90, "trimsWhitespace")
@@ -25,13 +26,13 @@ func ttsSpeedFailures() -> [String] {
     expect("9", 1.5, "clampHigh")
     expect("0.1", 0.7, "clampLow")
     // NaN parses as a Float but bypasses clamp (NaN comparisons are always false) → must default.
-    expect("nan", 1.0, "nanDefault")
-    expect("-nan", 1.0, "negNanDefault")
+    expect("nan", def, "nanDefault")
+    expect("-nan", def, "negNanDefault")
 
-    // Constants are the agreed bounds.
+    // Constants are the agreed bounds; default is our 1.1× (upstream is 1.0×).
     if TTSSpeed.min != 0.7 { failures.append("TTSSpeed.min: got \(TTSSpeed.min); expected 0.7") }
     if TTSSpeed.max != 1.5 { failures.append("TTSSpeed.max: got \(TTSSpeed.max); expected 1.5") }
-    if TTSSpeed.default != 1.0 { failures.append("TTSSpeed.default: got \(TTSSpeed.default); expected 1.0") }
+    if TTSSpeed.default != 1.1 { failures.append("TTSSpeed.default: got \(TTSSpeed.default); expected 1.1") }
 
     return failures
 }

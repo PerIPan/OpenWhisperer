@@ -7,7 +7,9 @@ import Foundation
 public enum TTSSpeed {
     public static let min: Float = 0.7
     public static let max: Float = 1.5
-    public static let `default`: Float = 1.0
+    /// Our default is a slightly brisk 1.1× (upstream ships 1.0×) — replies feel
+    /// snappier without losing clarity. Slider still spans [min, max].
+    public static let `default`: Float = 1.1
 
     /// Clamp any rate into `[min, max]`.
     public static func clamp(_ v: Float) -> Float {

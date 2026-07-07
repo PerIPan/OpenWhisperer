@@ -165,8 +165,8 @@ final class TTSHTTPServer {
         return (v?.isEmpty == false) ? v! : "af_heart"
     }
 
-    /// The user's global TTS speed (`tts_speed`), clamped, or 1.0. Used by the
-    /// blocking WAV path when the request omits a `speed`.
+    /// The user's global TTS speed (`tts_speed`), clamped, or the 1.1× default.
+    /// Used by the blocking WAV path when the request omits a `speed`.
     private static func userSpeed() -> Float {
         TTSSpeed.parse(try? String(contentsOf: Paths.ttsSpeed, encoding: .utf8))
     }
