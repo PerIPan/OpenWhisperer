@@ -170,6 +170,14 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         isVisible = false
     }
 
+    /// Toggle drag-to-move. The overlay is moved by dragging its background
+    /// (`isMovableByWindowBackground`), but that same mechanism swallows a drag on
+    /// the resize grip — so while the cursor is over the grip we turn move OFF, letting
+    /// the grip's `DragGesture` resize instead. Restored on exit.
+    func setWindowMovable(_ movable: Bool) {
+        window?.isMovableByWindowBackground = movable
+    }
+
     func windowWillClose(_ notification: Notification) {
         stopTTSPolling()
         window = nil
@@ -432,7 +440,17 @@ struct OverlayView: View {
                 .padding(.top, 2)
                 .contentShape(Rectangle())
                 .gesture(gripDrag)
-                .onHover { $0 ? NSCursor.resizeUpDown.push() : NSCursor.pop() }
+                .onHover { inside in
+                    // Suppress window-move over the grip so the drag resizes instead.
+                    // Don't re-enable mid-drag if the cursor slips off the shrinking grip.
+                    if inside {
+                        overlay.setWindowMovable(false)
+                        NSCursor.resizeUpDown.push()
+                    } else {
+                        if dragStartLines == nil { overlay.setWindowMovable(true) }
+                        NSCursor.pop()
+                    }
+                }
                 .transition(.opacity)
             }
         }
@@ -459,6 +477,7 @@ struct OverlayView: View {
             .onEnded { _ in
                 dragStartLines = nil
                 overlay.persistTranscriptLines()
+                overlay.setWindowMovable(true)   // restore move once the drag finishes
             }
     }
 }
