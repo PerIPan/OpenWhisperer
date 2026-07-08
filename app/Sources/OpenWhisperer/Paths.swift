@@ -76,8 +76,6 @@ enum Paths {
     /// TTS speed file
     static let ttsSpeed = appSupport.appendingPathComponent("tts_speed")
 
-    /// TTS queue mode file (contains "on" or "off")
-    static let ttsQueue = appSupport.appendingPathComponent("tts_queue")
 
     /// Card expanded states (persisted so user's collapse/expand survives restarts)
     static let setupCardExpanded = appSupport.appendingPathComponent("setup_expanded")
