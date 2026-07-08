@@ -52,7 +52,7 @@ public struct MCPServer {
             let speak: [String: Any] = [
                 "name": "speak",
                 "description": "Synthesize and play the given text aloud through OpenWhisperer's "
-                    + "local voice (text-to-speech). Fire-and-forget: returns immediately while audio plays.",
+                    + "local voice (text-to-speech). Fire-and-forget: returns immediately while audio plays; subsequent requests are queued to play sequentially.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
