@@ -132,7 +132,18 @@ actor SpeechTranscriber {
         }
 
         let lang = (language?.isEmpty == false && language != "auto") ? language : nil
-        let options = DecodingOptions(language: lang)
+        // detectLanguage: WhisperKit's default (false while usePrefillPrompt is on)
+        // prefills <|en|> for a nil language — "Auto-detect" would force English.
+        // withoutTimestamps: dictation needs no timestamps. suppressBlank: matches
+        // the OpenAI reference decoder (WhisperKit defaults it off). .vad: better
+        // window seams on >30 s dictations; no effect on short clips.
+        let options = DecodingOptions(
+            language: lang,
+            detectLanguage: lang == nil,
+            withoutTimestamps: true,
+            suppressBlank: true,
+            chunkingStrategy: .vad
+        )
         let results = try await wk.transcribe(audioArray: processedSamples, decodeOptions: options)
         return results
             .map(\.text)
