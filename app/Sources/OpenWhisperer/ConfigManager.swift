@@ -606,13 +606,14 @@ enum ConfigManager {
             }
         }
 
-        // Clean lock/pid files in app support (includes legacy two-server artifacts)
+        // Clean lock/pid/config files in app support (includes legacy two-server/queue artifacts)
         let cleanFiles = [
             Paths.appSupport.appendingPathComponent("tts_hook.pid"),
             Paths.appSupport.appendingPathComponent("tts_playing.lock"),
             Paths.appSupport.appendingPathComponent("tts_hook.lock"),
             Paths.appSupport.appendingPathComponent("whisper.pid"),
             Paths.appSupport.appendingPathComponent("tts.pid"),
+            Paths.appSupport.appendingPathComponent("tts_queue"),
         ]
         for url in cleanFiles {
             if fm.fileExists(atPath: url.path) {

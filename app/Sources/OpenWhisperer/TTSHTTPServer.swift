@@ -125,7 +125,7 @@ final class TTSHTTPServer {
 
         case ("POST", "/v1/audio/play"):
             // Fire-and-forget: hand the text to the in-app player and return immediately. The
-            // player synthesizes sentence-by-sentence and supersedes any current playback.
+            // player synthesizes sentence-by-sentence and queues sequential playback.
             let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any]
             let input = json?["input"] as? String ?? ""
             let voice = json?["voice"] as? String ?? Self.userVoice()

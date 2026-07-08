@@ -22,7 +22,7 @@ actor TTSPlaybackController {
     private var playQueue: [QueueItem] = []
     private var currentItem: QueueItem?
 
-    /// Bumped on barge-in or non-queued supersede to invalidate the entire queue and any active playback.
+    /// Bumped on barge-in to invalidate the entire queue and any active playback.
     private var generation = 0
     /// Bumped on starting any item to identify the currently active item's task/callbacks.
     private var activeItemGen = 0
