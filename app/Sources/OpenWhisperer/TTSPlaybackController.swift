@@ -32,25 +32,12 @@ actor TTSPlaybackController {
         self.tts = tts
     }
 
-    /// Speak `text`, superseding any current playback or queueing it depending on the setting.
+    /// Speak `text`, queueing it for sequential playback.
     func play(text: String, voice: String, speed: Float) {
-        if Self.isQueueEnabled() {
-            let item = QueueItem(text: text, voice: voice, speed: speed, parentGeneration: generation)
-            playQueue.append(item)
-            if currentItem == nil {
-                startNext()
-            }
-        } else {
-            generation += 1
-            let gen = generation
-            playQueue.removeAll()
-            currentItem = nil
-            synthDone = false
-            playTask?.cancel()
-            engine.stop()
-
-            let item = QueueItem(text: text, voice: voice, speed: speed, parentGeneration: gen)
-            startItem(item)
+        let item = QueueItem(text: text, voice: voice, speed: speed, parentGeneration: generation)
+        playQueue.append(item)
+        if currentItem == nil {
+            startNext()
         }
     }
 
@@ -163,13 +150,6 @@ actor TTSPlaybackController {
 
     private static func readVolume() -> Float {
         TTSVolume.parse(try? String(contentsOf: Paths.ttsVolume, encoding: .utf8))
-    }
-
-    private static func isQueueEnabled() -> Bool {
-        guard let content = try? String(contentsOf: Paths.ttsQueue, encoding: .utf8) else {
-            return false
-        }
-        return content.trimmingCharacters(in: .whitespacesAndNewlines) == "on"
     }
 
     private func isUserRecording() async -> Bool {
