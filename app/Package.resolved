@@ -21,10 +21,9 @@
     {
       "identity" : "whisperkit",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/argmaxinc/WhisperKit.git",
+      "location" : "https://github.com/hakanensari/WhisperKit.git",
       "state" : {
-        "revision" : "25c62997041c134b03ca82731ce2f6fd2cae1eb9",
-        "version" : "1.0.0"
+        "revision" : "a1eb2f0183bb87ef1582a4e1c9325d2d71578ed0"
       }
     }
   ],
