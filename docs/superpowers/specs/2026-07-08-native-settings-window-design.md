@@ -22,10 +22,12 @@ stays on the website and the overlay.
 - Replace `Window("OpenWhisperer Settings", id: "settings")` with a **`Settings` scene**.
 - A `TabView` inside a Settings scene renders native **toolbar tabs** (icon + label) for free.
 - Each tab is a `Form` with **`.formStyle(.grouped)`** — the modern System Settings look.
-- The menubar "Settings…" button switches from `openWindow(id:)` to the
-  **`openSettings` environment action** (macOS 14+), keeping the explicit
-  `NSApp.activate(ignoringOtherApps: true)` — required for an `LSUIElement` app so the
-  window actually comes forward. ⌘, keyboard shortcut unchanged.
+- The menubar "Settings…" button becomes a **`SettingsLink`** (macOS 14+). *Deviation
+  from the first draft (implementation finding):* a plain `Button` + `openSettings`
+  environment action silently fails to present the window for an accessory
+  (`LSUIElement`) app — macOS gates Settings-scene presentation on app activation, which
+  synthetic/inactive contexts are denied. `SettingsLink` handles presentation and
+  activation internally. ⌘, keyboard shortcut unchanged.
 - Fixed content width ~500 pt per tab; height varies per tab (standard settings behavior,
   `windowResizability` handled by the scene).
 
@@ -75,7 +77,7 @@ Deletions (written-never-read today, GUI-only):
 - **Move `OWColor` into `Theme.swift`** — `TranscriptionOverlay` still uses it. `OWFont` and
   `registerBundledFonts` are kept only if the overlay (or anything else) still consumes them;
   otherwise deleted (verify with grep at implementation time).
-- `OpenWhispererApp.swift`: `Settings` scene + `openSettings`; menubar menu and
+- `OpenWhispererApp.swift`: `Settings` scene + `SettingsLink`; menubar menu and
   `MenuBarStatusIcon` untouched.
 
 ## Out of scope
