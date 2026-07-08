@@ -137,7 +137,15 @@ final class TTSHTTPServer {
         case ("POST", "/mcp"):
             // Minimal MCP over Streamable HTTP. All JSON-RPC shaping is pure (OpenWhispererKit);
             // here we only map the outcome onto HTTP and perform the one side effect (playback).
-            switch MCPServer().handle(req.body) {
+            let isVoiceCached: (String) -> Bool = { voice in
+                let sanitized = voice.filter { $0.isLetter || $0.isNumber || $0 == "_" }
+                guard !sanitized.isEmpty else { return false }
+                if sanitized == "af_heart" { return true }
+                let home = FileManager.default.homeDirectoryForCurrentUser
+                let path = home.appendingPathComponent(".cache/fluidaudio/Models/kokoro-82m-coreml/ANE/\(sanitized).bin").path
+                return FileManager.default.fileExists(atPath: path)
+            }
+            switch MCPServer().handle(req.body, isVoiceCached: isVoiceCached) {
             case .json(let data):
                 respond(conn, "200 OK", data, contentType: "application/json")
             case .accepted:
