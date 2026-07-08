@@ -18,6 +18,7 @@ struct KitTestRunner {
         failures += ttsSpeedFailures()
         failures += ttsVolumeFailures()
         failures += ttsVoiceRegistryFailures()
+        failures += vocabularyPromptFailures()
 
         if failures.isEmpty {
             print("✅ OpenWhispererKit: all checks passed")
