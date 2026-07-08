@@ -86,7 +86,7 @@ actor SpeechTranscriber {
                     model: modelName,
                     downloadBase: hubBase,
                     modelFolder: cachedModelFolder.path,
-                    tokenizerFolder: hubBase.appendingPathComponent("models/openai/whisper-large-v3"),
+                    tokenizerFolder: hubBase,
                     download: false
                 )
                 return try await WhisperKit(config)
