@@ -20,7 +20,7 @@ public struct MCPServer {
 
     public init() {}
 
-    public func handle(_ body: Data) -> MCPOutcome {
+    public func handle(_ body: Data, isVoiceCached: (String) -> Bool = { _ in false }) -> MCPOutcome {
         guard let msg = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
             return .json(Self.errorResponse(id: NSNull(), code: -32700, message: "Parse error"))
         }
@@ -63,11 +63,37 @@ public struct MCPServer {
                     "required": ["text"],
                 ],
             ]
-            return .json(Self.resultResponse(id: requestID, result: ["tools": [speak]]))
+            let listVoices: [String: Any] = [
+                "name": "list_voices",
+                "description": "Retrieve the list of available text-to-speech voices, including their language, region, gender, and local cache status.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [String: Any]()
+                ]
+            ]
+            return .json(Self.resultResponse(id: requestID, result: ["tools": [speak, listVoices]]))
 
         case "tools/call":
             let name = params["name"] as? String ?? ""
             let args = params["arguments"] as? [String: Any] ?? [:]
+            if name == "list_voices" {
+                let voiceList = TTSVoiceRegistry.allVoices.map { voice -> [String: Any] in
+                    return [
+                        "id": voice.id,
+                        "name": voice.name,
+                        "language": voice.language,
+                        "region": voice.region,
+                        "gender": voice.gender,
+                        "cached": isVoiceCached(voice.id)
+                    ]
+                }
+                let voiceData = (try? JSONSerialization.data(withJSONObject: ["voices": voiceList], options: [.prettyPrinted])) ?? Data()
+                let response = Self.resultResponse(id: requestID, result: [
+                    "content": [["type": "text", "text": String(data: voiceData, encoding: .utf8) ?? ""]],
+                    "isError": false,
+                ])
+                return .json(response)
+            }
             guard name == "speak" else {
                 return .json(Self.toolError(id: requestID, message: "Unknown tool: \(name)"))
             }

@@ -134,5 +134,38 @@ func mcpServerFailures() -> [String] {
         failures.append("malformed: expected .json parse error")
     }
 
+    // tools/list → advertises `list_voices`
+    if case let .json(data) = req(#"{"jsonrpc":"2.0","id":12,"method":"tools/list","params":{}}"#),
+       let result = decode(data)?["result"] as? [String: Any],
+       let tools = result["tools"] as? [[String: Any]],
+       let listVoices = tools.first(where: { ($0["name"] as? String) == "list_voices" }) {
+        let schema = listVoices["inputSchema"] as? [String: Any]
+        if schema?["properties"] == nil { failures.append("tools/list: list_voices inputSchema properties missing") }
+    } else {
+        failures.append("tools/list: expected list_voices tool in .json outcome")
+    }
+
+    // tools/call list_voices → returns the serialized voices list with correct cached state
+    let mockIsCached: (String) -> Bool = { $0 == "af_heart" }
+    switch server.handle(Data(#"{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"list_voices"}}"#.utf8), isVoiceCached: mockIsCached) {
+    case let .json(data):
+        if let r = decode(data)?["result"] as? [String: Any],
+           let content = r["content"] as? [[String: Any]],
+           let text = content.first?["text"] as? String,
+           let bodyData = text.data(using: .utf8),
+           let voicesObj = (try? JSONSerialization.jsonObject(with: bodyData)) as? [String: Any],
+           let voicesList = voicesObj["voices"] as? [[String: Any]] {
+            if voicesList.count != 54 { failures.append("list_voices tool: expected 54 voices, got \(voicesList.count)") }
+            if let heart = voicesList.first(where: { ($0["id"] as? String) == "af_heart" }) {
+                if (heart["cached"] as? Bool) != true { failures.append("list_voices tool: af_heart cached should be true") }
+            } else { failures.append("list_voices tool: missing af_heart") }
+            if let bella = voicesList.first(where: { ($0["id"] as? String) == "af_bella" }) {
+                if (bella["cached"] as? Bool) != false { failures.append("list_voices tool: af_bella cached should be false") }
+            } else { failures.append("list_voices tool: missing af_bella") }
+        } else { failures.append("list_voices tool: invalid response shape") }
+    default:
+        failures.append("list_voices tool: expected .json outcome")
+    }
+
     return failures
 }
