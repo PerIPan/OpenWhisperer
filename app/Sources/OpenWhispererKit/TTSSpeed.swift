@@ -3,7 +3,7 @@ import Foundation
 /// Clamp/parse for the global `tts_speed` preference (Kokoro playback rate).
 /// Pure and dependency-free so it unit-tests under CLT; shared by every read
 /// site so the bounds/default can't drift. Bounds MUST equal the menubar
-/// Slider's `in:` range (see MenuBarView).
+/// Slider's `in:` range (see VoiceTab).
 public enum TTSSpeed {
     public static let min: Float = 0.7
     public static let max: Float = 1.5
