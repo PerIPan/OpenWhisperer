@@ -107,15 +107,15 @@ struct MenuBarView: View {
     // on 2026-07-01). Grouped by language for the nested-submenu picker. Non-default
     // voices download on first selection via KokoroTTS.ensureVoicePack. The bare `af`
     // alias is intentionally omitted (it is a default mix, not a named voice).
-    private static var voiceGroups: [(group: String, options: [(id: String, label: String)])] {
+    private static let voiceGroups: [(group: String, options: [(id: String, label: String)])] = {
         TTSVoiceRegistry.groups.map { group in
             (group.name, group.voices.map { ($0.id, "\($0.name) (\($0.gender.prefix(1)))") })
         }
-    }
+    }()
 
-    private static var allVoices: [(id: String, label: String)] {
+    private static let allVoices: [(id: String, label: String)] = {
         TTSVoiceRegistry.allVoices.map { ($0.id, "\($0.name) (\($0.gender.prefix(1)))") }
-    }
+    }()
 
     private static let languages: [(id: String, label: String)] = [
         ("auto", "Auto-detect"),

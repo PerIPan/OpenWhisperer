@@ -143,7 +143,10 @@ final class TTSHTTPServer {
                 if sanitized == "af_heart" { return true }
                 let home = FileManager.default.homeDirectoryForCurrentUser
                 let path = home.appendingPathComponent(".cache/fluidaudio/Models/kokoro-82m-coreml/ANE/\(sanitized).bin").path
-                return FileManager.default.fileExists(atPath: path)
+                guard FileManager.default.fileExists(atPath: path) else { return false }
+                let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+                let size = (attrs?[.size] as? NSNumber)?.uint64Value ?? 0
+                return size > 1000
             }
             switch MCPServer().handle(req.body, isVoiceCached: isVoiceCached) {
             case .json(let data):
