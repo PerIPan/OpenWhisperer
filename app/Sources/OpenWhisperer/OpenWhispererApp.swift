@@ -61,15 +61,15 @@ struct OpenWhispererApp: App {
     }
 }
 
-/// Menubar menu content. `openSettings` + explicit activation — required for an
-/// LSUIElement app so the Settings window actually comes forward.
+/// Menubar menu content.
 private struct SettingsMenuItems: View {
-    @Environment(\.openSettings) private var openSettings
-
     var body: some View {
-        Button("Settings...") {
-            openSettings()
-            NSApp.activate(ignoringOtherApps: true)
+        // SettingsLink is the sanctioned way to open the Settings scene from a
+        // MenuBarExtra (macOS 14+): it handles presentation + activation internally,
+        // which a plain Button + openSettings does not reliably do for an
+        // accessory (LSUIElement) app.
+        SettingsLink {
+            Text("Settings...")
         }
         .keyboardShortcut(",", modifiers: .command)
 
