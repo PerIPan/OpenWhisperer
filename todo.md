@@ -13,7 +13,7 @@ Branch: `v1.5-native` · Plan: `docs/superpowers/plans/2026-06-24-v1.5.md`
 - [x] **Transcription overlay** rethemed to the warm surface
 - [x] Foundation fixes: TTS gen-guard + playback-error lock clear, HTTP body cap + bind-failure
       surfaced, KokoroTTS voice-pack logging, AVAudioFormat guard, uniform 900s voice-turn TTL
-- [x] **WhisperKit 0.18.0 → 1.0.0** (clean compile, both test suites green); FluidAudio already latest
+- [ ] **WhisperKit 0.18.0 → 1.0.0** (reverted back to `0.18.0` due to transcription quality regression in `1.0.0`)
 - [x] README reframed to v1.5; tagless limitations documented in AGENTS.md
 - [x] Build + `OpenWhispererKitTests` + `HookTests` green throughout
 
