@@ -26,6 +26,16 @@ enum Paths {
     static let serverLog = appSupport.appendingPathComponent("server.log")
     static let setupLog = appSupport.appendingPathComponent("setup.log")
 
+    /// Downloaded ML models live under the app's Application Support space rather than
+    /// the user's (often iCloud-synced) ~/Documents. `whisperHubBase` is WhisperKit's
+    /// `downloadBase`; it lays out `models/argmaxinc/whisperkit-coreml/<model>` beneath
+    /// it, mirroring the legacy ~/Documents/huggingface layout so a one-time move suffices.
+    /// (Kokoro/FluidAudio keeps its own ~/.cache/fluidaudio — upstream pins the shared
+    /// G2P/lexicon assets there, so it can't be cleanly relocated; it's a hidden cache
+    /// outside iCloud anyway.)
+    static let modelsDir = appSupport.appendingPathComponent("models")
+    static let whisperHubBase = modelsDir.appendingPathComponent("huggingface")
+
     /// Auto-submit flag file (read in-process by the Swift app)
     static let autoSubmitFlag = appSupport.appendingPathComponent("auto_submit")
 

@@ -24,6 +24,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ConfigManager.migrateRemoveTextResponseMode()
         // Strip the obsolete Stop hook (replaced by the speak MCP tool) from existing installs.
         ConfigManager.migrateRemoveClaudeStopHook()
+        // Move the Whisper model hub out of ~/Documents (iCloud-synced) into app support,
+        // before prepareSTT() loads the model from the new path. Instant same-volume rename.
+        ModelStorage.migrateWhisperHubIfNeeded()
         // Prompt for Accessibility permission if not already granted
         accessibilityManager.requestIfNeeded()
         // Clean stale temp/lock/pid files from previous sessions (background, delayed)

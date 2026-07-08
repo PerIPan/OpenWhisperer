@@ -63,12 +63,10 @@ actor SpeechTranscriber {
         return textTokens(" " + prompt)
     }
 
-    /// WhisperKit's default download base (`~/Documents/huggingface`).
-    private static var hubBase: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
-        return docs.appendingPathComponent("huggingface")
-    }
+    /// WhisperKit download base — the app's Application Support space (not the user's
+    /// iCloud-synced ~/Documents). `ModelStorage.migrateWhisperHubIfNeeded()` moves an
+    /// existing legacy cache here on launch, before this is first read.
+    private static var hubBase: URL { Paths.whisperHubBase }
 
     /// On-disk cache folder for the CoreML model.
     private static var cachedModelFolder: URL {

@@ -10,13 +10,19 @@ enum ModelStorage {
         let url: URL
     }
 
-    /// The three caches OpenWhisperer populates: the Whisper STT model (WhisperKit hub),
-    /// the Kokoro TTS models + lexicon (FluidAudio), and the compiled CoreML/ANE bytecode.
+    /// The caches OpenWhisperer populates: the Whisper STT model (WhisperKit hub, now under
+    /// Application Support), the Kokoro TTS models + lexicon (FluidAudio, in ~/.cache), and
+    /// the compiled CoreML/ANE bytecode. The legacy ~/Documents Whisper path is listed too so
+    /// a pre-relocation cache (or a skipped migration) is still cleaned up; empty locations
+    /// are hidden from the breakdown.
     static var locations: [Location] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return [
             Location(
                 name: "Whisper STT model",
+                url: Paths.whisperHubBase.appendingPathComponent("models/argmaxinc/whisperkit-coreml")),
+            Location(
+                name: "Whisper STT model (old location)",
                 url: home.appendingPathComponent("Documents/huggingface/models/argmaxinc/whisperkit-coreml")),
             Location(
                 name: "Kokoro TTS models",
@@ -25,6 +31,26 @@ enum ModelStorage {
                 name: "Compiled model cache",
                 url: home.appendingPathComponent("Library/Caches/OpenWhisperer/com.apple.e5rt.e5bundlecache")),
         ]
+    }
+
+    /// One-time move of the Whisper (WhisperKit) hub from its legacy ~/Documents/huggingface
+    /// location into the app's Application Support space — so a 1.5 GB model isn't dumped in
+    /// the user's (often iCloud-synced) Documents, and everything the app downloads sits under
+    /// one removable folder. A same-volume move is an instant rename (no 1.5 GB copy); skipped
+    /// when the new location already exists. Call at launch BEFORE the model is loaded.
+    static func migrateWhisperHubIfNeeded() {
+        let fm = FileManager.default
+        let old = fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents/huggingface")
+        let new = Paths.whisperHubBase
+        guard fm.fileExists(atPath: old.path), !fm.fileExists(atPath: new.path) else { return }
+        do {
+            try fm.createDirectory(at: Paths.modelsDir, withIntermediateDirectories: true)
+            try fm.moveItem(at: old, to: new)
+            NSLog("ModelStorage: migrated Whisper hub → \(new.path)")
+        } catch {
+            // Non-fatal: leave the legacy cache; WhisperKit re-downloads to the new path.
+            NSLog("ModelStorage: Whisper hub migration failed (\(error.localizedDescription)); leaving legacy cache")
+        }
     }
 
     /// Recursive on-disk (allocated) size of a file or directory; 0 when missing.
