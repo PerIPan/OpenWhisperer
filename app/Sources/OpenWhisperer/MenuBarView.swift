@@ -287,6 +287,11 @@ struct MenuBarView: View {
                 silenceThreshold = saved
             }
             refreshDiagnostics()
+            // Surface missing grants: open the Setup card (which now holds the permission
+            // rows) whenever a needed permission isn't granted, so it isn't buried in a
+            // collapsed card. selectedMode is loaded just above, so Speech Recognition
+            // only forces it open in Hands-Free.
+            if !allPermissionsGranted { setupExpanded = true }
         }
     }
 
@@ -924,6 +929,9 @@ struct MenuBarView: View {
                 }
                 // (Removed the redundant "HOOK configured" diagnostic row —
                 // the Applied pill above already conveys this state.)
+
+                OWInternalDivider()
+                permissionsSection
             }
         }
         .onChange(of: setupExpanded) { _, newValue in
@@ -1100,46 +1108,53 @@ struct MenuBarView: View {
             && (!speechNeeded || dictationManager.keywordDetector.permissionGranted)
     }
 
+    /// Permission status rows, shown at the bottom of the Setup card. The Setup card
+    /// auto-opens when any needed permission is missing (see `onAppear`), so a missing
+    /// grant surfaces without the user hunting for it. Speech Recognition is only needed
+    /// — and only shown — in Hands-Free mode (its wake words); the other modes don't use it.
+    private var permissionsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 4) {
+                Text("Permissions")
+                    .font(OWFont.sectionLabel())
+                    .foregroundColor(OWColor.inkSoft)
+                Image(systemName: "info.circle")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .help("macOS grants Open Whisperer needs: Accessibility (type into the focused app), Microphone (record dictation), and Speech Recognition (hands-free wake words). Tap a row to open Settings.")
+            }
+            ModernDiagnosticRow(label: "Accessibility", ok: accessibilityManager.isGranted)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .help("Lets the app type dictated text into the focused app via keystrokes — the clipboard is never touched. Tap to open Settings.")
+            ModernDiagnosticRow(label: "Microphone", ok: dictationManager.recorder.micPermission)
+                .contentShape(Rectangle())
+                .onTapGesture { dictationManager.recorder.openMicSettings() }
+                .help("Lets the app record your microphone to capture dictation. Tap to open Settings.")
+            // Only relevant in hands-free — hidden otherwise so we don't nag for a
+            // permission the current mode never uses.
+            if selectedMode == .handsFree {
+                ModernDiagnosticRow(label: "Speech Recognition", ok: dictationManager.keywordDetector.permissionGranted)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .help("Hands-Free only: Apple Speech detects the wake words \"initiate\" and \"hold on\". Normal dictation doesn't use it. Tap to open Settings.")
+            }
+        }
+    }
+
     private var footerSection: some View {
         OWCard {
             VStack(alignment: .leading, spacing: 8) {
-                // Always show the permission rows so grant status is visible at a glance;
-                // the header title adapts once everything is granted. The live re-checks
-                // (Accessibility poll + refreshDiagnostics) keep the rows accurate if a
-                // permission is revoked mid-session.
-                Group {
-                    OWCardHeader(title: allPermissionsGranted ? "Permissions" : "Permissions Required", icon: "lock.shield",
-                                 help: "macOS grants Open Whisperer needs: Accessibility (type into the focused app), Microphone (record dictation), and Speech Recognition (hands-free wake words). Tap a row to open Settings.")
-
-                    ModernDiagnosticRow(label: "Accessibility", ok: accessibilityManager.isGranted)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                                NSWorkspace.shared.open(url)
-                            }
-                        }
-                        .help("Lets the app type dictated text into the focused app via keystrokes — the clipboard is never touched. Tap to open Settings.")
-                    ModernDiagnosticRow(label: "Microphone", ok: dictationManager.recorder.micPermission)
-                        .contentShape(Rectangle())
-                        .onTapGesture { dictationManager.recorder.openMicSettings() }
-                        .help("Lets the app record your microphone to capture dictation. Tap to open Settings.")
-                    // Only relevant in hands-free — hidden otherwise so we don't nag for a
-                    // permission the current mode never uses.
-                    if selectedMode == .handsFree {
-                        ModernDiagnosticRow(label: "Speech Recognition", ok: dictationManager.keywordDetector.permissionGranted)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition") {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            }
-                            .help("Hands-Free only: Apple Speech detects the wake words \"initiate\" and \"hold on\". Normal dictation doesn't use it. Tap to open Settings.")
-                    }
-
-
-                    OWInternalDivider()
-                }
-
+                // Permissions moved into the Setup card (auto-opens when a grant is missing);
+                // the footer keeps the login item + version.
                 // Launch at login
                 ModernDiagnosticRow(label: "Start on startup", ok: launchAtLogin)
                     .contentShape(Rectangle())
