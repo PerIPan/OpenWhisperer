@@ -3,7 +3,7 @@ import Foundation
 /// Clamp/parse for the global `tts_volume` preference (Kokoro playback gain).
 /// Pure and dependency-free so it unit-tests under CLT; shared by every read
 /// site so the bounds/default can't drift. Bounds MUST equal the menubar
-/// Slider's `in:` range (see MenuBarView).
+/// Slider's `in:` range (see VoiceTab).
 public enum TTSVolume {
     public static let min: Float = 0.3
     public static let max: Float = 2.0

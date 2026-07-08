@@ -91,12 +91,6 @@ enum Paths {
     /// TTS speed file
     static let ttsSpeed = appSupport.appendingPathComponent("tts_speed")
 
-
-    /// Card expanded states (persisted so user's collapse/expand survives restarts)
-    static let setupCardExpanded = appSupport.appendingPathComponent("setup_expanded")
-    static let voiceSettingsCardExpanded = appSupport.appendingPathComponent("voice_settings_expanded")
-    static let serverCardExpanded = appSupport.appendingPathComponent("server_expanded")
-
     /// Overlay transcript size — number of transcript lines the floating overlay
     /// shows (0–3). Set by dragging the overlay's resize grip; 0 = waveform only.
     static let overlayLines = appSupport.appendingPathComponent("overlay_lines")
