@@ -31,23 +31,36 @@ actor SpeechTranscriber {
 
     /// Encode the user's vocabulary glossary (Paths.sttVocabulary) as prompt
     /// tokens, keeping leading terms within the budget. Every failure path
-    /// (missing file, no tokenizer, empty list) degrades to nil — dictation
-    /// must never break on account of its own glossary.
+    /// (missing file, no tokenizer, empty list, zero fitting terms) degrades
+    /// to nil — dictation must never break on account of its own glossary.
+    /// Counts and returns TEXT tokens only: `encode(text:)` wraps its result
+    /// in special tokens (SOT/notimestamps/EOT), which would inflate the
+    /// budget math ~3 tokens per encode; WhisperKit filters specials from
+    /// promptTokens anyway, so stripping them here keeps the budget honest.
     private static func glossaryPromptTokens(tokenizer: WhisperTokenizer?) -> [Int]? {
         guard let tokenizer,
               let text = try? String(contentsOf: Paths.sttVocabulary, encoding: .utf8) else { return nil }
         let terms = VocabularyPrompt.terms(from: text)
         guard !terms.isEmpty else { return nil }
-        let counts = terms.map { tokenizer.encode(text: $0).count }
-        let separatorCount = tokenizer.encode(text: ", ").count
+        let sentinel = tokenizer.specialTokens.specialTokenBegin
+        func textTokens(_ s: String) -> [Int] {
+            tokenizer.encode(text: s).filter { $0 < sentinel }
+        }
+        let counts = terms.map { textTokens($0).count }
+        let separatorCount = textTokens(", ").count
         let kept = VocabularyPrompt.fittingPrefixCount(
             tokenCounts: counts, separatorCount: separatorCount, budget: promptTokenBudget)
-        guard kept > 0 else { return nil }
+        guard kept > 0 else {
+            NSLog("SpeechTranscriber: vocabulary dropped entirely — first term alone exceeds the \(promptTokenBudget)-token budget")
+            return nil
+        }
         if kept < terms.count {
             NSLog("SpeechTranscriber: vocabulary trimmed to first \(kept) of \(terms.count) terms")
         }
         guard let prompt = VocabularyPrompt.promptText(Array(terms.prefix(kept))) else { return nil }
-        return tokenizer.encode(text: prompt)
+        // Leading space: the OpenAI reference and WhisperKit's CLI both encode
+        // prompts as " " + text so the first word tokenizes in its in-transcript form.
+        return textTokens(" " + prompt)
     }
 
     /// WhisperKit's default download base (`~/Documents/huggingface`).
