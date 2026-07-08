@@ -107,45 +107,14 @@ struct MenuBarView: View {
     // on 2026-07-01). Grouped by language for the nested-submenu picker. Non-default
     // voices download on first selection via KokoroTTS.ensureVoicePack. The bare `af`
     // alias is intentionally omitted (it is a default mix, not a named voice).
-    private static let voiceGroups: [(group: String, options: [(id: String, label: String)])] = [
-        ("English (US)", [
-            ("af_heart", "Heart (F)"), ("af_bella", "Bella (F)"), ("af_alloy", "Alloy (F)"),
-            ("af_aoede", "Aoede (F)"), ("af_jessica", "Jessica (F)"), ("af_kore", "Kore (F)"),
-            ("af_nicole", "Nicole (F)"), ("af_nova", "Nova (F)"), ("af_river", "River (F)"),
-            ("af_sarah", "Sarah (F)"), ("af_sky", "Sky (F)"),
-            ("am_adam", "Adam (M)"), ("am_echo", "Echo (M)"), ("am_eric", "Eric (M)"),
-            ("am_fenrir", "Fenrir (M)"), ("am_liam", "Liam (M)"), ("am_michael", "Michael (M)"),
-            ("am_onyx", "Onyx (M)"), ("am_puck", "Puck (M)"), ("am_santa", "Santa (M)"),
-        ]),
-        ("English (UK)", [
-            ("bf_alice", "Alice (F)"), ("bf_emma", "Emma (F)"), ("bf_isabella", "Isabella (F)"),
-            ("bf_lily", "Lily (F)"),
-            ("bm_daniel", "Daniel (M)"), ("bm_fable", "Fable (M)"), ("bm_george", "George (M)"),
-            ("bm_lewis", "Lewis (M)"),
-        ]),
-        ("French", [("ff_siwis", "Siwis (F)")]),
-        ("Italian", [("if_sara", "Sara (F)"), ("im_nicola", "Nicola (M)")]),
-        ("Spanish", [("ef_dora", "Dora (F)"), ("em_alex", "Alex (M)"), ("em_santa", "Santa (M)")]),
-        ("Portuguese (BR)", [("pf_dora", "Dora (F)"), ("pm_alex", "Alex (M)"), ("pm_santa", "Santa (M)")]),
-        ("Hindi", [
-            ("hf_alpha", "Alpha (F)"), ("hf_beta", "Beta (F)"),
-            ("hm_omega", "Omega (M)"), ("hm_psi", "Psi (M)"),
-        ]),
-        ("Japanese", [
-            ("jf_alpha", "Alpha (F)"), ("jf_gongitsune", "Gongitsune (F)"), ("jf_nezumi", "Nezumi (F)"),
-            ("jf_tebukuro", "Tebukuro (F)"), ("jm_kumo", "Kumo (M)"),
-        ]),
-        ("Chinese", [
-            ("zf_xiaobei", "Xiaobei (F)"), ("zf_xiaoni", "Xiaoni (F)"), ("zf_xiaoxiao", "Xiaoxiao (F)"),
-            ("zf_xiaoyi", "Xiaoyi (F)"),
-            ("zm_yunjian", "Yunjian (M)"), ("zm_yunxi", "Yunxi (M)"),
-            ("zm_yunxia", "Yunxia (M)"), ("zm_yunyang", "Yunyang (M)"),
-        ]),
-    ]
+    private static var voiceGroups: [(group: String, options: [(id: String, label: String)])] {
+        TTSVoiceRegistry.groups.map { group in
+            (group.name, group.voices.map { ($0.id, "\($0.name) (\($0.gender.prefix(1)))") })
+        }
+    }
 
-    /// Flattened roster for collapsed-label lookup and load-time validation.
     private static var allVoices: [(id: String, label: String)] {
-        voiceGroups.flatMap { $0.options }
+        TTSVoiceRegistry.allVoices.map { ($0.id, "\($0.name) (\($0.gender.prefix(1)))") }
     }
 
     private static let languages: [(id: String, label: String)] = [
