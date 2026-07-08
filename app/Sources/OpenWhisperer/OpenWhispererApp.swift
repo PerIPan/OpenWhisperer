@@ -36,6 +36,7 @@ enum OpenWhispererMain {
 
 struct OpenWhispererApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @Environment(\.openWindow) private var openWindow
 
     init() {
         // Register custom fonts before SwiftUI composes the first layout pass.
@@ -44,19 +45,31 @@ struct OpenWhispererApp: App {
 
     var body: some Scene {
         MenuBarExtra {
+            Button("Settings...") {
+                openWindow(id: "settings")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            .keyboardShortcut(",", modifiers: .command)
+
+            Divider()
+
+            Button("Quit OpenWhisperer") {
+                NSApplication.shared.terminate(nil)
+            }
+            .keyboardShortcut("q", modifiers: .command)
+        } label: {
+            // Always-visible first-run signal: hourglass while the models load, waveform once ready.
+            MenuBarStatusIcon(dictation: appDelegate.dictationManager, server: appDelegate.serverManager)
+        }
+
+        Window("OpenWhisperer Settings", id: "settings") {
             MenuBarView()
                 .environmentObject(appDelegate.serverManager)
                 .environmentObject(appDelegate.setupManager)
                 .environmentObject(appDelegate.dictationManager)
                 .environmentObject(appDelegate.accessibilityManager)
-                .onAppear {
-                    appDelegate.setupDictation()
-                }
-        } label: {
-            // Always-visible first-run signal: hourglass while the models load, waveform once ready.
-            MenuBarStatusIcon(dictation: appDelegate.dictationManager, server: appDelegate.serverManager)
         }
-        .menuBarExtraStyle(.window)
+        .windowResizability(.contentSize)
     }
 }
 
