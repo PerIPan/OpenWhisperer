@@ -21,7 +21,8 @@ The June 24 → July 8 accuracy regression (WhisperKit 1.0.0 tokenizer-path bug,
 - **Read per dictation.** `SpeechTranscriber` reads and tokenizes the glossary on every `transcribe` call. The file is tiny; this makes edits live without an app restart and needs no file watcher.
 - **Cap keep-first, drop-last.** WhisperKit trims `promptTokens` with `.suffix(111)` — over budget, the *front* of the list silently vanishes. We cap at **96 tokens ourselves, keeping leading terms**, and log when terms drop. The 15-token slack absorbs BPE boundary drift between per-term and joined encodings.
 - **Terms join as one comma-separated line.** Whisper conditions on the prompt as preceding transcript; a plain "WhisperKit, Codex CLI, Kokoro" reads like someone listing the terms. No prefix sentence.
-- **Hallucination guardrail is documentation.** Prompt words can hallucinate into near-silent audio (short clips are zero-padded to 1.5 s). The file template says: keep it to a dozen or two terms. No runtime heuristic.
+- **In-popover editor, file-backed.** The glossary is edited in a small multi-line text box in the Voice Settings card (user's choice at design review, 2026-07-08 — replaces the earlier "Edit Vocabulary…" external-editor button). The box shows the raw file, one term per line; edits write back debounced. The file stays the source of truth on the flat-file bus, so hand-editing it still works.
+- **Hallucination guardrail is a UI caption.** Prompt words can hallucinate into near-silent audio (short clips are zero-padded to 1.5 s). The caption under the box says: nudges dictation toward these spellings — keep it short. No runtime heuristic.
 - **Auto-detect fix is one expression.** `detectLanguage: lang == nil`. A pinned language behaves exactly as today; auto pays one extra decoder pass (milliseconds on the ANE).
 - **Global only.** STT has no notion of the frontmost project, so no per-project vocabulary (unlike `OW_TTS_*`). Out of scope.
 
@@ -30,7 +31,7 @@ The June 24 → July 8 accuracy regression (WhisperKit 1.0.0 tokenizer-path bug,
 - No WER measurement harness (parked in `docs/UX-BACKLOG.md`: extend `app/Tools/STTDiag` into a fixed-corpus WER runner; it would have caught the 1.0.0 regression on day one).
 - No model change: `openai_whisper-large-v3-v20240930_turbo` FP16 stays (1.93% WER LibriSpeech per Argmax; full large-v3 is the ceiling but ~2× size and far slower decode).
 - No STT engine picker (decided 2026-06-20, PR #6 — don't relitigate).
-- No settings UI beyond the "Edit Vocabulary…" row; no in-app glossary editor.
+- No external-editor affordance and no separate vocabulary window — just the in-card text box.
 
 ## Approach
 
@@ -74,24 +75,17 @@ let options = DecodingOptions(
 
 - `os_log` when glossary terms are dropped by the cap.
 
-### 3. "Edit Vocabulary…" (MenuBarView)
+### 3. Vocabulary text box (MenuBarView)
 
-A row in the Voice Input card (near the Dictate picker). On click: if `stt_vocabulary` is missing, write the template below; then `NSWorkspace.shared.open` it (default text editor).
+A compact multi-line editor in the Voice Settings card, below the Dictate picker. File-backed: loads `stt_vocabulary` on appear, writes back debounced (~0.5 s) on change and once more on disappear. No template file — a fresh install has no file, the box is empty, behavior is stock.
 
-```
-# OpenWhisperer dictation vocabulary
-# One word or phrase per line. Lines starting with # are ignored.
-# Whisper nudges transcription toward these spellings.
-# Keep it short — a dozen or two terms. Long lists can make
-# rare words appear in near-silent recordings.
-#
-# Examples:
-# WhisperKit
-# Codex CLI
-# Kokoro
-```
+Copy is aimed at the app's core audience (developers driving Claude Code / Codex / Pi by voice):
 
-(All lines commented: a fresh template yields zero terms, so behavior stays stock until the user adds words.)
+- **Label:** `Vocabulary` with the inline hint `one term per line`.
+- **Placeholder (empty state):** `WhisperKit` / `Codex CLI` / `Kokoro` — real terms from the product's own world.
+- **Caption:** `Biases dictation toward these spellings — product names, CLI jargon, APIs. Keep it to a dozen or two.`
+
+Styling follows the existing card controls (the `PortField` precedent shows text input works in this popover); a fixed ~5-line height with internal scroll keeps the card from growing unbounded.
 
 ### Error handling
 
