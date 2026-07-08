@@ -35,10 +35,12 @@ struct VoiceTab: View {
                     try? newValue.write(to: Paths.ttsVoice, atomically: true, encoding: .utf8)
                 }
 
-                // Bounds MUST equal TTSSpeed.min/max (see TTSSpeed.swift).
+                // Continuous sliders — a step: would draw tick marks. The write rounds
+                // to 2 decimals and TTSSpeed/TTSVolume clamp on read, so no snapping
+                // is needed. Bounds MUST equal TTSSpeed.min/max (see TTSSpeed.swift).
                 LabeledContent("Speed") {
                     HStack(spacing: 8) {
-                        Slider(value: $selectedSpeed, in: 0.7...1.5, step: 0.05)
+                        Slider(value: $selectedSpeed, in: 0.7...1.5)
                         Text(multiplierLabel(selectedSpeed))
                             .monospacedDigit().foregroundStyle(.secondary)
                             .frame(width: 40, alignment: .trailing)
@@ -53,7 +55,7 @@ struct VoiceTab: View {
                 // Bounds MUST equal TTSVolume.min/max (see TTSVolume.swift).
                 LabeledContent("Volume") {
                     HStack(spacing: 8) {
-                        Slider(value: $selectedVolume, in: 0.3...2.0, step: 0.05)
+                        Slider(value: $selectedVolume, in: 0.3...2.0)
                         Text(multiplierLabel(selectedVolume))
                             .monospacedDigit().foregroundStyle(.secondary)
                             .frame(width: 40, alignment: .trailing)

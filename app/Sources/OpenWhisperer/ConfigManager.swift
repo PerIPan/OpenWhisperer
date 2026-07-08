@@ -157,7 +157,7 @@ enum ConfigManager {
             first time you run `codex` after this, approve trusting the
             OpenWhisperer hook when prompted, or the spoken summary won't fire.
 
-            By default only voice-dictated turns are spoken; typed turns stay silent. Change this with the Response setting (text = typed turns only; always = every turn).
+            By default only voice-dictated turns are spoken; typed turns stay silent. Change this in Settings → Voice under “Speak replies”.
             """
         )
         window.show()
@@ -237,7 +237,7 @@ enum ConfigManager {
 
             Then run /reload in Pi (or restart it) to load it.
 
-            By default only voice-dictated turns are spoken; typed turns stay silent. Change this with the Response setting (text = typed turns only; always = every turn).
+            By default only voice-dictated turns are spoken; typed turns stay silent. Change this in Settings → Voice under “Speak replies”.
             """
         )
         window.show()
@@ -297,7 +297,7 @@ enum ConfigManager {
 
             Start a NEW agy session afterward so it picks up both changes.
 
-            By default only voice-dictated turns are spoken; typed turns stay silent. Change this with the Response setting (text = typed turns only; always = every turn).
+            By default only voice-dictated turns are spoken; typed turns stay silent. Change this in Settings → Voice under “Speak replies”.
             """
         )
         window.show()
