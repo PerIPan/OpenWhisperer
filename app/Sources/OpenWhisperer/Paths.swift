@@ -38,6 +38,11 @@ enum Paths {
     /// STT language file (default language for in-process WhisperKit STT)
     static let sttLanguage = appSupport.appendingPathComponent("stt_language")
 
+    /// Dictation vocabulary (glossary) — one term per line, #-comments allowed.
+    /// Fed to WhisperKit as promptTokens to bias transcription toward these
+    /// spellings. Edited by the Voice Settings vocabulary box; absent = no bias.
+    static let sttVocabulary = appSupport.appendingPathComponent("stt_vocabulary")
+
     /// TTS voice file (tts-hook.sh reads voice name from this)
     static let ttsVoice = appSupport.appendingPathComponent("tts_voice")
 

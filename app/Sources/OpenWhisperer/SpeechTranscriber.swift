@@ -1,4 +1,5 @@
 import Foundation
+import OpenWhispererKit
 import WhisperKit
 
 /// In-process Whisper speech-to-text via WhisperKit (CoreML / ANE).
@@ -21,6 +22,33 @@ actor SpeechTranscriber {
     /// For a smaller ~632 MB 4-bit download, use
     /// `"openai_whisper-large-v3-v20240930_turbo_632MB"`.
     static let modelName = "openai_whisper-large-v3-v20240930_turbo"
+
+    /// Prompt-token budget for the vocabulary glossary. WhisperKit hard-trims
+    /// prompts to 111 tokens (maxTokenContext/2 - 1) with keep-LAST semantics;
+    /// capping at 96 keep-FIRST ourselves leaves slack for BPE boundary drift
+    /// between per-term and joined encodings.
+    private static let promptTokenBudget = 96
+
+    /// Encode the user's vocabulary glossary (Paths.sttVocabulary) as prompt
+    /// tokens, keeping leading terms within the budget. Every failure path
+    /// (missing file, no tokenizer, empty list) degrades to nil — dictation
+    /// must never break on account of its own glossary.
+    private static func glossaryPromptTokens(tokenizer: WhisperTokenizer?) -> [Int]? {
+        guard let tokenizer,
+              let text = try? String(contentsOf: Paths.sttVocabulary, encoding: .utf8) else { return nil }
+        let terms = VocabularyPrompt.terms(from: text)
+        guard !terms.isEmpty else { return nil }
+        let counts = terms.map { tokenizer.encode(text: $0).count }
+        let separatorCount = tokenizer.encode(text: ", ").count
+        let kept = VocabularyPrompt.fittingPrefixCount(
+            tokenCounts: counts, separatorCount: separatorCount, budget: promptTokenBudget)
+        guard kept > 0 else { return nil }
+        if kept < terms.count {
+            NSLog("SpeechTranscriber: vocabulary trimmed to first \(kept) of \(terms.count) terms")
+        }
+        guard let prompt = VocabularyPrompt.promptText(Array(terms.prefix(kept))) else { return nil }
+        return tokenizer.encode(text: prompt)
+    }
 
     /// WhisperKit's default download base (`~/Documents/huggingface`).
     private static var hubBase: URL {
@@ -141,6 +169,7 @@ actor SpeechTranscriber {
             language: lang,
             detectLanguage: lang == nil,
             withoutTimestamps: true,
+            promptTokens: Self.glossaryPromptTokens(tokenizer: wk.tokenizer),
             suppressBlank: true,
             chunkingStrategy: .vad
         )
