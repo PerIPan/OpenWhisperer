@@ -1100,15 +1100,7 @@ struct MenuBarView: View {
                     Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
                         .font(OWFont.caption())
                         .foregroundStyle(.tertiary)
-
                     Spacer()
-
-                    Button(action: { NSApplication.shared.terminate(nil) }) {
-                        Label("Quit", systemImage: "power")
-                            .font(OWFont.body(11))
-                    }
-                    .buttonStyle(OWRowButtonStyle())
-                    .keyboardShortcut("q")
                 }
             }
         }
