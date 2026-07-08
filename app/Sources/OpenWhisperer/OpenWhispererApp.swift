@@ -36,7 +36,6 @@ enum OpenWhispererMain {
 
 struct OpenWhispererApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @Environment(\.openWindow) private var openWindow
 
     init() {
         // Register custom fonts before SwiftUI composes the first layout pass.
@@ -45,31 +44,41 @@ struct OpenWhispererApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            Button("Settings...") {
-                openWindow(id: "settings")
-                NSApp.activate(ignoringOtherApps: true)
-            }
-            .keyboardShortcut(",", modifiers: .command)
-
-            Divider()
-
-            Button("Quit OpenWhisperer") {
-                NSApplication.shared.terminate(nil)
-            }
-            .keyboardShortcut("q", modifiers: .command)
+            SettingsMenuItems()
         } label: {
             // Always-visible first-run signal: hourglass while the models load, waveform once ready.
             MenuBarStatusIcon(dictation: appDelegate.dictationManager, server: appDelegate.serverManager)
         }
 
-        Window("OpenWhisperer Settings", id: "settings") {
-            MenuBarView()
+        Settings {
+            SettingsView()
                 .environmentObject(appDelegate.serverManager)
                 .environmentObject(appDelegate.setupManager)
                 .environmentObject(appDelegate.dictationManager)
                 .environmentObject(appDelegate.accessibilityManager)
         }
         .windowResizability(.contentSize)
+    }
+}
+
+/// Menubar menu content. `openSettings` + explicit activation — required for an
+/// LSUIElement app so the Settings window actually comes forward.
+private struct SettingsMenuItems: View {
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Button("Settings...") {
+            openSettings()
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        .keyboardShortcut(",", modifiers: .command)
+
+        Divider()
+
+        Button("Quit OpenWhisperer") {
+            NSApplication.shared.terminate(nil)
+        }
+        .keyboardShortcut("q", modifiers: .command)
     }
 }
 
