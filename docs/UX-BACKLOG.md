@@ -64,6 +64,12 @@ behavior, structure, or user-facing copy and deserve their own pass + sign-off.
 - **Typography ramp:** the ux/ui note to lift 10pt hints to 11pt and tighten the 10–13 ramp to three
   clear tiers (partially applied; full pass deferred).
 
+## Dev tooling
+- **STTDiag → WER harness.** Extend `app/Tools/STTDiag` (today: loads the model offline and transcribes
+  1 s of silence) into a fixed-corpus WER runner: 10–20 recorded reference clips + expected texts,
+  report per-clip and aggregate WER. Run before any WhisperKit bump — would have caught the 1.0.0
+  tokenizer regression (Jun 24 → Jul 8) on day one. Context: `docs/superpowers/specs/2026-07-08-stt-accuracy-levers-design.md`.
+
 ## Notes
 - All deferred items are **non-blocking** for the v1.5 release. The shipped visual pass already removes
   the biggest brand mismatch (system colors) and tightens spacing/typography/iconography.
