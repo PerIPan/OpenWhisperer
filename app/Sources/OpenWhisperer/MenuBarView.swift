@@ -71,6 +71,9 @@ struct MenuBarView: View {
     @EnvironmentObject var dictationManager: DictationManager
     @EnvironmentObject var accessibilityManager: AccessibilityManager
     @State private var autoSubmit = false
+    @State private var vocabularyText = ""
+    /// Debounced save of the vocabulary editor (0.5 s after the last keystroke).
+    @State private var vocabularySaveWork: DispatchWorkItem?
     @State private var autoFocusEnabled = false
     @State private var autoFocusReturn = false
     @State private var focusAppName = ""
@@ -261,6 +264,7 @@ struct MenuBarView: View {
                     selectedLanguage = lang
                 }
             }
+            vocabularyText = (try? String(contentsOf: Paths.sttVocabulary, encoding: .utf8)) ?? ""
             if let savedStyle = try? String(contentsOf: Paths.ttsStyle, encoding: .utf8),
                !savedStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let style = savedStyle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -292,6 +296,16 @@ struct MenuBarView: View {
         var s = String(format: "%.2f", v)
         while s.contains(".") && (s.hasSuffix("0") || s.hasSuffix(".")) { s.removeLast() }
         return s + "×"
+    }
+
+    /// Persist the vocabulary editor's contents to the flat-file bus.
+    /// Whitespace-only → remove the file (stock behavior, no glossary).
+    private func saveVocabulary(_ text: String) {
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            try? FileManager.default.removeItem(at: Paths.sttVocabulary)
+        } else {
+            try? text.write(to: Paths.sttVocabulary, atomically: true, encoding: .utf8)
+        }
     }
 
     // MARK: - Header
@@ -577,7 +591,7 @@ struct MenuBarView: View {
         OWCollapsibleCard(
             title: "Voice Settings",
             icon: "slider.horizontal.3",
-            help: "Dictation language, the voice that reads replies aloud, how fast it's read, and Response — how much of a reply is spoken, and when.",
+            help: "Dictation language and vocabulary, the voice that reads replies aloud, how fast it's read, and Response — how much of a reply is spoken, and when.",
             expanded: $voiceSettingsExpanded
         ) {
             EmptyView()
@@ -593,6 +607,58 @@ struct MenuBarView: View {
                     } else {
                         try? newValue.write(to: Paths.sttLanguage, atomically: true, encoding: .utf8)
                     }
+                }
+
+                OWInternalDivider()
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Vocabulary")
+                            .font(OWFont.body(11))
+                            .foregroundColor(OWColor.ink)
+                        Spacer()
+                        Text("one term per line")
+                            .font(OWFont.caption(10))
+                            .foregroundColor(OWColor.inkSoft)
+                    }
+                    ZStack(alignment: .topLeading) {
+                        TextEditor(text: $vocabularyText)
+                            .font(OWFont.mono(11))
+                            .scrollContentBackground(.hidden)
+                            .padding(4)
+                            .frame(height: 72)
+                            .background(OWColor.pickerBg)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(OWColor.pickerBorder, lineWidth: 1)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        if vocabularyText.isEmpty {
+                            Text("WhisperKit\nCodex CLI\nKokoro")
+                                .font(OWFont.mono(11))
+                                .foregroundColor(OWColor.inkFaint)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 4)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .onChange(of: vocabularyText) { _, newValue in
+                        vocabularySaveWork?.cancel()
+                        let work = DispatchWorkItem { saveVocabulary(newValue) }
+                        vocabularySaveWork = work
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+                    }
+                    .onDisappear {
+                        // Flush a pending debounce so a quick popover close can't lose edits.
+                        if let work = vocabularySaveWork, !work.isCancelled {
+                            work.cancel()
+                            saveVocabulary(vocabularyText)
+                        }
+                    }
+                    Text("Biases dictation toward these spellings — product names, CLI jargon, APIs. Keep it to a dozen or two.")
+                        .font(OWFont.caption(10))
+                        .foregroundColor(OWColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 OWInternalDivider()
