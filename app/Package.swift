@@ -6,10 +6,8 @@ let package = Package(
     platforms: [.macOS(.v14)],
     dependencies: [
         // Native in-process Whisper STT (CoreML / ANE). MIT. macOS 14+.
-        // v1.5: floor reverted from `1.0.0` back to `0.18.0` (excluding `1.0.0`) due to
-        // transcription accuracy degradation in the 1.0.0 release. To revert/upgrade:
-        // change this line and run `swift package resolve`.
-        .package(url: "https://github.com/argmaxinc/WhisperKit.git", "0.18.0"..<"1.0.0"),
+        // v1.5: floor `0.9.0` → `1.0.0` (resolved 0.18.0 → 1.0.0, the stable milestone).
+        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.0.0"),
         // Native in-process Kokoro TTS (CoreML / ANE). Apache-2.0. macOS 14+. No metallib.
         // Release 0.15.5+ contains the #730 fix ("Fix KokoroAne strided MLMultiArray handling")
         // which resolves issue #727 where 0.15.4 mis-read a *strided* MLMultiArray the Kokoro
