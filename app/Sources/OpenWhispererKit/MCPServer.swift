@@ -52,12 +52,12 @@ public struct MCPServer {
             let speak: [String: Any] = [
                 "name": "speak",
                 "description": "Synthesize and play the given text aloud through OpenWhisperer's "
-                    + "local voice (text-to-speech). Fire-and-forget: returns immediately while audio plays; subsequent requests are queued to play sequentially.",
+                    + "local voice (text-to-speech). Fire-and-forget: returns immediately while audio plays; subsequent requests are automatically queued by the engine to play sequentially and gaplessly. To orchestrate a multi-actor conversation or dialogue, do NOT write scripts or add delays/sleeps; instead, call this tool sequentially multiple times with different voice IDs (discovered using the list_voices tool).",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
                         "text": ["type": "string", "description": "The text to speak aloud."],
-                        "voice": ["type": "string", "description": "Optional Kokoro voice id; defaults to the user's selected voice."],
+                        "voice": ["type": "string", "description": "Optional Kokoro voice id (e.g., 'af_heart', 'bf_emma', 'jf_alpha'). Discover available IDs using list_voices. Pass different voice IDs in consecutive speak calls to script multi-character dialogue without external code."],
                         "speed": ["type": "number", "description": "Optional playback speed, 0.7–1.5; defaults to the user's setting."],
                     ],
                     "required": ["text"],
@@ -65,7 +65,7 @@ public struct MCPServer {
             ]
             let listVoices: [String: Any] = [
                 "name": "list_voices",
-                "description": "Retrieve the list of available text-to-speech voices, including their language, region, gender, and local cache status.",
+                "description": "Retrieve the list of available text-to-speech voices, including their language, region, gender, and local cache status. Use these voice IDs in the 'speak' tool's 'voice' parameter to orchestrate multi-voice/multi-actor conversations.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [String: Any]()
