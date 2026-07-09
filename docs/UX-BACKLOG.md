@@ -6,6 +6,18 @@ spacing/radius/shadow, Fraunces wordmark, gold-tinted card headers + chevrons, w
 waveform, brand-tinted pickers/buttons/badges). The items below are **deferred** because they change
 behavior, structure, or user-facing copy and deserve their own pass + sign-off.
 
+> **2026-07-09 — the native tabbed Settings window (PR #20,
+> `docs/superpowers/specs/2026-07-08-native-settings-window-design.md`) superseded the card UI
+> and shipped much of this list.** Done: merge Voice Input/Voice Settings (now Input/Voice tabs),
+> label clarity ("Language", "Reply detail", "Press Enter after inserting", "Return to previous
+> app"), overlay toggle placement (Input), silence-threshold rename ("Auto-submit after N s of
+> silence"), Speech Recognition annotated Hands-Free-only (row hidden otherwise), permissions
+> always visible (General), "Server & Logs" → Advanced with Diagnostics section, Remove-models
+> button. Still open: first-run checklist, always-visible "Server reachable" (it's in Advanced,
+> not the first screen), persist the PTT-restart notice, periodic diagnostic refresh,
+> "TTS unreachable" cue while in Standby, per-project hooks, hook validity check, re-apply
+> affordance after upgrades, menubar icon ambient TTS state, WER harness.
+
 ## UX / Information architecture (ux-researcher)
 
 ### P0 candidates (next)
