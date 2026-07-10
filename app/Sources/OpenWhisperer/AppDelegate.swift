@@ -140,11 +140,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func menuWillOpen(_ notification: Notification) {
-        // Find if Settings window is currently open (visible and titled "Settings")
+        // Find if Settings window is currently open (visible and titled with one of our settings tabs)
+        let settingsTitles = ["Settings", "General", "Input", "Voice", "Agents", "Advanced"]
         for window in NSApp.windows {
             if window.isVisible,
                let title = window.title as String?,
-               title == "Settings" || title.hasSuffix(" Settings") {
+               settingsTitles.contains(title) {
                 // Foreground the window and activate the app
                 NSApp.activate(ignoringOtherApps: true)
                 window.makeKeyAndOrderFront(nil)
