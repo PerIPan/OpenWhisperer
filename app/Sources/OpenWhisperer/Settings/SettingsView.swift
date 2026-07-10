@@ -16,8 +16,5 @@ struct SettingsView: View {
                 .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
         }
         .frame(width: 520)
-        .onAppear {
-            NSApp.activate(ignoringOtherApps: true)
-        }
     }
 }
