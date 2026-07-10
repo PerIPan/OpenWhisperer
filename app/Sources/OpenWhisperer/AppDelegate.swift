@@ -48,6 +48,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Hide dock icon (menubar-only app)
         NSApp.setActivationPolicy(.accessory)
 
+        // Observe menu opening to bring Settings window to the front if it's already open
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(menuWillOpen),
+            name: NSMenu.didBeginTrackingNotification,
+            object: nil
+        )
+
         // Start hotkey listener immediately so Ctrl works without opening the menubar first
         setupDictation()
 
@@ -125,8 +133,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        NotificationCenter.default.removeObserver(self, name: NSMenu.didBeginTrackingNotification, object: nil)
         hotkeyManager.stop()
         serverManager.stopAll(synchronous: true)
         _ = ConfigManager.cleanTempFiles()
+    }
+
+    @objc private func menuWillOpen(_ notification: Notification) {
+        // Find if Settings window is currently open (visible and titled "Settings")
+        for window in NSApp.windows {
+            if window.isVisible,
+               let title = window.title as String?,
+               title == "Settings" || title.hasSuffix(" Settings") {
+                // Foreground the window and activate the app
+                NSApp.activate(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
+                break
+            }
+        }
     }
 }
