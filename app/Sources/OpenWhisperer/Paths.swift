@@ -48,6 +48,11 @@ enum Paths {
     /// STT language file (default language for in-process WhisperKit STT)
     static let sttLanguage = appSupport.appendingPathComponent("stt_language")
 
+    /// STT engine selector: "parakeet" (feel-test default) or "whisper".
+    /// Read per dictation via `STTEngine.parse` — `echo whisper > stt_engine`
+    /// reverts to the Whisper path with no rebuild or restart.
+    static let sttEngine = appSupport.appendingPathComponent("stt_engine")
+
     /// Dictation vocabulary (glossary) — one term per line, #-comments allowed.
     /// Fed to WhisperKit as promptTokens to bias transcription toward these
     /// spellings. Edited by the Voice Settings vocabulary box; absent = no bias.

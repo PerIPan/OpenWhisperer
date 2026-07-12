@@ -28,6 +28,38 @@ enum OpenWhispererMain {
                 exit(2)
             }
             RunLoop.main.run()
+        } else if let flagIndex = CommandLine.arguments.firstIndex(of: "--diag-parakeet") {
+            // Headless Parakeet probe — downloads/loads the TDT v3 CoreML models, then
+            // transcribes any audio files listed after the flag. Exercises the full STT
+            // path (model fetch → ANE compile → decode) without mic/TCC:
+            //   swift run OpenWhisperer --diag-parakeet clip1.wav clip2.wav
+            let files = CommandLine.arguments.suffix(from: flagIndex + 1)
+            Task {
+                do {
+                    print("DIAG: preparing Parakeet TDT v3 (downloads ~460 MB if uncached)…")
+                    let t0 = Date()
+                    let parakeet = ParakeetTranscriber()
+                    try await parakeet.prepare()
+                    print("DIAG: Parakeet LOADED OK in \(Int(-t0.timeIntervalSinceNow))s")
+                    for path in files {
+                        let t1 = Date()
+                        let text = try await parakeet.transcribe(
+                            url: URL(fileURLWithPath: path), language: nil)
+                        print("DIAG: \(path) [\(Int(-t1.timeIntervalSinceNow * 1000)) ms] → \(text)")
+                    }
+                } catch {
+                    print("DIAG: Parakeet FAILED: \(error)")
+                    print("DIAG: localizedDescription: \(error.localizedDescription)")
+                    exit(1)
+                }
+                exit(0)
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: 600 * 1_000_000_000)
+                print("DIAG: TIMEOUT after 600s — Parakeet probe did not complete")
+                exit(2)
+            }
+            RunLoop.main.run()
         } else {
             OpenWhispererApp.main()
         }

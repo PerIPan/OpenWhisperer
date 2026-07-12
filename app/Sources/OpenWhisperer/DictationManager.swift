@@ -13,6 +13,9 @@ class DictationManager: ObservableObject {
     let keywordDetector = KeywordDetector()
     /// In-process Whisper STT (WhisperKit). Ported from the former HTTP call to the Python server (now deleted).
     let transcriber = SpeechTranscriber()
+    /// In-process Parakeet TDT v3 STT (FluidAudio). Active when the `stt_engine`
+    /// pref says "parakeet" (the 2026-07-13 feel-test default).
+    let parakeet = ParakeetTranscriber()
     /// In-process TTS playback (Phase 3). Injected by `AppDelegate` from `ServerManager`; used by
     /// `killTTS()` for instant barge-in. Optional so headless/test paths without a server still run.
     var ttsController: TTSPlaybackController?
@@ -158,17 +161,21 @@ class DictationManager: ObservableObject {
     /// first dictation isn't blocked on a multi-minute download. Idempotent.
     func prepareSTT() {
         guard !sttModelReady else { return }
-        // Set expectations: the first launch downloads (~1.5 GB) and then compiles the model for
-        // the Neural Engine (up to ~1–2 min). Without this, a slow first load looks "stuck".
-        sttStatus = SpeechTranscriber.isModelCached
+        let engine = Self.activeSTTEngine
+        // Set expectations: the first launch downloads (Whisper ~1.5 GB, Parakeet
+        // ~460 MB) and then compiles the model for the Neural Engine (up to ~1–2 min).
+        // Without this, a slow first load looks "stuck".
+        let cached = engine == .parakeet ? ParakeetTranscriber.isModelCached : SpeechTranscriber.isModelCached
+        let sizeNote = engine == .parakeet ? "about 460 MB" : "about 1.5 GB"
+        sttStatus = cached
             ? "Preparing the speech model… first launch compiles it for the Neural Engine — up to a minute or two. Dictation will be ready when it finishes."
-            : "Downloading the speech model… one-time, about 1.5 GB. This can take a few minutes on first launch."
+            : "Downloading the speech model… one-time, \(sizeNote). This can take a few minutes on first launch."
         Task { [weak self] in
             guard let self else { return }
             // Live percent while the archive downloads (first run only — the handler
             // is never called when the model is cached). Whole-percent granularity
             // keeps main-thread updates cheap.
-            await self.transcriber.setDownloadProgressHandler { [weak self] fraction in
+            let progressHandler: @Sendable (Double) -> Void = { [weak self] fraction in
                 let pct = min(100, Int(fraction * 100))
                 Task { @MainActor in
                     guard let self, !self.sttModelReady, !self.sttFailed else { return }
@@ -176,12 +183,19 @@ class DictationManager: ObservableObject {
                         self.sttStatus = "Download done — compiling for the Neural Engine… up to a minute or two."
                     } else if pct != self.lastReportedDownloadPct {
                         self.lastReportedDownloadPct = pct
-                        self.sttStatus = "Downloading the speech model… \(pct)% of ~1.5 GB (one-time)."
+                        self.sttStatus = "Downloading the speech model… \(pct)% of \(sizeNote) (one-time)."
                     }
                 }
             }
             do {
-                _ = try await self.transcriber.prepare()
+                switch engine {
+                case .whisper:
+                    await self.transcriber.setDownloadProgressHandler(progressHandler)
+                    _ = try await self.transcriber.prepare()
+                case .parakeet:
+                    await self.parakeet.setDownloadProgressHandler(progressHandler)
+                    _ = try await self.parakeet.prepare()
+                }
                 await MainActor.run {
                     self.sttModelReady = true
                     self.sttFailed = false
@@ -207,6 +221,21 @@ class DictationManager: ObservableObject {
     }
 
     /// A short, actionable message for a model-load failure.
+    /// The engine selected by the `stt_engine` pref, re-read on every call so a
+    /// flipped file takes effect on the next dictation (no restart).
+    static var activeSTTEngine: STTEngine {
+        STTEngine.parse(try? String(contentsOf: Paths.sttEngine, encoding: .utf8))
+    }
+
+    /// Dispatch a transcription to the active engine. Both transcribers self-prepare
+    /// on first use, so flipping engines mid-session lazily loads the other model.
+    private func transcribeWithActiveEngine(samples: [Float], language: String?) async throws -> String {
+        switch Self.activeSTTEngine {
+        case .whisper: return try await transcriber.transcribe(samples: samples, language: language)
+        case .parakeet: return try await parakeet.transcribe(samples: samples, language: language)
+        }
+    }
+
     private static func sttFailureMessage(for error: Error) -> String {
         let text = error.localizedDescription.lowercased()
         if text.contains("timed out") || text.contains("download") || text.contains("network")
@@ -425,7 +454,7 @@ class DictationManager: ObservableObject {
             guard let self else { return }
             let result: Result<String, Error>
             do {
-                let text = try await self.transcriber.transcribe(samples: samples, language: language)
+                let text = try await self.transcribeWithActiveEngine(samples: samples, language: language)
                 result = .success(text)
             } catch {
                 result = .failure(error)
@@ -588,7 +617,7 @@ class DictationManager: ObservableObject {
             guard let self else { return }
             let result: Result<String, Error>
             do {
-                let text = try await self.transcriber.transcribe(samples: samples, language: language)
+                let text = try await self.transcribeWithActiveEngine(samples: samples, language: language)
                 result = .success(text)
             } catch {
                 result = .failure(error)

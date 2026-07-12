@@ -24,8 +24,11 @@ enum Diagnostics {
         lines.append("Microphone: \(micPermission)")
         lines.append("")
 
-        lines.append("— Speech model (WhisperKit) —")
-        lines.append("Cached on disk: \(SpeechTranscriber.isModelCached ? "yes" : "no")")
+        let sttEngine = DictationManager.activeSTTEngine
+        lines.append("— Speech model (\(sttEngine == .parakeet ? "Parakeet TDT v3" : "WhisperKit")) —")
+        lines.append("Engine (stt_engine): \(sttEngine.rawValue)")
+        let sttCached = sttEngine == .parakeet ? ParakeetTranscriber.isModelCached : SpeechTranscriber.isModelCached
+        lines.append("Cached on disk: \(sttCached ? "yes" : "no")")
         lines.append("Ready: \(dictation.sttModelReady ? "yes" : "no")\(dictation.sttFailed ? " (FAILED)" : "")")
         if let status = dictation.sttStatus { lines.append("Status: \(status)") }
         if let error = dictation.error { lines.append("Last error: \(error)") }
