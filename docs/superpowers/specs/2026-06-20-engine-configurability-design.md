@@ -167,6 +167,26 @@ The protocol-seam implementation (`Transcriber` / `SpeechSynthesizer`,
 `FluidAudioTranscriber` with Parakeet-batch + Nemotron-streaming) lives on the
 abandoned `worktree-engine-config` branch / PR #6 if ever revisited.
 
+### Addendum (2026-07-13) — constraints changed, Parakeet re-opened
+
+The user explicitly waived two constraints this Outcome rested on: **Turkish
+support no longer matters**, and **the macOS 14 deployment floor no longer
+matters**. Consequences for the record:
+
+- The case against **Parakeet v3** was almost entirely the Turkish constraint.
+  The feel-test's "rougher English / mangled jargon" evidence came from
+  **Nemotron** (the test build's default); Parakeet's English was never put
+  through the feel-test. With Turkish waived, Parakeet is un-rejected —
+  status: **worth a proper English evaluation** (own-corpus WER harness, incl.
+  the jargon/glossary cases), not adopted. Note `stt_vocabulary` /
+  `promptTokens` is Whisper-specific and has no Parakeet equivalent.
+- **TTSKit (Qwen3-TTS, in the already-pinned argmax-oss-swift SDK)** was
+  disqualified in the 2026-07-12 research pass on the macOS 15+ API floor +
+  no Turkish; both grounds are now waived. Status: eligible for a spike;
+  no quality-vs-Kokoro comparison exists anywhere yet.
+- Nothing is decided beyond re-opening evaluation. Whisper large-v3-turbo +
+  Kokoro remain the shipped engines until a harness says otherwise.
+
 ## Success criteria (the feel-test)
 
 1. App launches defaulting to Nemotron STT + Kokoro TTS; dictation works.
