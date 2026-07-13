@@ -3,7 +3,6 @@ import OpenWhispererKit
 
 struct InputTab: View {
     @EnvironmentObject var dictationManager: DictationManager
-    @ObservedObject private var overlay = TranscriptionOverlay.shared
 
     @State private var selectedMode: InteractionMode = .holdToTalk
     @State private var selectedPTTKey = "ctrl"
@@ -86,11 +85,6 @@ struct InputTab: View {
                     dictationManager.recorder.silenceThresholdSeconds = TimeInterval(newValue)
                 }
             }
-
-            Toggle("Show transcription overlay", isOn: Binding(
-                get: { overlay.isVisible },
-                set: { $0 ? overlay.show() : overlay.hide() }
-            ))
 
             if !dictationManager.recorder.micPermission {
                 Button("Grant Microphone Access…") { dictationManager.recorder.openMicSettings() }
