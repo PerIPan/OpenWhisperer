@@ -160,7 +160,7 @@ Delete the toggle block (lines 90–93) and its preceding blank line:
             ))
 ```
 
-Confirm no `overlay` references remain in the file: `rg -n overlay app/Sources/OpenWhisperer/Settings/InputTab.swift` → no matches.
+Confirm no references to the removed property remain: `rg -n '\boverlay\.' app/Sources/OpenWhisperer/Settings/InputTab.swift` → no matches. (Unrelated `TranscriptionOverlay.shared.pttKeyLabel` writes remain in the file.)
 
 - [ ] **Step 3: Build and run the suites**
 

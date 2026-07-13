@@ -35,7 +35,8 @@ app re-shows it on every launch, so a user who prefers it hidden must close it e
    removed Settings toggle used.
 2. **`Settings/InputTab.swift`:** delete the "Show transcription overlay" `Toggle`
    (lines 90–93) and the now-unused `@ObservedObject overlay` property (line 6). No
-   other references exist in the file.
+   other references to that property exist in the file (unrelated
+   `TranscriptionOverlay.shared.pttKeyLabel` writes remain).
 3. **Persistence — `overlay_hidden` flag file** in Application Support, following the
    existing flag-file convention (`auto_submit`: exists = on, absent = off; inverted
    here because the default is *shown*):
