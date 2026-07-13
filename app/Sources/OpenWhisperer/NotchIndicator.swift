@@ -3,6 +3,13 @@ import SwiftUI
 import Combine
 import OpenWhispererKit
 
+/// Hosting view that accepts the first click even while the app is inactive — the
+/// band lives in a non-activating panel that is never key, and click-to-barge-in
+/// must work on the first click with another app frontmost.
+private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 /// Dynamic Island-style status band at the notch. Owns one non-activating panel per
 /// screen — status is global, so every display shows the same state and nothing ever
 /// moves between screens. Replaces the floating overlay.
@@ -101,7 +108,7 @@ final class NotchIndicator: NSObject, ObservableObject {
             panel.hidesOnDeactivate = false
             panel.isReleasedWhenClosed = false
             panel.isMovableByWindowBackground = false
-            panel.contentView = NSHostingView(
+            panel.contentView = FirstMouseHostingView(
                 rootView: NotchBandView(indicator: self, geometry: geometry))
             panel.setFrame(geometry.windowFrame(), display: true)
             panel.orderFrontRegardless()
