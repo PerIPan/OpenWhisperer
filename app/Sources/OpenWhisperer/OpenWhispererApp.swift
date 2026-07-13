@@ -83,10 +83,8 @@ private struct SettingsMenuItems: View {
     private static let visibleRows = 10
 
     var body: some View {
-        // A plain Text renders as a disabled menu item — the section header.
-        Text("Recent Transcriptions")
-
         if history.items.isEmpty {
+            // A plain Text renders as a disabled menu item.
             Text("No transcriptions yet")
         } else {
             // Newest first. The label is truncated; clicking copies the full text.
