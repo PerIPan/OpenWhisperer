@@ -1,11 +1,24 @@
 import SwiftUI
 import OpenWhispererKit
 
+/// Shell that re-resolves the live recorder each render; `BandContent` observes it
+/// so recorder state/level changes drive re-renders (the deleted overlay solved the
+/// same problem with an @ObservedObject recorder in its child views).
+struct NotchBandView: View {
+    @ObservedObject var indicator: NotchIndicator
+    let geometry: NotchGeometry
+
+    var body: some View {
+        BandContent(indicator: indicator, recorder: indicator.currentRecorder, geometry: geometry)
+    }
+}
+
 /// The black band hugging the notch (or the synthesized lozenge on screens without
 /// one): a 4pt status dot at idle, expanding waveform wings during activity, the
 /// hands-free countdown line, and a hover flyout with the state word and hotkey hint.
-struct NotchBandView: View {
+private struct BandContent: View {
     @ObservedObject var indicator: NotchIndicator
+    @ObservedObject var recorder: AudioRecorder
     let geometry: NotchGeometry
 
     @State private var hovered = false
@@ -19,17 +32,16 @@ struct NotchBandView: View {
     private static let wingLevelCount = 12
 
     var body: some View {
-        let recorder = indicator.currentRecorder
         VStack(spacing: 3) {
-            band(recorder: recorder)
+            band
                 .onHover { inside in
                     withAnimation(.easeInOut(duration: 0.12)) { hovered = inside }
                 }
                 .onTapGesture {
-                    if isSpeaking(recorder) { indicator.onBargeIn?() }
+                    if isSpeaking { indicator.onBargeIn?() }
                 }
             if hovered {
-                flyout(recorder: recorder)
+                flyout
                     .transition(.opacity)
             }
             Spacer(minLength: 0)
@@ -39,22 +51,22 @@ struct NotchBandView: View {
 
     // MARK: - Band
 
-    private func band(recorder: AudioRecorder) -> some View {
-        let expanded = isExpanded(recorder)
+    private var band: some View {
+        let expanded = isExpanded
         return NotchShape(cornerRadius: 8)
             .fill(.black)
             .frame(width: geometry.bandWidth(expanded: expanded), height: geometry.bandHeight)
             .overlay(alignment: .trailing) {
-                wingContent(recorder: recorder, expanded: expanded)
+                wingContent(expanded: expanded)
             }
             .animation(.easeInOut(duration: 0.18), value: expanded)
     }
 
     @ViewBuilder
-    private func wingContent(recorder: AudioRecorder, expanded: Bool) -> some View {
+    private func wingContent(expanded: Bool) -> some View {
         if expanded {
             ZStack(alignment: .bottomLeading) {
-                waveform(recorder: recorder)
+                waveform
                 if indicator.interactionMode == .handsFree, recorder.state == .recording {
                     SilenceCountdownLine(recorder: recorder)
                         .frame(height: 1.5)
@@ -64,16 +76,16 @@ struct NotchBandView: View {
             .padding(.trailing, 6)
         } else {
             Circle()
-                .fill(dotColor(recorder))
+                .fill(dotColor)
                 .frame(width: 4, height: 4)
                 .padding(.trailing, 6)
         }
     }
 
     @ViewBuilder
-    private func waveform(recorder: AudioRecorder) -> some View {
+    private var waveform: some View {
         GeometryReader { geo in
-            if isSpeaking(recorder) {
+            if isSpeaking {
                 TimelineView(.animation(minimumInterval: 0.03)) { timeline in
                     let time = timeline.date.timeIntervalSinceReferenceDate
                     Self.mirroredLines(
@@ -93,10 +105,10 @@ struct NotchBandView: View {
 
     // MARK: - Flyout
 
-    private func flyout(recorder: AudioRecorder) -> some View {
+    private var flyout: some View {
         HStack(spacing: 5) {
-            Circle().fill(dotColor(recorder)).frame(width: 6, height: 6)
-            Text(stateWord(recorder))
+            Circle().fill(dotColor).frame(width: 6, height: 6)
+            Text(stateWord)
                 .font(.custom("Outfit", size: 10))
             if recorder.state == .recording {
                 Text(hint)
@@ -120,17 +132,17 @@ struct NotchBandView: View {
 
     // MARK: - State helpers
 
-    private func isSpeaking(_ recorder: AudioRecorder) -> Bool {
+    private var isSpeaking: Bool {
         indicator.isTTSPlaying && recorder.state == .idle
     }
 
-    private func isExpanded(_ recorder: AudioRecorder) -> Bool {
-        recorder.state != .idle || isSpeaking(recorder)
+    private var isExpanded: Bool {
+        recorder.state != .idle || isSpeaking
     }
 
-    private func dotColor(_ recorder: AudioRecorder) -> Color {
+    private var dotColor: Color {
         if indicator.statusIsError { return OWColor.danger }
-        if isSpeaking(recorder) { return OWColor.accent }
+        if isSpeaking { return OWColor.accent }
         switch recorder.state {
         case .recording: return OWColor.recording
         case .uploading: return OWColor.warn
@@ -139,9 +151,9 @@ struct NotchBandView: View {
         }
     }
 
-    private func stateWord(_ recorder: AudioRecorder) -> String {
+    private var stateWord: String {
         if indicator.statusIsError { return "Attention needed — see menu" }
-        if isSpeaking(recorder) { return "Speaking…" }
+        if isSpeaking { return "Speaking…" }
         switch recorder.state {
         case .recording: return "Recording…"
         case .uploading: return "Transcribing…"
