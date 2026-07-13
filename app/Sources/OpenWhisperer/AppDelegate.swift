@@ -15,6 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let dictationManager = DictationManager()
     let hotkeyManager = HotkeyManager()
     let accessibilityManager = AccessibilityManager()
+    let transcriptionHistory = TranscriptionHistory()
     private var dictationSetupDone = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -116,6 +117,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         TranscriptionOverlay.shared.dictationManager = dictationManager
         TranscriptionOverlay.shared.setupManager = setupManager
+        transcriptionHistory.wire(to: dictationManager)
 
         // Show the overlay on launch unless the user hid it last session
         // (overlay_hidden flag — maintained by TranscriptionOverlay.show()/hide()).
