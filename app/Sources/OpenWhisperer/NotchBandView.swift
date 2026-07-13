@@ -150,7 +150,7 @@ struct NotchBandView: View {
         }
     }
 
-    // MARK: - Waveform drawing (ported from the overlay's WaveformBar)
+    // MARK: - Waveform drawing (ported from the deleted floating overlay)
 
     /// Vertical bars mirrored around the center line, tapered at the edges.
     static func mirroredLines(levels: [CGFloat], size: CGSize) -> Path {
@@ -208,7 +208,7 @@ struct NotchShape: Shape {
 }
 
 /// Hands-free auto-submit countdown as a thin gold line along the wing's bottom edge
-/// (ported from the overlay's SilenceProgressBar, restyled for the band).
+/// (ported from the deleted floating overlay's countdown bar, restyled for the band).
 struct SilenceCountdownLine: View {
     @ObservedObject var recorder: AudioRecorder
 
