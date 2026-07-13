@@ -71,7 +71,7 @@ struct InputTab: View {
                     guard loaded else { return }
                     try? newValue.write(to: Paths.pttHotkey, atomically: true, encoding: .utf8)
                     if let key = PTTKey(rawValue: newValue) {
-                        TranscriptionOverlay.shared.pttKeyLabel = key.label
+                        NotchIndicator.shared.pttKeyLabel = key.label
                     }
                     pttKeyChanged = true
                 }
@@ -255,7 +255,7 @@ struct InputTab: View {
             .trimmingCharacters(in: .whitespacesAndNewlines),
            let key = PTTKey(rawValue: savedKey) {
             selectedPTTKey = savedKey
-            TranscriptionOverlay.shared.pttKeyLabel = key.label
+            NotchIndicator.shared.pttKeyLabel = key.label
         }
         if let savedStr = try? String(contentsOf: Paths.silenceThreshold, encoding: .utf8),
            let saved = Int(savedStr.trimmingCharacters(in: .whitespacesAndNewlines)) {

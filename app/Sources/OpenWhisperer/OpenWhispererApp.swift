@@ -77,7 +77,7 @@ struct OpenWhispererApp: App {
 private struct SettingsMenuItems: View {
     @Environment(\.openSettings) private var openSettings
     @ObservedObject var history: TranscriptionHistory
-    @ObservedObject private var overlay = TranscriptionOverlay.shared
+    @ObservedObject private var indicator = NotchIndicator.shared
 
     /// Rows the dropdown shows; the buffer keeps `TranscriptHistoryBuffer.maxEntries`.
     private static let visibleRows = 10
@@ -103,9 +103,19 @@ private struct SettingsMenuItems: View {
 
         Divider()
 
-        Toggle("Show Overlay", isOn: Binding(
-            get: { overlay.isVisible },
-            set: { $0 ? overlay.show() : overlay.hide() }
+        // Model/setup status — the band shows only a red dot; the words live here.
+        if let status = indicator.statusText {
+            if indicator.statusIsError, let dm = indicator.dictationManager, dm.sttFailed {
+                Button("\(status) — Retry") { dm.retrySTT() }
+            } else {
+                Text(status)
+            }
+            Divider()
+        }
+
+        Toggle("Show Status Indicator", isOn: Binding(
+            get: { indicator.isVisible },
+            set: { $0 ? indicator.show() : indicator.hide() }
         ))
 
         Divider()

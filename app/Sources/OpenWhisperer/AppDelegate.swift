@@ -84,12 +84,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let saved = try? String(contentsOf: Paths.pttHotkey, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
            let key = PTTKey(rawValue: saved) {
             hotkeyManager.pttKey = key
-            TranscriptionOverlay.shared.pttKeyLabel = key.label
+            NotchIndicator.shared.pttKeyLabel = key.label
         }
 
         // Load saved interaction mode
         dictationManager.interactionMode = InteractionMode.load()
-        TranscriptionOverlay.shared.interactionMode = dictationManager.interactionMode
+        NotchIndicator.shared.interactionMode = dictationManager.interactionMode
 
         // Capture the frontmost app PID at the moment the hotkey is pressed down,
         // before recording UI or any window can steal focus away.
@@ -117,14 +117,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkeyManager.start()
 
-        TranscriptionOverlay.shared.dictationManager = dictationManager
-        TranscriptionOverlay.shared.setupManager = setupManager
+        NotchIndicator.shared.dictationManager = dictationManager
+        NotchIndicator.shared.setupManager = setupManager
+        // Click-while-speaking on the band stops playback — the same barge-in the
+        // mic path uses.
+        let playback = serverManager.playback
+        NotchIndicator.shared.onBargeIn = { Task { await playback.bargeIn() } }
         transcriptionHistory.wire(to: dictationManager)
 
-        // Show the overlay on launch unless the user hid it last session
-        // (overlay_hidden flag — maintained by TranscriptionOverlay.show()/hide()).
+        // Show the indicator on launch unless the user hid it last session
+        // (overlay_hidden flag — maintained by NotchIndicator.show()/hide()).
         if !FileManager.default.fileExists(atPath: Paths.overlayHidden.path) {
-            TranscriptionOverlay.shared.show()
+            NotchIndicator.shared.show()
         }
     }
 

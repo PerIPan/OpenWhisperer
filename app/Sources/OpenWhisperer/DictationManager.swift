@@ -27,7 +27,7 @@ class DictationManager: ObservableObject {
         didSet {
             if interactionMode != oldValue {
                 handleModeChange(from: oldValue, to: interactionMode)
-                TranscriptionOverlay.shared.interactionMode = interactionMode
+                NotchIndicator.shared.interactionMode = interactionMode
             }
         }
     }
