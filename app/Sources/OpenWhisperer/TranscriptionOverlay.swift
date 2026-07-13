@@ -17,36 +17,9 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
 
     private var window: NSWindow?
 
-    struct Line: Identifiable {
-        let id: Int
-        let text: String
-    }
-
-    @Published var lines: [Line] = []
     @Published var isVisible: Bool = false
     @Published var isTTSPlaying: Bool = false
-    private var nextLineId = 0
     private var ttsTimer: Timer?
-
-    /// How many transcript lines the overlay shows (0…`maxTranscriptLines`). Driven
-    /// by the resize grip; 0 collapses to the waveform-only pill (no separator). The
-    /// window auto-sizes to content, so changing this resizes the overlay live.
-    @Published var transcriptLines: Int = TranscriptionOverlay.loadTranscriptLines()
-    /// The top of the range — the overlay never shows more than this many lines.
-    static let maxTranscriptLines = 3
-
-    static func clampLines(_ n: Int) -> Int { Swift.max(0, Swift.min(maxTranscriptLines, n)) }
-
-    private static func loadTranscriptLines() -> Int {
-        let raw = (try? String(contentsOf: Paths.overlayLines, encoding: .utf8))?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return clampLines(Int(raw ?? "") ?? maxTranscriptLines)
-    }
-
-    /// Persist the current line count (call on drag-end).
-    func persistTranscriptLines() {
-        try? String(transcriptLines).write(to: Paths.overlayLines, atomically: true, encoding: .utf8)
-    }
 
     /// The current PTT key label shown in the overlay (e.g. "Ctrl", "fn").
     @Published var pttKeyLabel: String = "Ctrl"
@@ -127,7 +100,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
 
         let w = KeyableWindow(
             contentRect: NSRect(x: 0, y: 0, width: 240, height: 64),
-            styleMask: [.borderless, .resizable],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
@@ -172,14 +145,6 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         isVisible = false
     }
 
-    /// Toggle drag-to-move. The overlay is moved by dragging its background
-    /// (`isMovableByWindowBackground`), but that same mechanism swallows a drag on
-    /// the resize grip — so while the cursor is over the grip we turn move OFF, letting
-    /// the grip's `DragGesture` resize instead. Restored on exit.
-    func setWindowMovable(_ movable: Bool) {
-        window?.isMovableByWindowBackground = movable
-    }
-
     func windowWillClose(_ notification: Notification) {
         stopTTSPolling()
         window = nil
@@ -219,22 +184,6 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
             dm.$sttModelReady.sink { _ in recompute() }.store(in: &statusCancellables)
             dm.$sttFailed.sink { _ in recompute() }.store(in: &statusCancellables)
             dm.$sttStatus.sink { _ in recompute() }.store(in: &statusCancellables)
-            // Transcript history straight from the in-process pipeline. (The overlay
-            // used to tail server.log for "Transcribed:" lines — a format only the
-            // deleted Python server wrote, so the pane had been empty since the port.)
-            dm.$lastTranscription
-                .dropFirst()
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] text in
-                    guard let self, !text.isEmpty else { return }
-                    self.nextLineId += 1
-                    self.lines.append(Line(id: self.nextLineId, text: text))
-                    // Scrollable history, memory-bounded.
-                    if self.lines.count > 50 {
-                        self.lines = Array(self.lines.suffix(50))
-                    }
-                }
-                .store(in: &statusCancellables)
         }
         if let sm = setupManager {
             sm.$state.sink { _ in recompute() }.store(in: &statusCancellables)
@@ -266,68 +215,6 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     }
 }
 
-// MARK: - Overlay Line Row
-
-struct OverlayLineRow: View {
-    let line: TranscriptionOverlay.Line
-    let isCopied: Bool
-    let onTap: () -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(alignment: .center, spacing: 4) {
-                Text(line.text)
-                    .font(.custom("Outfit", size: 11))
-                    .foregroundColor(isCopied ? OWColor.accent : OWColor.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .layoutPriority(1)
-
-                if isCopied {
-                    ZStack(alignment: .bottomTrailing) {
-                        Image(systemName: "doc.on.clipboard")
-                            .font(.system(size: 8))
-                            .foregroundColor(OWColor.accent)
-                        
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 5, weight: .black))
-                            .foregroundColor(OWColor.accent)
-                            .background(
-                                Circle()
-                                    .fill(OWColor.page)
-                                    .frame(width: 7, height: 7)
-                            )
-                            .offset(x: 2, y: 2)
-                    }
-                    .transition(.opacity)
-                } else if isHovered {
-                    Image(systemName: "doc.on.clipboard")
-                        .font(.system(size: 8))
-                        .foregroundColor(OWColor.inkSoft)
-                        .transition(.opacity)
-                }
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(isHovered ? OWColor.pillFill.opacity(0.5) : Color.clear)
-            .cornerRadius(6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
-                isHovered = hovering
-            }
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-    }
-}
-
 // MARK: - Overlay View
 
 struct OverlayView: View {
@@ -336,14 +223,6 @@ struct OverlayView: View {
     /// We do NOT take recorder as a direct init parameter anymore — doing so
     /// would freeze the reference at the moment NSHostingView was constructed.
     @ObservedObject var overlay: TranscriptionOverlay
-    @State private var copiedLineId: Int? = nil
-    /// Grip is hover-revealed so the collapsed state is a clean waveform-only pill.
-    @State private var overlayHovered = false
-    /// Line count captured at drag-start, so the drag maps to an absolute size.
-    @State private var dragStartLines: Int? = nil
-
-    /// Vertical drag distance (pts) that steps the overlay by one transcript line.
-    private static let lineStep: CGFloat = 27
 
     var body: some View {
         // Derive the live recorder from overlay.currentRecorder each time body evaluates,
@@ -374,9 +253,8 @@ struct OverlayView: View {
                     .padding(.top, 2)
             }
 
-            // Body region: model-loading / failure status takes priority; otherwise a
-            // capped, scrollable transcript that only appears once there are lines
-            // (so the overlay stays a small pill while idle).
+            // Model-loading / failure status. (Transcription history lives in the
+            // menubar dropdown; the overlay is a pure status widget.)
             if let status = overlay.statusText {
                 HStack(spacing: 6) {
                     Label(status, systemImage: overlay.statusIsError ? "exclamationmark.triangle.fill" : "arrow.down.circle")
@@ -392,95 +270,12 @@ struct OverlayView: View {
                     }
                 }
                 .padding(.top, 4)
-            } else if overlay.transcriptLines > 0, !overlay.lines.isEmpty {
-                // Show the N most-recent lines (newest first). N is the resize-grip
-                // size; at 0 this whole block — including the separator — is gone,
-                // leaving just the waveform pill. The window auto-sizes to fit.
-                Divider().padding(.top, 4)
-                VStack(alignment: .leading, spacing: 4) {
-                    let visible = Array(overlay.lines.reversed().prefix(overlay.transcriptLines))
-                    ForEach(Array(visible.enumerated()), id: \.element.id) { index, line in
-                        if index > 0 { Divider() }
-                        OverlayLineRow(
-                            line: line,
-                            isCopied: copiedLineId == line.id,
-                            onTap: {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(line.text, forType: .string)
-                                withAnimation(.easeIn(duration: 0.1)) {
-                                    copiedLineId = line.id
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                                    withAnimation(.easeOut(duration: 0.2)) {
-                                        if copiedLineId == line.id {
-                                            copiedLineId = nil
-                                        }
-                                    }
-                                }
-                            }
-                        )
-                        .help("Click to copy transcription")
-                        .id(line.id)
-                    }
-                }
-                .padding(.top, 2)
-            }
-
-            // Resize grip — hover-revealed. Drag up to show fewer transcript lines
-            // (3 → 2 → 1 → waveform-only); drag down to grow back. Stay visible for
-            // the duration of a drag even if the shrinking window slips out from
-            // under the cursor (which would otherwise drop hover and cancel it).
-            if overlayHovered || dragStartLines != nil {
-                HStack {
-                    Spacer()
-                    Capsule()
-                        .fill(OWColor.inkFaint)
-                        .frame(width: 26, height: 4)
-                    Spacer()
-                }
-                .frame(height: 9)
-                .padding(.top, 2)
-                .contentShape(Rectangle())
-                .gesture(gripDrag)
-                .onHover { inside in
-                    // Suppress window-move over the grip so the drag resizes instead.
-                    // Don't re-enable mid-drag if the cursor slips off the shrinking grip.
-                    if inside {
-                        overlay.setWindowMovable(false)
-                        NSCursor.resizeUpDown.push()
-                    } else {
-                        if dragStartLines == nil { overlay.setWindowMovable(true) }
-                        NSCursor.pop()
-                    }
-                }
-                .transition(.opacity)
             }
         }
         .padding(.horizontal, 10)
         .padding(.top, 6)
         .padding(.bottom, 9)
         .frame(width: 240, alignment: .leading)
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) { overlayHovered = hovering }
-        }
-    }
-
-    /// Maps a vertical drag on the grip to an absolute line count (0…max), snapping
-    /// per `lineStep`. Dragging up (negative) shrinks; down grows. Persisted on end.
-    private var gripDrag: some Gesture {
-        DragGesture(minimumDistance: 2)
-            .onChanged { value in
-                let start = dragStartLines ?? overlay.transcriptLines
-                if dragStartLines == nil { dragStartLines = start }
-                let delta = Int((value.translation.height / Self.lineStep).rounded())
-                let next = TranscriptionOverlay.clampLines(start + delta)
-                if next != overlay.transcriptLines { overlay.transcriptLines = next }
-            }
-            .onEnded { _ in
-                dragStartLines = nil
-                overlay.persistTranscriptLines()
-                overlay.setWindowMovable(true)   // restore move once the drag finishes
-            }
     }
 }
 

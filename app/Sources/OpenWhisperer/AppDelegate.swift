@@ -25,6 +25,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ConfigManager.migrateRemoveTextResponseMode()
         // Strip the obsolete Stop hook (replaced by the speak MCP tool) from existing installs.
         ConfigManager.migrateRemoveClaudeStopHook()
+        // Delete the orphaned overlay_lines pref (grip removed with menubar history).
+        ConfigManager.removeLegacyOverlayLines()
         // Prompt for Accessibility permission if not already granted
         accessibilityManager.requestIfNeeded()
         // Clean stale temp/lock/pid files from previous sessions (background, delayed)

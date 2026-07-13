@@ -84,9 +84,9 @@ enum Paths {
     /// TTS speed file
     static let ttsSpeed = appSupport.appendingPathComponent("tts_speed")
 
-    /// Overlay transcript size — number of transcript lines the floating overlay
-    /// shows (0–3). Set by dragging the overlay's resize grip; 0 = waveform only.
-    static let overlayLines = appSupport.appendingPathComponent("overlay_lines")
+    /// Legacy (pre menubar-history): the overlay resize grip's persisted line count.
+    /// Kept only so `ConfigManager.removeLegacyOverlayLines()` can delete stale files.
+    static let legacyOverlayLines = appSupport.appendingPathComponent("overlay_lines")
 
     /// Overlay visibility flag — present when the user hid the floating overlay
     /// (menu toggle off, or the overlay's X button). Absent = show on launch.
