@@ -27,7 +27,6 @@ menu and slims the overlay to a pure status widget.
 ## Menu structure
 
 ```
-Recent Transcriptions          (disabled header)
 fix the race in the tts serv…  (up to 10 rows, newest first, click = copy)
 add a menubar toggle for the…
 — or, when empty —

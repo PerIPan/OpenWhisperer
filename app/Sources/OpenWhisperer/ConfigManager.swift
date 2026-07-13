@@ -519,6 +519,12 @@ enum ConfigManager {
         try? fm.moveItem(at: Paths.legacyVoiceDetail, to: Paths.ttsStyle)
     }
 
+    /// One-shot cleanup: transcription history moved to the menubar dropdown (2026-07-13)
+    /// and the overlay's resize grip went with it — delete the grip's orphaned pref file.
+    static func removeLegacyOverlayLines() {
+        try? FileManager.default.removeItem(at: Paths.legacyOverlayLines)
+    }
+
     /// One-shot: the `text` response mode was removed (no sensible use case). Rewrite any
     /// persisted `tts_response_mode` == "text" to the default "voice" so the picker and hook agree.
     static func migrateRemoveTextResponseMode() {

@@ -15,6 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let dictationManager = DictationManager()
     let hotkeyManager = HotkeyManager()
     let accessibilityManager = AccessibilityManager()
+    let transcriptionHistory = TranscriptionHistory()
     private var dictationSetupDone = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -24,6 +25,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ConfigManager.migrateRemoveTextResponseMode()
         // Strip the obsolete Stop hook (replaced by the speak MCP tool) from existing installs.
         ConfigManager.migrateRemoveClaudeStopHook()
+        // Delete the orphaned overlay_lines pref (grip removed with menubar history).
+        ConfigManager.removeLegacyOverlayLines()
         // Prompt for Accessibility permission if not already granted
         accessibilityManager.requestIfNeeded()
         // Clean stale temp/lock/pid files from previous sessions (background, delayed)
@@ -116,6 +119,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         TranscriptionOverlay.shared.dictationManager = dictationManager
         TranscriptionOverlay.shared.setupManager = setupManager
+        transcriptionHistory.wire(to: dictationManager)
 
         // Show the overlay on launch unless the user hid it last session
         // (overlay_hidden flag — maintained by TranscriptionOverlay.show()/hide()).
