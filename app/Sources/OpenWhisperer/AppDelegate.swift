@@ -117,8 +117,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         TranscriptionOverlay.shared.dictationManager = dictationManager
         TranscriptionOverlay.shared.setupManager = setupManager
 
-        // Show transcription overlay by default on launch
-        TranscriptionOverlay.shared.show()
+        // Show the overlay on launch unless the user hid it last session
+        // (overlay_hidden flag — maintained by TranscriptionOverlay.show()/hide()).
+        if !FileManager.default.fileExists(atPath: Paths.overlayHidden.path) {
+            TranscriptionOverlay.shared.show()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

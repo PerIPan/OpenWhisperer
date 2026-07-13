@@ -96,6 +96,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     @Published var currentRecorder: AudioRecorder = AudioRecorder(skipPermissionCheck: true)
 
     func show() {
+        try? FileManager.default.removeItem(at: Paths.overlayHidden)
         if let w = window {
             // FIX: Never recreate NSHostingView on an already-constructed window.
             // Recreating it tears down the entire SwiftUI render tree, cancels
@@ -164,6 +165,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     }
 
     func hide() {
+        try? "on".write(to: Paths.overlayHidden, atomically: true, encoding: .utf8)
         stopTTSPolling()
         window?.close()
         window = nil
