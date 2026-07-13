@@ -1,4 +1,5 @@
 import SwiftUI
+import OpenWhispererKit
 
 /// Entry point. Normal launch runs the SwiftUI menu-bar app; `--serve-tts` runs a headless
 /// native-TTS HTTP server (for testing/diagnostics and CI) without the GUI.
@@ -55,7 +56,7 @@ struct OpenWhispererApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            SettingsMenuItems()
+            SettingsMenuItems(history: appDelegate.transcriptionHistory)
         } label: {
             // Always-visible first-run signal: hourglass while the models load, waveform once ready.
             MenuBarStatusIcon(dictation: appDelegate.dictationManager, server: appDelegate.serverManager)
@@ -75,9 +76,35 @@ struct OpenWhispererApp: App {
 /// Menubar menu content.
 private struct SettingsMenuItems: View {
     @Environment(\.openSettings) private var openSettings
+    @ObservedObject var history: TranscriptionHistory
     @ObservedObject private var overlay = TranscriptionOverlay.shared
 
+    /// Rows the dropdown shows; the buffer keeps `TranscriptHistoryBuffer.maxEntries`.
+    private static let visibleRows = 10
+
     var body: some View {
+        // A plain Text renders as a disabled menu item — the section header.
+        Text("Recent Transcriptions")
+
+        if history.items.isEmpty {
+            Text("No transcriptions yet")
+        } else {
+            // Newest first. The label is truncated; clicking copies the full text.
+            ForEach(Array(history.items.prefix(Self.visibleRows).enumerated()), id: \.offset) { _, text in
+                Button(TranscriptHistoryBuffer.menuLabel(text)) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                }
+            }
+        }
+
+        Divider()
+
+        Button("Clear History") { history.clear() }
+            .disabled(history.items.isEmpty)
+
+        Divider()
+
         Toggle("Show Overlay", isOn: Binding(
             get: { overlay.isVisible },
             set: { $0 ? overlay.show() : overlay.hide() }
