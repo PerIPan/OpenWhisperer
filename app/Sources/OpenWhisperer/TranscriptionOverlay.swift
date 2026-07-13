@@ -242,8 +242,8 @@ struct OverlayView: View {
             }
             .frame(height: 12)
 
-            // Live waveform + state word ("Standby" / "Recording…" / "Speaking…").
-            WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, pttKeyLabel: overlay.pttKeyLabel, interactionMode: overlay.interactionMode)
+            // Live waveform + status dot (no text — the words live in the menubar dropdown).
+            WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError)
                 .frame(height: 32)
 
             // Silence countdown — hands-free only.
@@ -251,25 +251,6 @@ struct OverlayView: View {
                 SilenceProgressBar(recorder: recorder)
                     .frame(height: 1.5)
                     .padding(.top, 2)
-            }
-
-            // Model-loading / failure status. (Transcription history lives in the
-            // menubar dropdown; the overlay is a pure status widget.)
-            if let status = overlay.statusText {
-                HStack(spacing: 6) {
-                    Label(status, systemImage: overlay.statusIsError ? "exclamationmark.triangle.fill" : "arrow.down.circle")
-                        .font(.custom("Outfit", size: 10))
-                        .foregroundColor(overlay.statusIsError ? OWColor.danger : OWColor.inkSoft)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if overlay.statusIsError, let dm = overlay.dictationManager, dm.sttFailed {
-                        Spacer(minLength: 0)
-                        Button("Retry") { dm.retrySTT() }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.mini)
-                    }
-                }
-                .padding(.top, 4)
             }
         }
         .padding(.horizontal, 10)
@@ -284,8 +265,8 @@ struct OverlayView: View {
 struct WaveformBar: View {
     @ObservedObject var recorder: AudioRecorder
     var isTTSPlaying: Bool = false
-    var pttKeyLabel: String = "Ctrl"
-    var interactionMode: InteractionMode = .pressToTalk
+    /// Paints the dot danger-red while model status is failed (the words live in the menu).
+    var statusIsError: Bool = false
 
     /// Active/recording waveform: warm cream-gold → gold → deep gold (mirrors the site's EQ bars).
     private static let waveGradient = LinearGradient(
@@ -321,22 +302,7 @@ struct WaveformBar: View {
                 Circle()
                     .fill(statusColor)
                     .frame(width: 8, height: 8)
-                Text(statusText)
-                    .font(.custom("Outfit", size: 10))
-                    .foregroundColor(statusColor)
                 Spacer()
-                if recorder.state == .recording {
-                    let hint: String = {
-                        switch interactionMode {
-                        case .holdToTalk: return "Release \(pttKeyLabel) to stop"
-                        case .handsFree: return "silence submits"
-                        case .pressToTalk: return "Press \(pttKeyLabel) to stop"
-                        }
-                    }()
-                    Text(hint)
-                        .font(.custom("Outfit", size: 9))
-                        .foregroundColor(.secondary)
-                }
             }
 
             // Mirrored line waveform
@@ -395,6 +361,7 @@ struct WaveformBar: View {
     }
 
     private var statusColor: Color {
+        if statusIsError { return OWColor.danger }
         if isTTSPlaying && recorder.state == .idle { return OWColor.accent }
         switch recorder.state {
         case .recording: return OWColor.recording
@@ -404,15 +371,6 @@ struct WaveformBar: View {
         }
     }
 
-    private var statusText: String {
-        if isTTSPlaying && recorder.state == .idle { return "Speaking..." }
-        switch recorder.state {
-        case .recording: return "Recording..."
-        case .uploading: return "Transcribing..."
-        case .listening: return "Listening..."
-        case .idle: return "Standby"
-        }
-    }
 }
 
 // MARK: - Silence Progress Bar
