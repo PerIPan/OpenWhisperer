@@ -79,6 +79,10 @@ class DictationManager: ObservableObject {
     private var recorderSink: AnyCancellable?
     private var engineErrorSink: AnyCancellable?
     private var uploadWatchdog: DispatchWorkItem?
+    /// Engines whose model finished loading this session (main-thread only).
+    /// Sizes the transcription watchdog: a cold engine's first dictation pays
+    /// the model load inside the transcribe task, so it gets a longer leash.
+    private var warmEngines: Set<STTEngine> = []
     /// The in-flight transcription. Cancelled on mode switch / timeout; a cancelled
     /// task's result is dropped via the `Task.isCancelled` guard so it can never type
     /// into the wrong app (the T1.2/T1.4 invariant). Note: cancelling does NOT interrupt
@@ -230,9 +234,46 @@ class DictationManager: ObservableObject {
     /// Dispatch a transcription to the active engine. Both transcribers self-prepare
     /// on first use, so flipping engines mid-session lazily loads the other model.
     private func transcribeWithActiveEngine(samples: [Float], language: String?) async throws -> String {
-        switch Self.activeSTTEngine {
-        case .whisper: return try await transcriber.transcribe(samples: samples, language: language)
-        case .parakeet: return try await parakeet.transcribe(samples: samples, language: language)
+        let engine = Self.activeSTTEngine
+        let text: String
+        switch engine {
+        case .whisper: text = try await transcriber.transcribe(samples: samples, language: language)
+        case .parakeet: text = try await parakeet.transcribe(samples: samples, language: language)
+        }
+        await MainActor.run { _ = self.warmEngines.insert(engine) }
+        return text
+    }
+
+    /// Watchdog budget for one transcription: 35 s once the active engine's model
+    /// is warm; generous on the first dictation after an engine flip, which loads
+    /// the model inside the watchdogged task (Whisper's load alone exceeds 35 s).
+    private func transcriptionTimeout() -> TimeInterval {
+        warmEngines.contains(Self.activeSTTEngine) ? 35 : 180
+    }
+
+    /// Kick the active engine's model load as recording starts, so a first
+    /// dictation after an engine flip overlaps the load with the user speaking
+    /// instead of paying it all inside the watchdogged transcribe task.
+    private func prewarmActiveEngineIfNeeded() {
+        let engine = Self.activeSTTEngine
+        guard !warmEngines.contains(engine) else { return }
+        sttStatus = "Loading the \(engine == .parakeet ? "Parakeet" : "Whisper") speech model… the first dictation after switching engines can take a minute."
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                switch engine {
+                case .whisper: _ = try await self.transcriber.prepare()
+                case .parakeet: _ = try await self.parakeet.prepare()
+                }
+                await MainActor.run {
+                    self.warmEngines.insert(engine)
+                    self.sttStatus = nil
+                }
+            } catch {
+                await MainActor.run {
+                    self.sttStatus = "Speech model failed to load: \(error.localizedDescription)"
+                }
+            }
         }
     }
 
@@ -319,6 +360,7 @@ class DictationManager: ObservableObject {
             guard !isTyping else { return }
             killTTS()
             playClick()
+            prewarmActiveEngineIfNeeded()
             // captureTargetApp() already called by HotkeyManager.onKeyDown (L-4)
             recorder.startRecording()
         case .recording:
@@ -338,6 +380,7 @@ class DictationManager: ObservableObject {
         guard recorder.state == .idle, !isTyping else { return }
         killTTS()
         playClick()
+        prewarmActiveEngineIfNeeded()
         captureTargetApp()
         recorder.startRecording()
     }
@@ -400,6 +443,7 @@ class DictationManager: ObservableObject {
         // It will be restarted after the STT cycle completes (resumeListening path).
         keywordDetector.stop()
         playClick()
+        prewarmActiveEngineIfNeeded()
         captureTargetApp()
         recorder.startBuffering()
     }
@@ -438,7 +482,7 @@ class DictationManager: ObservableObject {
         uploadWatchdog?.cancel()
         let watchdog = DispatchWorkItem { [weak self] in
             guard let self, self.recorder.state == .uploading else { return }
-            os_log(.default, log: dictLog, "Watchdog: hands-free transcription exceeded 35s")
+            os_log(.default, log: dictLog, "Watchdog: hands-free transcription timed out")
             self.bargedIn = false
             self.activeTranscribeTask?.cancel()
             self.activeTranscribeTask = nil
@@ -448,7 +492,7 @@ class DictationManager: ObservableObject {
             self.error = "Transcription timed out"
         }
         uploadWatchdog = watchdog
-        DispatchQueue.main.asyncAfter(deadline: .now() + 35, execute: watchdog)
+        DispatchQueue.main.asyncAfter(deadline: .now() + transcriptionTimeout(), execute: watchdog)
 
         activeTranscribeTask = Task { [weak self] in
             guard let self else { return }
@@ -517,6 +561,7 @@ class DictationManager: ObservableObject {
         keywordDetector.stop()
         killTTS()
         playClick()
+        prewarmActiveEngineIfNeeded()
         captureTargetApp()
         recorder.startBuffering()
     }
@@ -594,7 +639,7 @@ class DictationManager: ObservableObject {
             self.error = "Transcription timed out"
         }
         uploadWatchdog = watchdog
-        DispatchQueue.main.asyncAfter(deadline: .now() + 35, execute: watchdog)
+        DispatchQueue.main.asyncAfter(deadline: .now() + transcriptionTimeout(), execute: watchdog)
 
         guard let samples = recorder.exportPCMFloat() else {
             uploadWatchdog?.cancel()
