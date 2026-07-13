@@ -59,6 +59,14 @@ behavior, structure, or user-facing copy and deserve their own pass + sign-off.
 - Hook validity check (file exists + executable) alongside "HOOK configured".
 - Mode comparison mini-reference off the mode picker.
 - Menubar icon ambient state during TTS playback.
+- **Notch status indicator (overlay split, phase 2).** Move the recording/standby/speaking status out
+  of the floating overlay into a small dynamic indicator beside the MacBook notch (VoiceInk "notch
+  recorder" pattern; cf. Dynamic Island). Phase 1 — moving transcription history into the menubar
+  dropdown — is specced separately (2026-07-13 discussion). Open problems to solve in its own design
+  pass: fallback for non-notch displays (fake-notch pill vs. keeping the floating overlay as an
+  alternate style, as VoiceInk does); new homes for the overlay's text states (model download
+  progress, errors, "Transcribing…", hands-free silence countdown); fullscreen behavior
+  (`canJoinAllSpaces` + window level); overlap with the macOS orange mic dot.
 - **Manage storage → Remove downloaded models.** No in-app way to delete the models today (~1.7 GB:
   WhisperKit STT at `~/Documents/huggingface/models/argmaxinc/` + `…/openai/` ≈ 1.5 GB; FluidAudio
   Kokoro at `~/.cache/fluidaudio` ≈ 196 MB). Add a Server/Diagnostics-card row showing the on-disk
