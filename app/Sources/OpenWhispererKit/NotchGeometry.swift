@@ -5,9 +5,9 @@ import CoreGraphics
 /// metrics, where the band's panel sits and how wide the visible black band is in
 /// each state. Lives in OpenWhispererKit so the math is unit-testable under CLT;
 /// `NotchIndicator` (app target) feeds it real NSScreen values.
-public struct NotchGeometry {
+public struct NotchGeometry: Equatable {
     /// The subset of NSScreen the geometry needs, as plain values.
-    public struct ScreenMetrics {
+    public struct ScreenMetrics: Equatable {
         public let frame: CGRect
         public let safeAreaTop: CGFloat
         public let auxiliaryLeftWidth: CGFloat?
