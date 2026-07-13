@@ -79,12 +79,10 @@ On first launch, the app:
 - Loads both models on the Apple Neural Engine
 - Starts the in-app TTS server automatically (loopback only, port 8000)
 
-While that one-time download and Neural-Engine compile runs, the menu and the floating overlay both show live progress so you know it isn't stuck:
+While that one-time download and Neural-Engine compile runs, the menu shows live progress so you know it isn't stuck (the overlay is signal-only — just a waveform and status dot):
 
 <p align="center">
   <img src="screenshot-loading-menu.png" width="460" alt="Open Whisperer menu preparing the models on first launch">
-  <br><br>
-  <img src="screenshot-loading-overlay.png" width="460" alt="Open Whisperer overlay showing model-preparation progress">
 </p>
 
 The menubar icon gives you:
