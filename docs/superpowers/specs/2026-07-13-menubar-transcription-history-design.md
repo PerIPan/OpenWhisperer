@@ -59,7 +59,8 @@ Two units, one wire:
    - `var items: [String]` — newest first, full text.
    - `static func menuLabel(_ text: String, limit: Int = 50) -> String` — collapse
      newlines, trim, truncate on `Character` (grapheme) boundaries with a trailing `…`.
-2. **`TranscriptionHistory`** (`@MainActor final class …: ObservableObject`, app target)
+2. **`TranscriptionHistory`** (`final class …: ObservableObject`, app target; mutations
+   delivered on the main queue, matching `TranscriptionOverlay`'s wiring)
    — ~20 lines: wraps the buffer, `@Published private(set) var items`, exposes
    `clear()`. `AppDelegate` owns it and subscribes it to
    `DictationManager.$lastTranscription` — the same feed `TranscriptionOverlay.wireStatus()`
