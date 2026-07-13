@@ -103,6 +103,16 @@ private struct SettingsMenuItems: View {
 
         Divider()
 
+        // Model/setup status — the overlay shows only a red dot; the words live here.
+        if let status = overlay.statusText {
+            if overlay.statusIsError, let dm = overlay.dictationManager, dm.sttFailed {
+                Button("\(status) — Retry") { dm.retrySTT() }
+            } else {
+                Text(status)
+            }
+            Divider()
+        }
+
         Toggle("Show Overlay", isOn: Binding(
             get: { overlay.isVisible },
             set: { $0 ? overlay.show() : overlay.hide() }
