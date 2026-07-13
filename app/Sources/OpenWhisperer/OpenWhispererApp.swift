@@ -75,8 +75,16 @@ struct OpenWhispererApp: App {
 /// Menubar menu content.
 private struct SettingsMenuItems: View {
     @Environment(\.openSettings) private var openSettings
+    @ObservedObject private var overlay = TranscriptionOverlay.shared
 
     var body: some View {
+        Toggle("Show Overlay", isOn: Binding(
+            get: { overlay.isVisible },
+            set: { $0 ? overlay.show() : overlay.hide() }
+        ))
+
+        Divider()
+
         Button("Settings...") {
             // Activate the app to bring the Settings window to the front
             NSApp.activate(ignoringOtherApps: true)

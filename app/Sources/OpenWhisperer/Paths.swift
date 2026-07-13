@@ -88,6 +88,10 @@ enum Paths {
     /// shows (0–3). Set by dragging the overlay's resize grip; 0 = waveform only.
     static let overlayLines = appSupport.appendingPathComponent("overlay_lines")
 
+    /// Overlay visibility flag — present when the user hid the floating overlay
+    /// (menu toggle off, or the overlay's X button). Absent = show on launch.
+    static let overlayHidden = appSupport.appendingPathComponent("overlay_hidden")
+
     /// Selected AI platform (claudeCode, codexCLI)
     static let selectedPlatform = appSupport.appendingPathComponent("selected_platform")
 
