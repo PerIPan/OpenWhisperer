@@ -3,15 +3,16 @@ import Foundation
 
 /// In-process Parakeet TDT v3 speech-to-text via FluidAudio (CoreML / ANE).
 ///
-/// Mirrors `SpeechTranscriber`'s surface so `DictationManager` can dispatch on the
-/// `stt_engine` pref (2026-07-13 feel-test; see the engine-configurability spec
-/// addendum). Actor-isolated for the same reasons as the Whisper path: serialize
-/// work on the compute unit and dedup the one-time model load.
+/// The app's sole STT engine since 2026-07-13, replacing WhisperKit (see the
+/// engine-configurability spec's migration addendum: ~8–10x faster decode at
+/// comparable quiet-room accuracy). Actor-isolated to serialize work on the
+/// compute unit and dedup the one-time model load.
 ///
-/// Differences from the Whisper path, by design:
-/// - No `stt_vocabulary` glossary: `promptTokens` is a Whisper mechanism. FluidAudio
+/// Differences from the removed Whisper path, by design:
+/// - Literal transcripts: fillers/repairs are kept, where Whisper tidied them.
+/// - No `stt_vocabulary` glossary: `promptTokens` was a Whisper mechanism. FluidAudio
 ///   has its own vocabulary-boosting system (CTC keyword spotter + rescorer), but it
-///   needs an extra model download — evaluate separately if Parakeet wins the feel-test.
+///   needs an extra model download — wire it up only if jargon accuracy regresses.
 /// - `stt_language` maps to a script-filter hint (v3 top-K token filtering), not a
 ///   decode prompt; unknown codes and "auto" mean no hint (the model auto-detects).
 actor ParakeetTranscriber {

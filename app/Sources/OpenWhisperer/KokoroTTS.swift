@@ -6,7 +6,7 @@ import OpenWhispererKit
 ///
 /// Ported from the former out-of-process Python `mlx_audio` server (now deleted). Actor-isolated so the one-time
 /// model load can't race and synthesis calls serialize on the compute unit. Mirrors the
-/// `SpeechTranscriber` pattern (in-flight load dedup, error wrapping). FluidAudio caches
+/// `ParakeetTranscriber` pattern (in-flight load dedup, error wrapping). FluidAudio caches
 /// its CoreML chain under `~/.cache/fluidaudio` and loads from cache when present, so an
 /// already-downloaded model survives a blocked/slow Hub (offline-first by construction).
 actor KokoroTTS {

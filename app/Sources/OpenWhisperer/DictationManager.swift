@@ -7,14 +7,12 @@ import OpenWhispererKit
 private let dictLog = OSLog(subsystem: "com.openwhisperer.app", category: "dictation")
 
 /// Orchestrates the record → upload → type cycle for all interaction modes.
-/// Sends audio to the local Whisper server and types the result into the focused app.
+/// Feeds audio to the in-process STT model and types the result into the focused app.
 class DictationManager: ObservableObject {
     let recorder = AudioRecorder()
     let keywordDetector = KeywordDetector()
-    /// In-process Whisper STT (WhisperKit). Ported from the former HTTP call to the Python server (now deleted).
-    let transcriber = SpeechTranscriber()
-    /// In-process Parakeet TDT v3 STT (FluidAudio). Active when the `stt_engine`
-    /// pref says "parakeet" (the 2026-07-13 feel-test default).
+    /// In-process Parakeet TDT v3 STT (FluidAudio, CoreML/ANE). Replaced WhisperKit
+    /// 2026-07-13 — see the engine-configurability spec's migration addendum.
     let parakeet = ParakeetTranscriber()
     /// In-process TTS playback (Phase 3). Injected by `AppDelegate` from `ServerManager`; used by
     /// `killTTS()` for instant barge-in. Optional so headless/test paths without a server still run.
@@ -40,7 +38,7 @@ class DictationManager: ObservableObject {
     /// Non-nil while the speech model is downloading/loading, or holding a failure
     /// message (status string for the UI — menu bar and standby overlay both read it).
     @Published var sttStatus: String?
-    /// True once the WhisperKit model is loaded and ready to transcribe.
+    /// True once the STT model is loaded and ready to transcribe.
     @Published var sttModelReady = false
     /// True when the speech-model load failed (offers a Retry in the UI).
     @Published var sttFailed = false
@@ -79,14 +77,14 @@ class DictationManager: ObservableObject {
     private var recorderSink: AnyCancellable?
     private var engineErrorSink: AnyCancellable?
     private var uploadWatchdog: DispatchWorkItem?
-    /// Engines whose model finished loading this session (main-thread only).
-    /// Sizes the transcription watchdog: a cold engine's first dictation pays
-    /// the model load inside the transcribe task, so it gets a longer leash.
-    private var warmEngines: Set<STTEngine> = []
+    /// True once the STT model finished loading this session (main-thread only).
+    /// Sizes the transcription watchdog: a cold model's first dictation pays the
+    /// load inside the transcribe task, so it gets a longer leash.
+    private var sttWarm = false
     /// The in-flight transcription. Cancelled on mode switch / timeout; a cancelled
     /// task's result is dropped via the `Task.isCancelled` guard so it can never type
     /// into the wrong app (the T1.2/T1.4 invariant). Note: cancelling does NOT interrupt
-    /// WhisperKit mid-inference — the guard, not the cancel, preserves correctness.
+    /// the model mid-inference — the guard, not the cancel, preserves correctness.
     private var activeTranscribeTask: Task<Void, Never>?
     /// True while a barge-in recording is active — prevents handleTTSStateChange from resetting to keyword mode
     private var bargedIn = false
@@ -161,19 +159,15 @@ class DictationManager: ObservableObject {
         speakArmedTimer?.invalidate()
     }
 
-    /// Kick off the one-time WhisperKit model download + load. Call at launch so the
+    /// Kick off the one-time Parakeet model download + load. Call at launch so the
     /// first dictation isn't blocked on a multi-minute download. Idempotent.
     func prepareSTT() {
         guard !sttModelReady else { return }
-        let engine = Self.activeSTTEngine
-        // Set expectations: the first launch downloads (Whisper ~1.5 GB, Parakeet
-        // ~460 MB) and then compiles the model for the Neural Engine (up to ~1–2 min).
-        // Without this, a slow first load looks "stuck".
-        let cached = engine == .parakeet ? ParakeetTranscriber.isModelCached : SpeechTranscriber.isModelCached
-        let sizeNote = engine == .parakeet ? "about 460 MB" : "about 1.5 GB"
-        sttStatus = cached
-            ? "Preparing the speech model… first launch compiles it for the Neural Engine — up to a minute or two. Dictation will be ready when it finishes."
-            : "Downloading the speech model… one-time, \(sizeNote). This can take a few minutes on first launch."
+        // Set expectations: the first launch downloads (~460 MB) and then compiles
+        // the model for the Neural Engine. Without this, a slow first load looks "stuck".
+        sttStatus = ParakeetTranscriber.isModelCached
+            ? "Preparing the speech model… first launch compiles it for the Neural Engine. Dictation will be ready when it finishes."
+            : "Downloading the speech model… one-time, about 460 MB. This can take a few minutes on first launch."
         Task { [weak self] in
             guard let self else { return }
             // Live percent while the archive downloads (first run only — the handler
@@ -184,24 +178,19 @@ class DictationManager: ObservableObject {
                 Task { @MainActor in
                     guard let self, !self.sttModelReady, !self.sttFailed else { return }
                     if pct >= 100 {
-                        self.sttStatus = "Download done — compiling for the Neural Engine… up to a minute or two."
+                        self.sttStatus = "Download done — compiling for the Neural Engine…"
                     } else if pct != self.lastReportedDownloadPct {
                         self.lastReportedDownloadPct = pct
-                        self.sttStatus = "Downloading the speech model… \(pct)% of \(sizeNote) (one-time)."
+                        self.sttStatus = "Downloading the speech model… \(pct)% of ~460 MB (one-time)."
                     }
                 }
             }
             do {
-                switch engine {
-                case .whisper:
-                    await self.transcriber.setDownloadProgressHandler(progressHandler)
-                    _ = try await self.transcriber.prepare()
-                case .parakeet:
-                    await self.parakeet.setDownloadProgressHandler(progressHandler)
-                    _ = try await self.parakeet.prepare()
-                }
+                await self.parakeet.setDownloadProgressHandler(progressHandler)
+                _ = try await self.parakeet.prepare()
                 await MainActor.run {
                     self.sttModelReady = true
+                    self.sttWarm = true
                     self.sttFailed = false
                     self.sttStatus = nil
                 }
@@ -225,48 +214,32 @@ class DictationManager: ObservableObject {
     }
 
     /// A short, actionable message for a model-load failure.
-    /// The engine selected by the `stt_engine` pref, re-read on every call so a
-    /// flipped file takes effect on the next dictation (no restart).
-    static var activeSTTEngine: STTEngine {
-        STTEngine.parse(try? String(contentsOf: Paths.sttEngine, encoding: .utf8))
-    }
-
-    /// Dispatch a transcription to the active engine. Both transcribers self-prepare
-    /// on first use, so flipping engines mid-session lazily loads the other model.
-    private func transcribeWithActiveEngine(samples: [Float], language: String?) async throws -> String {
-        let engine = Self.activeSTTEngine
-        let text: String
-        switch engine {
-        case .whisper: text = try await transcriber.transcribe(samples: samples, language: language)
-        case .parakeet: text = try await parakeet.transcribe(samples: samples, language: language)
-        }
-        await MainActor.run { _ = self.warmEngines.insert(engine) }
+    /// Transcribe via Parakeet, which self-prepares on first use, and mark the
+    /// model warm on success so the watchdog can tighten.
+    private func transcribeSTT(samples: [Float], language: String?) async throws -> String {
+        let text = try await parakeet.transcribe(samples: samples, language: language)
+        await MainActor.run { self.sttWarm = true }
         return text
     }
 
-    /// Watchdog budget for one transcription: 35 s once the active engine's model
-    /// is warm; generous on the first dictation after an engine flip, which loads
-    /// the model inside the watchdogged task (Whisper's load alone exceeds 35 s).
+    /// Watchdog budget for one transcription: 35 s once the model is warm;
+    /// generous when the first dictation must load the model inside the task.
     private func transcriptionTimeout() -> TimeInterval {
-        warmEngines.contains(Self.activeSTTEngine) ? 35 : 180
+        sttWarm ? 35 : 180
     }
 
-    /// Kick the active engine's model load as recording starts, so a first
-    /// dictation after an engine flip overlaps the load with the user speaking
-    /// instead of paying it all inside the watchdogged transcribe task.
-    private func prewarmActiveEngineIfNeeded() {
-        let engine = Self.activeSTTEngine
-        guard !warmEngines.contains(engine) else { return }
-        sttStatus = "Loading the \(engine == .parakeet ? "Parakeet" : "Whisper") speech model… the first dictation after switching engines can take a minute."
+    /// Kick the model load as recording starts, so a cold first dictation overlaps
+    /// the load with the user speaking instead of paying it all inside the
+    /// watchdogged transcribe task.
+    private func prewarmSTTIfNeeded() {
+        guard !sttWarm else { return }
+        sttStatus = "Loading the speech model… the first dictation can take a moment."
         Task { [weak self] in
             guard let self else { return }
             do {
-                switch engine {
-                case .whisper: _ = try await self.transcriber.prepare()
-                case .parakeet: _ = try await self.parakeet.prepare()
-                }
+                _ = try await self.parakeet.prepare()
                 await MainActor.run {
-                    self.warmEngines.insert(engine)
+                    self.sttWarm = true
                     self.sttStatus = nil
                 }
             } catch {
@@ -360,7 +333,7 @@ class DictationManager: ObservableObject {
             guard !isTyping else { return }
             killTTS()
             playClick()
-            prewarmActiveEngineIfNeeded()
+            prewarmSTTIfNeeded()
             // captureTargetApp() already called by HotkeyManager.onKeyDown (L-4)
             recorder.startRecording()
         case .recording:
@@ -380,7 +353,7 @@ class DictationManager: ObservableObject {
         guard recorder.state == .idle, !isTyping else { return }
         killTTS()
         playClick()
-        prewarmActiveEngineIfNeeded()
+        prewarmSTTIfNeeded()
         captureTargetApp()
         recorder.startRecording()
     }
@@ -443,7 +416,7 @@ class DictationManager: ObservableObject {
         // It will be restarted after the STT cycle completes (resumeListening path).
         keywordDetector.stop()
         playClick()
-        prewarmActiveEngineIfNeeded()
+        prewarmSTTIfNeeded()
         captureTargetApp()
         recorder.startBuffering()
     }
@@ -498,7 +471,7 @@ class DictationManager: ObservableObject {
             guard let self else { return }
             let result: Result<String, Error>
             do {
-                let text = try await self.transcribeWithActiveEngine(samples: samples, language: language)
+                let text = try await self.transcribeSTT(samples: samples, language: language)
                 result = .success(text)
             } catch {
                 result = .failure(error)
@@ -561,7 +534,7 @@ class DictationManager: ObservableObject {
         keywordDetector.stop()
         killTTS()
         playClick()
-        prewarmActiveEngineIfNeeded()
+        prewarmSTTIfNeeded()
         captureTargetApp()
         recorder.startBuffering()
     }
@@ -662,7 +635,7 @@ class DictationManager: ObservableObject {
             guard let self else { return }
             let result: Result<String, Error>
             do {
-                let text = try await self.transcribeWithActiveEngine(samples: samples, language: language)
+                let text = try await self.transcribeSTT(samples: samples, language: language)
                 result = .success(text)
             } catch {
                 result = .failure(error)

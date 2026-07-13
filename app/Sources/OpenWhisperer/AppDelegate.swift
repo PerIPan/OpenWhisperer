@@ -24,9 +24,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ConfigManager.migrateRemoveTextResponseMode()
         // Strip the obsolete Stop hook (replaced by the speak MCP tool) from existing installs.
         ConfigManager.migrateRemoveClaudeStopHook()
-        // Move the Whisper model hub out of ~/Documents (iCloud-synced) into app support,
-        // before prepareSTT() loads the model from the new path. Instant same-volume rename.
-        ModelStorage.migrateWhisperHubIfNeeded()
         // Prompt for Accessibility permission if not already granted
         accessibilityManager.requestIfNeeded()
         // Clean stale temp/lock/pid files from previous sessions (background, delayed)
@@ -51,7 +48,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Start hotkey listener immediately so Ctrl works without opening the menubar first
         setupDictation()
 
-        // Kick off the one-time WhisperKit model download + load so the first dictation
+        // Kick off the one-time Parakeet model download + load so the first dictation
         // isn't blocked on it. Independent of the in-process TTS server (`TTSHTTPServer` on :8000).
         dictationManager.prepareSTT()
 

@@ -7,7 +7,7 @@ import OpenWhispererKit
 private let audioLog = OSLog(subsystem: "com.openwhisperer.app", category: "audio")
 
 /// Records microphone audio, provides real-time RMS levels for waveform,
-/// and exports 16 kHz mono Float32 PCM for in-process Whisper (WhisperKit) transcription.
+/// and exports 16 kHz mono Float32 PCM for in-process Parakeet (FluidAudio) transcription.
 class AudioRecorder: ObservableObject {
     enum State {
         case idle, recording, uploading
@@ -129,7 +129,7 @@ class AudioRecorder: ObservableObject {
 
     /// Flush current PCM buffers as normalized Float32 (16 kHz mono) and continue
     /// recording (hands-free). In-process equivalent of `flushAndContinue()` for the
-    /// native WhisperKit path — feeds the model directly without a WAV round-trip.
+    /// native STT path — feeds the model directly without a WAV round-trip.
     func flushAndContinueFloat() -> [Float]? {
         dispatchPrecondition(condition: .onQueue(.main))
         bufferLock.lock()

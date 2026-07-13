@@ -3,7 +3,7 @@ import Combine
 
 /// Hosts the in-process native TTS: a `KokoroTTS` actor (FluidAudio CoreML/ANE) behind a
 /// tiny embedded HTTP server (`TTSHTTPServer`) on :8000. Ported from the former out-of-process Python
-/// `unified_server.py` (now deleted). STT is native in-app (`SpeechTranscriber`) and needs no server.
+/// `unified_server.py` (now deleted). STT is native in-app (`ParakeetTranscriber`) and needs no server.
 class ServerManager: ObservableObject {
     enum ServerStatus: String {
         case stopped = "Stopped"
@@ -14,7 +14,7 @@ class ServerManager: ObservableObject {
 
     @Published var status: ServerStatus = .stopped
     @Published var port: Int = 8000
-    @Published var sttModel: String = "whisper-large-v3-turbo"  // native WhisperKit
+    @Published var sttModel: String = "parakeet-tdt-0.6b-v3"  // native FluidAudio
     @Published var ttsModel: String = "kokoro-82m"              // native FluidAudio
     @Published var lastError: String = ""
 

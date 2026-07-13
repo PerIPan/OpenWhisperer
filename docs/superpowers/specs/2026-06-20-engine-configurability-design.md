@@ -187,6 +187,37 @@ matters**. Consequences for the record:
 - Nothing is decided beyond re-opening evaluation. Whisper large-v3-turbo +
   Kokoro remain the shipped engines until a harness says otherwise.
 
+### Addendum (2026-07-13, later) — Parakeet ADOPTED, WhisperKit removed
+
+The feel-test ran the same morning on a temporary `stt_engine` flip file
+(both engines live, per-dictation switching). Evidence:
+
+- **Speed (measured, same clips, warm models, production configs):** Parakeet
+  48–81 ms vs Whisper 506–663 ms per 2.6–6 s clip — ~8–10x. Cold load: ~12 s
+  vs ~96 s. The felt sluggishness that triggered this whole re-evaluation is
+  the Whisper decode+load cost.
+- **Accuracy (matched A/B sentences, quiet):** a draw with opposite failure
+  styles. Parakeet won one pair on words (Whisper hallucinated "art arising
+  movements" where Parakeet got "art arrives in movements"), Whisper won one
+  pair on polish (capitalisation, further/farther, no doubled words).
+  Parakeet transcribes literally (fillers, repairs, comma spray); Whisper
+  edits — and sometimes edits wrongly. Under vacuum noise both degraded,
+  Parakeet worse.
+- **Jargon:** Parakeet nailed Kokoro/Codex/Sentry/Claude Code with no
+  glossary; Whisper had needed `promptTokens` (and its upstream prefill-EOT
+  bug + fork pin) for the same.
+
+**User verdict: migrate.** Consequences shipped in the same PR: WhisperKit
+dependency + fork pin removed (`SpeechTranscriber`, `STTEngine` seam,
+`stt_engine` file, `stt_vocabulary` glossary + Settings box, `--diag-stt`,
+Whisper hub migration all deleted); `ParakeetTranscriber` is the sole engine;
+language picker trimmed to Parakeet's European coverage; orphaned Whisper
+caches (~1.5 GB) remain listed in ModelStorage so "Delete models" reclaims
+them. FluidAudio is now the app's single speech library (Parakeet STT +
+Kokoro TTS). Revisit triggers: jargon regression (wire FluidAudio's
+vocabulary boosting), noise-robustness complaints (the one axis Whisper
+clearly won).
+
 ## Success criteria (the feel-test)
 
 1. App launches defaulting to Nemotron STT + Kokoro TTS; dictation works.
