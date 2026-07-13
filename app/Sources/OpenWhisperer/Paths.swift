@@ -26,15 +26,12 @@ enum Paths {
     static let serverLog = appSupport.appendingPathComponent("server.log")
     static let setupLog = appSupport.appendingPathComponent("setup.log")
 
-    /// Downloaded ML models live under the app's Application Support space rather than
-    /// the user's (often iCloud-synced) ~/Documents. `whisperHubBase` is WhisperKit's
-    /// `downloadBase`; it lays out `models/argmaxinc/whisperkit-coreml/<model>` beneath
-    /// it, mirroring the legacy ~/Documents/huggingface layout so a one-time move suffices.
-    /// (Kokoro/FluidAudio keeps its own ~/.cache/fluidaudio — upstream pins the shared
-    /// G2P/lexicon assets there, so it can't be cleanly relocated; it's a hidden cache
-    /// outside iCloud anyway.)
+    /// Legacy model space from the removed WhisperKit engine (2026-07-13). Nothing
+    /// downloads here anymore; ModelStorage lists it so "Delete models" reclaims an
+    /// orphaned Whisper cache. (FluidAudio's models live in Application Support/
+    /// FluidAudio and ~/.cache/fluidaudio — upstream pins the shared G2P/lexicon
+    /// assets to the latter, so they can't be cleanly relocated.)
     static let modelsDir = appSupport.appendingPathComponent("models")
-    static let whisperHubBase = modelsDir.appendingPathComponent("huggingface")
 
     /// Auto-submit flag file (read in-process by the Swift app)
     static let autoSubmitFlag = appSupport.appendingPathComponent("auto_submit")
@@ -45,13 +42,9 @@ enum Paths {
     /// Auto-focus "with return" flag — return to origin app after text insertion
     static let autoFocusReturn = appSupport.appendingPathComponent("auto_focus_return")
 
-    /// STT language file (default language for in-process WhisperKit STT)
+    /// STT language file (script-filter hint for in-process Parakeet STT;
+    /// absent/"auto" = model auto-detect)
     static let sttLanguage = appSupport.appendingPathComponent("stt_language")
-
-    /// Dictation vocabulary (glossary) — one term per line, #-comments allowed.
-    /// Fed to WhisperKit as promptTokens to bias transcription toward these
-    /// spellings. Edited by the Voice Settings vocabulary box; absent = no bias.
-    static let sttVocabulary = appSupport.appendingPathComponent("stt_vocabulary")
 
     /// TTS voice file (tts-hook.sh reads voice name from this)
     static let ttsVoice = appSupport.appendingPathComponent("tts_voice")

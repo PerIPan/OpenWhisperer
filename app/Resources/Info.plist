@@ -2,33 +2,33 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key>
-    <string>Open Whisperer</string>
-    <key>CFBundleDisplayName</key>
-    <string>Open Whisperer</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.openwhisperer.app</string>
-    <key>CFBundleVersion</key>
-    <string>1.6.0</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.6.0</string>
-    <key>CFBundleExecutable</key>
-    <string>OpenWhisperer</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Push-to-talk dictation requires microphone access to transcribe your speech using local Whisper.</string>
-    <key>NSAccessibilityUsageDescription</key>
-    <string>Open Whisperer needs Accessibility access to type transcribed text into other apps.</string>
-    <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Open Whisperer uses on-device speech recognition for hands-free keyword detection.</string>
+	<key>CFBundleDisplayName</key>
+	<string>Open Whisperer</string>
+	<key>CFBundleExecutable</key>
+	<string>OpenWhisperer</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.openwhisperer.app</string>
+	<key>CFBundleName</key>
+	<string>Open Whisperer</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.7.0</string>
+	<key>CFBundleVersion</key>
+	<string>1.7.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>Open Whisperer needs Accessibility access to type transcribed text into other apps.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Push-to-talk dictation requires microphone access to transcribe your speech using local Whisper.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Open Whisperer uses on-device speech recognition for hands-free keyword detection.</string>
 </dict>
 </plist>

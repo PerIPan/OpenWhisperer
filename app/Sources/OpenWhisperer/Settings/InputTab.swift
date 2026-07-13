@@ -10,8 +10,6 @@ struct InputTab: View {
     @State private var silenceThreshold = 3
     @State private var pttKeyChanged = false
     @State private var selectedLanguage = "en"
-    @State private var vocabularyText = ""
-    @State private var vocabularySaveWork: DispatchWorkItem?
     @State private var autoSubmit = false
     @State private var autoFocusEnabled = false
     @State private var autoFocusReturn = false
@@ -22,12 +20,14 @@ struct InputTab: View {
     @State private var saveDebounce: DispatchWorkItem?
     @State private var loaded = false
 
+    /// Parakeet TDT v3's coverage is 25 European languages; this offers the common
+    /// ones as a script-filter hint. "Auto-detect" (or any unlisted code) lets the
+    /// model detect on its own. (The old Whisper-era list also had ja/ko/zh/ar/hi/tr,
+    /// which Parakeet doesn't support — removed with the 2026-07-13 migration.)
     private static let languages: [(id: String, label: String)] = [
         ("auto", "Auto-detect"), ("en", "English"), ("es", "Spanish"), ("fr", "French"),
         ("de", "German"), ("it", "Italian"), ("pt", "Portuguese"), ("nl", "Dutch"),
-        ("ja", "Japanese"), ("ko", "Korean"), ("zh", "Chinese"), ("ar", "Arabic"),
-        ("hi", "Hindi"), ("ru", "Russian"), ("pl", "Polish"), ("tr", "Turkish"),
-        ("uk", "Ukrainian"), ("sv", "Swedish"),
+        ("ru", "Russian"), ("pl", "Polish"), ("uk", "Ukrainian"), ("sv", "Swedish"),
     ]
 
     private static let focusApps: [(id: String, label: String)] = [
@@ -49,13 +49,6 @@ struct InputTab: View {
         }
         .formStyle(.grouped)
         .onAppear(perform: load)
-        .onDisappear {
-            // Flush a pending vocabulary debounce so a quick tab switch can't lose edits.
-            if let work = vocabularySaveWork, !work.isCancelled {
-                work.cancel()
-                saveVocabulary(vocabularyText)
-            }
-        }
     }
 
     // MARK: Dictation
@@ -134,7 +127,7 @@ struct InputTab: View {
         }
     }
 
-    // MARK: Language & Vocabulary
+    // MARK: Language
 
     private var languageSection: some View {
         Section {
@@ -149,38 +142,8 @@ struct InputTab: View {
                     try? newValue.write(to: Paths.sttLanguage, atomically: true, encoding: .utf8)
                 }
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Vocabulary")
-                    Spacer()
-                    Text("one term per line").font(.caption).foregroundStyle(.secondary)
-                }
-                TextEditor(text: $vocabularyText)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(height: 80)
-                    .overlay(alignment: .topLeading) {
-                        if vocabularyText.isEmpty {
-                            Text("WhisperKit\nCodex CLI\nKokoro")
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(.tertiary)
-                                .padding(.top, 1)
-                                .padding(.leading, 5)
-                                .allowsHitTesting(false)
-                        }
-                    }
-                    .onChange(of: vocabularyText) { _, newValue in
-                        guard loaded else { return }
-                        vocabularySaveWork?.cancel()
-                        let work = DispatchWorkItem { saveVocabulary(newValue) }
-                        vocabularySaveWork = work
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
-                    }
-            }
         } header: {
             Text("Language")
-        } footer: {
-            Text("Biases dictation toward these spellings — product names, CLI jargon, APIs. Keep it to a dozen or two.")
         }
     }
 
@@ -309,7 +272,6 @@ struct InputTab: View {
             let lang = savedLang.trimmingCharacters(in: .whitespacesAndNewlines)
             if Self.languages.contains(where: { $0.id == lang }) { selectedLanguage = lang }
         }
-        vocabularyText = (try? String(contentsOf: Paths.sttVocabulary, encoding: .utf8)) ?? ""
         autoSubmit = FileManager.default.fileExists(atPath: Paths.autoSubmitFlag.path)
         autoFocusEnabled = FileManager.default.fileExists(atPath: Paths.autoFocusApp.path)
         autoFocusReturn = FileManager.default.fileExists(atPath: Paths.autoFocusReturn.path)
@@ -339,14 +301,6 @@ struct InputTab: View {
         // Defer the loaded flag one runloop so the initial @State assignments above
         // can't fire the persistence onChange handlers.
         DispatchQueue.main.async { loaded = true }
-    }
-
-    private func saveVocabulary(_ text: String) {
-        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            try? FileManager.default.removeItem(at: Paths.sttVocabulary)
-        } else {
-            try? text.write(to: Paths.sttVocabulary, atomically: true, encoding: .utf8)
-        }
     }
 
     private func saveFocusApp() {

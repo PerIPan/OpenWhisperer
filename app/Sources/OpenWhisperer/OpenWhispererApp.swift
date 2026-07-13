@@ -7,24 +7,35 @@ enum OpenWhispererMain {
     static func main() {
         if CommandLine.arguments.contains("--serve-tts") {
             ServeTTSMode.run()
-        } else if CommandLine.arguments.contains("--diag-stt") {
-            // Headless STT load probe — spins the main run loop (so MainActor work can proceed,
-            // unlike a main-thread semaphore wait) and prints the exact WhisperKit load result.
+        } else if let flagIndex = CommandLine.arguments.firstIndex(of: "--diag-parakeet") {
+            // Headless Parakeet probe — downloads/loads the TDT v3 CoreML models, then
+            // transcribes any audio files listed after the flag. Exercises the full STT
+            // path (model fetch → ANE compile → decode) without mic/TCC:
+            //   swift run OpenWhisperer --diag-parakeet clip1.wav clip2.wav
+            let files = CommandLine.arguments.suffix(from: flagIndex + 1)
             Task {
                 do {
-                    print("DIAG: preparing WhisperKit (offline-first)…")
+                    print("DIAG: preparing Parakeet TDT v3 (downloads ~460 MB if uncached)…")
                     let t0 = Date()
-                    _ = try await SpeechTranscriber().prepare()
-                    print("DIAG: STT model LOADED OK in \(Int(-t0.timeIntervalSinceNow))s")
+                    let parakeet = ParakeetTranscriber()
+                    try await parakeet.prepare()
+                    print("DIAG: Parakeet LOADED OK in \(Int(-t0.timeIntervalSinceNow))s")
+                    for path in files {
+                        let t1 = Date()
+                        let text = try await parakeet.transcribe(
+                            url: URL(fileURLWithPath: path), language: nil)
+                        print("DIAG: \(path) [\(Int(-t1.timeIntervalSinceNow * 1000)) ms] → \(text)")
+                    }
                 } catch {
-                    print("DIAG: STT load FAILED: \(error)")
+                    print("DIAG: Parakeet FAILED: \(error)")
                     print("DIAG: localizedDescription: \(error.localizedDescription)")
+                    exit(1)
                 }
                 exit(0)
             }
             Task {
-                try? await Task.sleep(nanoseconds: 240 * 1_000_000_000)
-                print("DIAG: TIMEOUT after 240s — load did not complete")
+                try? await Task.sleep(nanoseconds: 600 * 1_000_000_000)
+                print("DIAG: TIMEOUT after 600s — Parakeet probe did not complete")
                 exit(2)
             }
             RunLoop.main.run()

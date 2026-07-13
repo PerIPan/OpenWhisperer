@@ -24,8 +24,8 @@ enum Diagnostics {
         lines.append("Microphone: \(micPermission)")
         lines.append("")
 
-        lines.append("— Speech model (WhisperKit) —")
-        lines.append("Cached on disk: \(SpeechTranscriber.isModelCached ? "yes" : "no")")
+        lines.append("— Speech model (Parakeet TDT v3) —")
+        lines.append("Cached on disk: \(ParakeetTranscriber.isModelCached ? "yes" : "no")")
         lines.append("Ready: \(dictation.sttModelReady ? "yes" : "no")\(dictation.sttFailed ? " (FAILED)" : "")")
         if let status = dictation.sttStatus { lines.append("Status: \(status)") }
         if let error = dictation.error { lines.append("Last error: \(error)") }

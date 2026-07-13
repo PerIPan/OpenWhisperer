@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// First-launch setup. Native STT (WhisperKit) + native TTS (FluidAudio) run fully in-process
+/// First-launch setup. Native STT (Parakeet) + native TTS (Kokoro) run fully in-process via FluidAudio
 /// on the ANE — both download their CoreML models lazily on first use, and load failures surface
 /// via `ServerManager` / the standby overlay. So setup has nothing to install; it just marks
 /// itself complete. (The former `uv`/venv/pip bootstrap was removed in the Phase-2b port.)
