@@ -1,7 +1,13 @@
 # Notch Status Indicator — Design
 
 **Date:** 2026-07-13
-**Status:** Approved (brainstorm with Hakan, 2026-07-13)
+**Status:** **REJECTED after live trial (2026-07-13)** — built and smoke-tested on-device
+(PR #24, closed unmerged). Hakan's verdict: the synthesized lozenge on non-notch screens
+doesn't look good, risks colliding with a full menu bar's icons, and one band per screen
+reads as clutter. Direction: keep the floating overlay and slim it instead (wave +
+status dot, no text) — see `2026-07-13-minimal-overlay-design.md`. Salvageable from the
+closed PR: the dropdown model-status row + Retry, `NotchGeometry` + checks, the
+first-mouse and constrainFrameRect lessons.
 **Phase 2 of the overlay split.** Phase 1 (menubar transcription history, PR #23) moved
 history out of the floating overlay; this phase replaces the overlay's remaining job —
 live status — with a Dynamic Island-style indicator at the notch, then deletes the
