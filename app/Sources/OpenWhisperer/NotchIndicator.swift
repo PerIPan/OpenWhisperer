@@ -10,6 +10,14 @@ private final class FirstMouseHostingView<Content: View>: NSHostingView<Content>
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
+/// Panel allowed to occupy the menu-bar band. AppKit's default frame constraining
+/// pushes windows below the menu bar; the band must hug the screen's top edge.
+private final class NotchPanel: NSPanel {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
+    }
+}
+
 /// Dynamic Island-style status band at the notch. Owns one non-activating panel per
 /// screen — status is global, so every display shows the same state and nothing ever
 /// moves between screens. Replaces the floating overlay.
@@ -92,7 +100,7 @@ final class NotchIndicator: NSObject, ObservableObject {
                 menuBarThickness: NSStatusBar.system.thickness
             )
             let geometry = NotchGeometry(metrics: metrics)
-            let panel = NSPanel(
+            let panel = NotchPanel(
                 contentRect: geometry.windowFrame(),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
