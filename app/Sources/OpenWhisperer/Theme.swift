@@ -37,17 +37,14 @@ extension Color {
 // MARK: - Design tokens
 
 // Warm "Open Whisperer" palette (openwhisperer.com). Tokens are light/dark dynamic —
-// via the `Color.ow(light, dark)` helper above. Used by the transcription overlay;
+// via the `Color.ow(light, dark)` helper above. Used by the notch status indicator;
 // the Settings window is deliberately native (system colors) and takes nothing from here.
 enum OWColor {
     // Surfaces
-    static let page = Color.ow(0xFAF7F1, 0x1E1B16)            // overlay background (cream / warm-dark)
-    // Lines
-    static let line = Color.ow(0xDCCFB8, 0x3A332B)             // borders + dividers
+    static let page = Color.ow(0xFAF7F1, 0x1E1B16)            // band background (cream / warm-dark)
     // Text ramp (warm ink → cream)
     static let ink = Color.ow(0x2A2520, 0xF3ECDF)
     static let inkSoft = Color.ow(0x6A6157, 0xB6AC9C)
-    static let inkFaint = Color.ow(0x978C7E, 0x877D6F)
     // Accent (gold)
     static let accent = Color.ow(0xC0A06A, 0xCBA86A)
     static let accentDeep = Color.ow(0x98763F, 0xD8B677)

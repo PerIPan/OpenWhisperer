@@ -36,7 +36,7 @@ class DictationManager: ObservableObject {
     /// Whether hands-free is calibrating ambient noise
     @Published var isCalibrating = false
     /// Non-nil while the speech model is downloading/loading, or holding a failure
-    /// message (status string for the UI — menu bar and standby overlay both read it).
+    /// message (status string for the UI — menu bar and notch status indicator both read it).
     @Published var sttStatus: String?
     /// True once the STT model is loaded and ready to transcribe.
     @Published var sttModelReady = false

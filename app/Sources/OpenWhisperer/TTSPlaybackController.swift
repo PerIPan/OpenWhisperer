@@ -5,7 +5,7 @@ import OpenWhispererKit
 /// Orchestrates in-process TTS playback: splits text into sentences, synthesizes each via
 /// `KokoroTTS`, and schedules them onto a gapless `AudioPlaybackEngine` so the first sentence plays
 /// while later ones synthesize. Owns the `tts_playing.lock` file the app polls for the "Speaking…"
-/// state (overlay waveform + hands-free mic-muting). Barge-in cancels pending synthesis — freeing
+/// state (notch indicator waveform + hands-free mic-muting). Barge-in cancels pending synthesis — freeing
 /// the ANE for STT — and stops audio instantly.
 actor TTSPlaybackController {
     private let tts: KokoroTTS

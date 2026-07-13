@@ -3,7 +3,7 @@ import SwiftUI
 
 /// First-launch setup. Native STT (Parakeet) + native TTS (Kokoro) run fully in-process via FluidAudio
 /// on the ANE — both download their CoreML models lazily on first use, and load failures surface
-/// via `ServerManager` / the standby overlay. So setup has nothing to install; it just marks
+/// via `ServerManager` / the notch status indicator. So setup has nothing to install; it just marks
 /// itself complete. (The former `uv`/venv/pip bootstrap was removed in the Phase-2b port.)
 class SetupManager: ObservableObject {
     enum SetupState: Equatable {

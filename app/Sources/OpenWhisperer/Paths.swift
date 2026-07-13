@@ -88,8 +88,9 @@ enum Paths {
     /// Kept only so `ConfigManager.removeLegacyOverlayLines()` can delete stale files.
     static let legacyOverlayLines = appSupport.appendingPathComponent("overlay_lines")
 
-    /// Overlay visibility flag — present when the user hid the floating overlay
-    /// (menu toggle off, or the overlay's X button). Absent = show on launch.
+    /// Notch indicator visibility flag — present when the user hid the band
+    /// (menu toggle off). Absent = show on launch. File name is legacy from the
+    /// floating-overlay era; kept as-is since it's an on-disk format.
     static let overlayHidden = appSupport.appendingPathComponent("overlay_hidden")
 
     /// Selected AI platform (claudeCode, codexCLI)

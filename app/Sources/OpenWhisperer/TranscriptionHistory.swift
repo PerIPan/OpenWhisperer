@@ -12,7 +12,7 @@ final class TranscriptionHistory: ObservableObject {
     private var cancellable: AnyCancellable?
 
     /// Subscribe to the dictation pipeline's transcription feed — the same
-    /// `$lastTranscription` publisher the overlay's status wiring consumes.
+    /// `$lastTranscription` publisher the notch indicator's status wiring consumes.
     func wire(to dictation: DictationManager) {
         cancellable = dictation.$lastTranscription
             .dropFirst()

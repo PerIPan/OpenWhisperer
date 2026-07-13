@@ -39,6 +39,9 @@ hands-free    recording state + a 1.5pt gold countdown line along the wing's bot
 error         idle sliver, dot in "danger" red
 ```
 
+Both wings grow symmetrically when expanding, so the band stays centered on the notch;
+the dot/waveform content sits in the right wing.
+
 The waveform path drawing (`mirroredLines`, `ttsLevels`) moves over from the overlay's
 `WaveformBar` mostly intact; only the container changes.
 
