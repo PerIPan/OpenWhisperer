@@ -146,7 +146,12 @@ actor TTSPlaybackController {
 
     private var lockURL: URL { Paths.appSupport.appendingPathComponent("tts_playing.lock") }
     private func writeLock() { try? Data().write(to: lockURL) }
-    private func removeLock() { try? FileManager.default.removeItem(at: lockURL) }
+    private func removeLock() {
+        try? FileManager.default.removeItem(at: lockURL)
+        // Playback has fully stopped (queue drained, barge-in, or playback error) —
+        // clear the wave instead of leaving it frozen on the last levels.
+        PlaybackLevelMeter.shared.reset()
+    }
 
     private static func readVolume() -> Float {
         TTSVolume.parse(try? String(contentsOf: Paths.ttsVolume, encoding: .utf8))

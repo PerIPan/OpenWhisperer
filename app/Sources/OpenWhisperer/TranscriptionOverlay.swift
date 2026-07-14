@@ -301,6 +301,7 @@ struct OverlayView: View {
 
 struct WaveformBar: View {
     @ObservedObject var recorder: AudioRecorder
+    @ObservedObject private var playbackMeter = PlaybackLevelMeter.shared
     var isTTSPlaying: Bool = false
     /// Paints the dot danger-red while model status is failed (the words live in the menu).
     var statusIsError: Bool = false
@@ -347,11 +348,20 @@ struct WaveformBar: View {
                 let maxBars = max(1, Int((geo.size.width + 1) / 3))
                 Group {
                     if isTTSPlaying && recorder.state == .idle {
-                        TimelineView(.animation(minimumInterval: 0.03)) { timeline in
-                            let time = timeline.date.timeIntervalSinceReferenceDate
-                            let levels = Self.ttsLevels(count: maxBars, time: time)
-                            Self.mirroredLines(levels: levels, size: geo.size)
+                        if playbackMeter.levelHistory.contains(where: { $0 > 0.01 }) {
+                            // Real playback levels — the meter's own @Published drives
+                            // re-render, no TimelineView needed.
+                            Self.mirroredLines(levels: playbackMeter.levelHistory.suffix(maxBars).map { CGFloat($0) }, size: geo.size)
                                 .fill(Self.ttsGradient)
+                        } else {
+                            // Fallback: synthetic sine animation (meter silent — e.g. levels
+                            // haven't arrived yet, or between sentences).
+                            TimelineView(.animation(minimumInterval: 0.03)) { timeline in
+                                let time = timeline.date.timeIntervalSinceReferenceDate
+                                let levels = Self.ttsLevels(count: maxBars, time: time)
+                                Self.mirroredLines(levels: levels, size: geo.size)
+                                    .fill(Self.ttsGradient)
+                            }
                         }
                     } else {
                         let gradient = recorder.state == .listening ? Self.listeningGradient : Self.idleGradient
