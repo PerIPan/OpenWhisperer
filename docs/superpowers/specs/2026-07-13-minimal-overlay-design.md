@@ -38,6 +38,11 @@ dot, no text**.
 > is now smoked dark glass (0x1E1B16 @ 0.55 over the blur) in BOTH appearances — a
 > vintage instrument face; the gold segments and status dot glow against it.
 
+> **2026-07-14, dot matrix:** the 12×7 grid doubles as an LED marquee — "LOADING" /
+> "ERROR" scroll across it (5×7 font, `DotMatrix` in Kit) instead of coloring the dot.
+> The REC lamp is now a fixed socket that lights (blinking red, bloomed) only while
+> recording; no lamp state for speaking/idle.
+
 ## Changes
 
 - `TranscriptionOverlay.swift`:

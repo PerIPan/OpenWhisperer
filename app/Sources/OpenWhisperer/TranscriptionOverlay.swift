@@ -270,7 +270,7 @@ struct OverlayView: View {
 
         ZStack(alignment: .bottom) {
             HStack(spacing: 8) {
-                WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError)
+                WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError, statusText: overlay.statusText)
             }
             .padding(.leading, 10)
             .padding(.trailing, 14)
@@ -296,30 +296,37 @@ struct WaveformBar: View {
     var isTTSPlaying: Bool = false
     /// Paints the dot danger-red while model status is failed (the words live in the menu).
     var statusIsError: Bool = false
+    /// Non-nil while a status word ("Loading…"/error) should take over the grid as a marquee.
+    var statusText: String? = nil
 
     var body: some View {
         HStack(spacing: 6) {
-            // Vintage tape-deck cue: the dot blinks ~1 Hz while recording, steady otherwise.
+            // REC lamp: a fixed panel fixture — unlit socket normally, blinking red
+            // while recording. No other state lights it (the grid carries the rest).
             if recorder.state == .recording {
                 TimelineView(.animation(minimumInterval: 0.05)) { timeline in
                     let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1)
                     Circle()
-                        .fill(statusColor)
+                        .fill(OWColor.recording)
                         .frame(width: 12, height: 12)
                         .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
+                        .shadow(color: OWColor.recording.opacity(0.8), radius: 3)
                         .opacity(phase < 0.55 ? 1 : 0.25)
                         .animation(.easeInOut(duration: 0.1), value: phase < 0.55)
                 }
             } else {
                 Circle()
-                    .fill(statusColor)
+                    .fill(Color.black.opacity(0.35))
                     .frame(width: 12, height: 12)
                     .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
             }
 
-            // Vintage segmented spectrum display — see `spectrum(bands:)`.
+            // Vintage segmented spectrum display — see `spectrum(bands:)`. A status
+            // word takes over the grid as a scrolling LED marquee when present.
             Group {
-                if isTTSPlaying && recorder.state == .idle {
+                if statusText != nil {
+                    marquee(word: statusIsError ? "ERROR" : "LOADING", color: statusIsError ? OWColor.danger : OWColor.accent)
+                } else if isTTSPlaying && recorder.state == .idle {
                     spectrum(bands: playbackMeter.spectrumBands.isEmpty
                              ? Array(repeating: 0, count: SpectrumBands.bandCount)
                              : playbackMeter.spectrumBands)
@@ -368,15 +375,50 @@ struct WaveformBar: View {
         .clipped()
     }
 
-    private var statusColor: Color {
-        if statusIsError { return OWColor.danger }
-        if isTTSPlaying && recorder.state == .idle { return OWColor.accent }
-        switch recorder.state {
-        case .recording: return OWColor.recording
-        case .uploading: return OWColor.warn
-        case .listening: return OWColor.accentDeep
-        case .idle: return OWColor.live
+    // MARK: - Status Marquee
+
+    /// LED marquee: scrolls the status word across the 12×7 grid, right to left,
+    /// with a full blank grid-width lead-in/out. ~8 columns/second.
+    @ViewBuilder
+    private func marquee(word: String, color: Color) -> some View {
+        let columns = DotMatrix.columns(for: word)
+        TimelineView(.periodic(from: .now, by: 0.12)) { timeline in
+            let gridWidth = SpectrumBands.bandCount
+            let cycle = columns.count + gridWidth
+            let step = Int(timeline.date.timeIntervalSinceReferenceDate / 0.12) % cycle
+            let window: [[Bool]] = (0..<gridWidth).map { cell in
+                let index = step - gridWidth + cell
+                return (index >= 0 && index < columns.count)
+                    ? columns[index]
+                    : Array(repeating: false, count: DotMatrix.rows)
+            }
+            matrix(window: window, color: color)
         }
+    }
+
+    /// Renders a 12-column window of 7-row cells with the same LED cell styling
+    /// (bloom on lit, ghost sockets unlit) as the spectrum.
+    private func matrix(window: [[Bool]], color: Color) -> some View {
+        GeometryReader { geo in
+            let columnWidth = geo.size.width / CGFloat(window.count)
+            let segmentHeight = (geo.size.height - CGFloat(DotMatrix.rows - 1) * 2) / CGFloat(DotMatrix.rows)
+            HStack(spacing: 0) {
+                ForEach(0..<window.count, id: \.self) { columnIndex in
+                    VStack(spacing: 2) {
+                        ForEach(0..<DotMatrix.rows, id: \.self) { row in
+                            let isLit = window[columnIndex][row]
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(isLit ? color : OWColor.accent.opacity(0.15))
+                                .shadow(color: isLit ? color.opacity(0.7) : .clear, radius: 2.5)
+                                .frame(height: segmentHeight)
+                        }
+                    }
+                    .frame(width: max(columnWidth - 4, 1))
+                    .padding(.horizontal, 2)
+                }
+            }
+        }
+        .clipped()
     }
 
 }
