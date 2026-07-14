@@ -19,7 +19,7 @@ dot, no text**.
 | Overlay content | **Waveform + status dot only.** State label and hotkey hint removed. |
 | Model status (loading / failure + Retry) | **Menubar dropdown row** — the pattern built for the notch branch (closed PR #24, commit `d6951d7`), re-targeted at the overlay's existing `statusText`/`statusIsError`: shown only while non-nil; a Button `"<status> — Retry"` when failed, else a disabled Text; followed by a Divider. |
 | Error signal on the overlay | The status dot turns **danger red** while `statusIsError` (words live in the menu). |
-| Non-text elements | **Keep:** hands-free silence line, close button, drag-to-move, bottom-right default position, warm surface, `overlay_hidden` flag + menu toggle (unchanged copy: "Show Overlay"). |
+| Non-text elements | **Keep:** hands-free silence line, close button, drag-to-move, bottom-right default position, frosted surface (HUD blur + faint warm tint — changed from near-opaque during smoke, 2026-07-14), `overlay_hidden` flag + menu toggle (unchanged copy: "Show Overlay"). |
 
 ## Changes
 

@@ -108,21 +108,41 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.isReleasedWhenClosed = false
         w.isMovableByWindowBackground = true
         w.delegate = self
-        w.contentView = hostingView
+        // Frosted background: system HUD blur of whatever is behind the window, with
+        // a faint warm tint so the surface still reads as OpenWhisperer. The hosting
+        // view's intrinsic size drives the window frame through the edge constraints.
+        let effect = NSVisualEffectView()
+        effect.material = .hudWindow
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        effect.wantsLayer = true
+        effect.layer?.cornerRadius = 12
+        effect.layer?.masksToBounds = true
+
+        let tint = NSView()
+        tint.wantsLayer = true
+        tint.layer?.backgroundColor = NSColor.ow(0xFAF7F1, 0x1E1B16).withAlphaComponent(0.18).cgColor
+
+        tint.translatesAutoresizingMaskIntoConstraints = false
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        effect.addSubview(tint)
+        effect.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            tint.topAnchor.constraint(equalTo: effect.topAnchor),
+            tint.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+            tint.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            tint.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: effect.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+            hostingView.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+        ])
+
+        w.contentView = effect
         w.backgroundColor = .clear
         w.isOpaque = false
         w.hasShadow = true
         w.minSize = NSSize(width: 200, height: 44)
-
-        // Round corners
-        if let contentView = w.contentView {
-            contentView.wantsLayer = true
-            contentView.layer?.cornerRadius = 12
-            contentView.layer?.masksToBounds = true
-            // Warm "Open Whisperer" surface (cream / warm-dark) to match the menubar + site.
-            // Dark value matches OWColor.page dark (0x1E1B16). Near-opaque to avoid bleed-through.
-            contentView.layer?.backgroundColor = NSColor.ow(0xFAF7F1, 0x1E1B16).withAlphaComponent(0.97).cgColor
-        }
 
         // Position bottom-right of screen
         if let screen = NSScreen.main {
