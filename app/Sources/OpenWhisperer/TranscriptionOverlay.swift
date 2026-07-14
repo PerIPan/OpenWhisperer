@@ -321,6 +321,7 @@ struct WaveformBar: View {
                     spectrum(bands: recorder.spectrumBands.isEmpty ? Array(repeating: 0, count: SpectrumBands.bandCount) : recorder.spectrumBands)
                 }
             }
+            .padding(.trailing, 8)
         }
     }
 
