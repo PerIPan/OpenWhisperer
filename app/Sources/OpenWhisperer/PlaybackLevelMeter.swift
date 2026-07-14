@@ -1,24 +1,24 @@
 import Foundation
 
-/// Live output-level history for TTS playback — the speaking counterpart to
-/// AudioRecorder.levelHistory. Written by AudioPlaybackEngine's output tap
-/// (audio thread → main queue), read by the overlay's waveform.
+/// Live output-sample snapshot for TTS playback — the speaking counterpart to
+/// AudioRecorder.scopeSamples. Written by AudioPlaybackEngine's output tap
+/// (audio thread → main queue), read by the overlay's oscilloscope waveform.
 final class PlaybackLevelMeter: ObservableObject {
     static let shared = PlaybackLevelMeter()
 
-    /// Scrolling normalized levels (0…1), newest last — same shape as the recorder's.
-    @Published private(set) var levelHistory: [Float] = Array(repeating: 0, count: 50)
+    /// Downsampled signed snapshot (~96 points) of the latest playback buffer's
+    /// channel-0 samples — same shape as the recorder's.
+    @Published private(set) var scopeSamples: [Float] = []
 
-    func push(_ level: Float) {
+    func push(samples: [Float]) {
         DispatchQueue.main.async {
-            self.levelHistory.removeFirst()
-            self.levelHistory.append(min(max(level, 0), 1))
+            self.scopeSamples = samples
         }
     }
 
     func reset() {
         DispatchQueue.main.async {
-            self.levelHistory = Array(repeating: 0, count: 50)
+            self.scopeSamples = []
         }
     }
 }

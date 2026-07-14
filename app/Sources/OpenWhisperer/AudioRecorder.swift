@@ -19,6 +19,10 @@ class AudioRecorder: ObservableObject {
     @Published var state: State = .idle
     @Published var audioLevel: Float = 0.0
     @Published var levelHistory: [Float] = Array(repeating: 0, count: 50)
+    /// Downsampled signed snapshot (~96 points) of the latest input buffer's channel-0
+    /// samples, for the overlay's oscilloscope trace. Largest-magnitude sample per bin
+    /// (sign preserved) so speech peaks survive downsampling.
+    @Published private(set) var scopeSamples: [Float] = []
     @Published var micPermission: Bool = false
     /// Set when the audio engine fails to configure or start, so the UI can surface it (T2.3).
     @Published var engineError: String?
@@ -222,10 +226,12 @@ class AudioRecorder: ObservableObject {
             self.onRawAudioBuffer?(buffer)
 
             let rms = self.computeRMS(buffer: buffer)
+            let scope = self.downsampleScope(buffer: buffer)
             DispatchQueue.main.async {
                 self.audioLevel = self.audioLevel * (1 - self.smoothing) + rms * self.smoothing
                 self.levelHistory.removeFirst()
                 self.levelHistory.append(self.audioLevel)
+                self.scopeSamples = scope
 
                 // Silence detection for hands-free mode
                 if self.silenceDetectionEnabled {
@@ -268,6 +274,7 @@ class AudioRecorder: ObservableObject {
 
         audioLevel = 0
         levelHistory = Array(repeating: 0, count: 50)
+        scopeSamples = []
     }
 
     /// Merge accumulated PCM buffers into normalized Float32 samples (16 kHz mono).
@@ -360,6 +367,29 @@ class AudioRecorder: ObservableObject {
         bufferLock.unlock()
         // Scale for UI display only (0–1 range for waveform)
         return min(rms * 120.0, 1.0)
+    }
+
+    /// Downsample `buffer`'s channel-0 samples to ~`targetCount` signed points, keeping
+    /// the largest-magnitude sample per bin (sign preserved) so peaks survive downsampling.
+    private func downsampleScope(buffer: AVAudioPCMBuffer, targetCount: Int = 96) -> [Float] {
+        guard let channelData = buffer.floatChannelData else { return [] }
+        let count = Int(buffer.frameLength)
+        guard count > 0 else { return [] }
+        let data = UnsafeBufferPointer(start: channelData[0], count: count)
+        let binSize = max(1, count / targetCount)
+        var result: [Float] = []
+        result.reserveCapacity(targetCount)
+        var start = 0
+        while start < count {
+            let end = min(start + binSize, count)
+            var peak: Float = 0
+            for i in start..<end where abs(data[i]) > abs(peak) {
+                peak = data[i]
+            }
+            result.append(peak)
+            start = end
+        }
+        return result
     }
 
     private func convert(buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {

@@ -14,10 +14,6 @@ final class AudioPlaybackEngine {
     private let format: AVAudioFormat
     private let lock = NSLock()
     private var pending = 0
-    /// Smoothed (EMA) output level fed to `PlaybackLevelMeter`, mutated only from the
-    /// mixer tap's audio-render thread — mirrors AudioRecorder's `audioLevel` smoothing.
-    private var meterLevel: Float = 0
-    private let meterSmoothing: Float = 0.25
 
     /// Invoked when the last queued buffer finishes playing (queue drained).
     var onDrained: (@Sendable () -> Void)?
@@ -34,30 +30,36 @@ final class AudioPlaybackEngine {
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
 
-        // Output-level tap for the overlay's "Speaking…" waveform. Installed once here
-        // (not per-utterance) so it lives for the engine's whole lifetime. Runs on an
-        // AVAudioEngine render thread; PlaybackLevelMeter.push hops to the main queue.
-        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2_048, format: nil) { [weak self] buffer, _ in
-            guard let self else { return }
-            let rms = Self.computeRMS(buffer: buffer)
-            // Playback samples are already normalized to [-1, 1] (unlike the quiet raw
-            // mic signal AudioRecorder scales by 120x), so a much smaller gain avoids
-            // permanently clipping at 1.0.
-            let level = min(1, rms * 8)
-            self.meterLevel = self.meterLevel * (1 - self.meterSmoothing) + level * self.meterSmoothing
-            PlaybackLevelMeter.shared.push(self.meterLevel)
+        // Output-sample tap for the overlay's "Speaking…" oscilloscope. Installed once
+        // here (not per-utterance) so it lives for the engine's whole lifetime. Runs on
+        // an AVAudioEngine render thread; PlaybackLevelMeter.push hops to the main queue.
+        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2_048, format: nil) { buffer, _ in
+            PlaybackLevelMeter.shared.push(samples: Self.downsampleScope(buffer: buffer))
         }
     }
 
-    /// RMS of the buffer's first channel. Mirrors `AudioRecorder.computeRMS`'s shape
-    /// (sans the mic-specific display gain, applied by the caller instead).
-    private static func computeRMS(buffer: AVAudioPCMBuffer) -> Float {
-        guard let channelData = buffer.floatChannelData else { return 0 }
+    /// Downsample `buffer`'s channel-0 samples to ~`targetCount` signed points, keeping
+    /// the largest-magnitude sample per bin (sign preserved). Mirrors
+    /// `AudioRecorder.downsampleScope`'s shape.
+    private static func downsampleScope(buffer: AVAudioPCMBuffer, targetCount: Int = 96) -> [Float] {
+        guard let channelData = buffer.floatChannelData else { return [] }
         let count = Int(buffer.frameLength)
-        guard count > 0 else { return 0 }
+        guard count > 0 else { return [] }
         let data = UnsafeBufferPointer(start: channelData[0], count: count)
-        let sumSq = data.reduce(Float(0)) { $0 + $1 * $1 }
-        return sqrt(sumSq / Float(count))
+        let binSize = max(1, count / targetCount)
+        var result: [Float] = []
+        result.reserveCapacity(targetCount)
+        var start = 0
+        while start < count {
+            let end = min(start + binSize, count)
+            var peak: Float = 0
+            for i in start..<end where abs(data[i]) > abs(peak) {
+                peak = data[i]
+            }
+            result.append(peak)
+            start = end
+        }
+        return result
     }
 
     /// True when nothing is queued or playing.
