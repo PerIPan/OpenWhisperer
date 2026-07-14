@@ -109,19 +109,21 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.isReleasedWhenClosed = false
         w.isMovableByWindowBackground = true
         w.delegate = self
-        // Frosted capsule: system HUD blur of whatever is behind the window, with a
-        // whisper of warm tint so the surface still reads as OpenWhisperer. Shaped via
-        // maskImage — mutating the effect view's own layer (cornerRadius/masksToBounds)
-        // silently breaks the behind-window blur.
+        // Smoked-glass dark instrument face: system HUD blur of whatever is behind
+        // the window, tinted dark so the gold segments glow like a vintage analyzer.
+        // Shaped via maskImage — mutating the effect view's own layer
+        // (cornerRadius/masksToBounds) silently breaks the behind-window blur.
         let effect = NSVisualEffectView()
         effect.material = .hudWindow
         effect.blendingMode = .behindWindow
         effect.state = .active
-        effect.maskImage = Self.capsuleMask(height: OverlayView.pillHeight)
+        effect.maskImage = Self.faceplateMask(height: OverlayView.pillHeight)
 
         let tint = NSView()
         tint.wantsLayer = true
-        tint.layer?.backgroundColor = NSColor.ow(0xFAF7F1, 0x1E1B16).withAlphaComponent(0.06).cgColor
+        // Smoked glass: dark instrument face in BOTH appearances (a vintage faceplate
+        // doesn't change color with the room), still translucent over the blur.
+        tint.layer?.backgroundColor = NSColor.ow(0x1E1B16, 0x1E1B16).withAlphaComponent(0.55).cgColor
 
         tint.translatesAutoresizingMaskIntoConstraints = false
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -170,10 +172,11 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         isVisible = false
     }
 
-    /// Stretchable capsule mask for the effect view — the sanctioned way to shape an
-    /// NSVisualEffectView (touching its layer breaks the material).
-    private static func capsuleMask(height: CGFloat) -> NSImage {
-        let radius = height / 2
+    /// Stretchable rounded-rect mask for the effect view — the sanctioned way to shape
+    /// an NSVisualEffectView (touching its layer breaks the material). Fixed 10pt
+    /// corners: a vintage faceplate, not a pill.
+    private static func faceplateMask(height: CGFloat) -> NSImage {
+        let radius: CGFloat = 10
         let image = NSImage(size: NSSize(width: height + 1, height: height), flipped: false) { rect in
             NSColor.black.setFill()
             NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()

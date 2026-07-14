@@ -34,6 +34,10 @@ dot, no text**.
 > **2026-07-14, final trim:** the close button is gone entirely — the menu's
 > "Show Overlay" toggle is the only hide control.
 
+> **2026-07-14, faceplate:** capsule → rounded rectangle (10pt corners), and the frost
+> is now smoked dark glass (0x1E1B16 @ 0.55 over the blur) in BOTH appearances — a
+> vintage instrument face; the gold segments and status dot glow against it.
+
 ## Changes
 
 - `TranscriptionOverlay.swift`:
