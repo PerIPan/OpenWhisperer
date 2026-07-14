@@ -26,6 +26,11 @@ dot, no text**.
 > `layer.cornerRadius` to `NSVisualEffectView.maskImage` — the layer mutation was
 > silently breaking the behind-window blur (root cause of the "not translucent" report).
 
+> **2026-07-14, later:** the wave visual is now a **vintage segmented spectrum display**
+> (12 log-spaced voice bands × 7 LED-style segments, gold with deep-gold peak segment),
+> fed by a pure `SpectrumBands` Goertzel filterbank in Kit from both the mic tap and the
+> playback tap. Pill grew to 180×44. Supersedes the brief oscilloscope iteration.
+
 ## Changes
 
 - `TranscriptionOverlay.swift`:

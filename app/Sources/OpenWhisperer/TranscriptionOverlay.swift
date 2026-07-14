@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import OpenWhispererKit
 
 /// Borderless window that accepts keyboard input (enables Cmd+C for text selection).
 private class KeyableWindow: NSWindow {
@@ -99,7 +100,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         hostingView.sizingOptions = [.minSize, .intrinsicContentSize, .preferredContentSize]
 
         let w = KeyableWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 160, height: 36),
+            contentRect: NSRect(x: 0, y: 0, width: 180, height: 44),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -144,7 +145,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
 
         // Position bottom-right of screen
         if let screen = NSScreen.main {
-            let x = screen.visibleFrame.maxX - 180
+            let x = screen.visibleFrame.maxX - 200
             let y = screen.visibleFrame.minY + 20
             w.setFrameOrigin(NSPoint(x: x, y: y))
         }
@@ -258,8 +259,8 @@ struct OverlayView: View {
     /// Hover reveals the close affordance; the pill is otherwise control-free.
     @State private var hovered = false
 
-    static let pillHeight: CGFloat = 36
-    static let pillWidth: CGFloat = 160
+    static let pillHeight: CGFloat = 44
+    static let pillWidth: CGFloat = 180
 
     var body: some View {
         // Derive the live recorder from overlay.currentRecorder each time body evaluates,
@@ -306,113 +307,75 @@ struct WaveformBar: View {
     /// Paints the dot danger-red while model status is failed (the words live in the menu).
     var statusIsError: Bool = false
 
-    /// Active/recording waveform: warm cream-gold → gold → deep gold (mirrors the site's EQ bars).
-    private static let waveGradient = LinearGradient(
-        colors: [Color.ow(0xE7CF9E, 0xE7CF9E), OWColor.accent, OWColor.accentDeep],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
-
-    /// Idle/standby waveform: muted warm neutral.
-    private static let idleGradient = LinearGradient(
-        colors: [OWColor.inkFaint, OWColor.inkSoft, OWColor.inkFaint],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
-
-    /// Listening gradient: gold tones.
-    private static let listeningGradient = LinearGradient(
-        colors: [OWColor.accent, OWColor.accentDeep, OWColor.accent],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
-
-    /// TTS-mode gradient: warm gold (the output counterpart to the recording gradient).
-    private static let ttsGradient = LinearGradient(
-        colors: [Color.ow(0xE7CF9E, 0xE7CF9E), OWColor.accent, OWColor.accentDeep],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
-
     var body: some View {
         HStack(spacing: 6) {
             Circle()
                 .fill(statusColor)
                 .frame(width: 10, height: 10)
 
-            // Oscilloscope waveform — spreads the latest audio snapshot across the
-            // full available width instead of scrolling a level history.
-            GeometryReader { geo in
-                Group {
-                    if isTTSPlaying && recorder.state == .idle {
-                        if !playbackMeter.scopeSamples.isEmpty {
-                            // Real playback samples — the meter's own @Published drives
-                            // re-render, no TimelineView needed.
-                            Self.scopeTrace(samples: playbackMeter.scopeSamples, size: geo.size)
-                                .fill(Self.ttsGradient)
-                        } else {
-                            // Fallback: synthetic sine animation (meter silent — e.g. samples
-                            // haven't arrived yet, or between sentences).
-                            TimelineView(.animation(minimumInterval: 0.03)) { timeline in
-                                let time = timeline.date.timeIntervalSinceReferenceDate
-                                Self.scopeTrace(samples: Self.syntheticScopeSamples(count: 96, time: time), size: geo.size)
-                                    .fill(Self.ttsGradient)
-                            }
-                        }
+            // Vintage segmented spectrum display — see `spectrum(bands:)`.
+            Group {
+                if isTTSPlaying && recorder.state == .idle {
+                    if !playbackMeter.spectrumBands.isEmpty {
+                        // Real playback bands — the meter's own @Published drives
+                        // re-render, no TimelineView needed.
+                        spectrum(bands: playbackMeter.spectrumBands)
                     } else {
-                        let gradient = recorder.state == .listening ? Self.listeningGradient : Self.idleGradient
-                        Self.scopeTrace(samples: recorder.scopeSamples, size: geo.size)
-                            .fill(gradient)
-                            .opacity(recorder.state == .uploading ? 0.5 : recorder.state == .idle ? 0.25 : 1.0)
+                        // Fallback: synthetic band animation (meter silent — e.g. bands
+                        // haven't arrived yet, or between sentences).
+                        TimelineView(.animation(minimumInterval: 0.03)) { timeline in
+                            let time = timeline.date.timeIntervalSinceReferenceDate
+                            spectrum(bands: Self.syntheticBands(time: time))
+                        }
                     }
+                } else {
+                    spectrum(bands: recorder.spectrumBands)
+                        .opacity(recorder.state == .uploading ? 0.5 : recorder.state == .idle ? 0.25 : 1.0)
                 }
-                .clipped()
             }
         }
     }
 
-    // MARK: - Oscilloscope Trace
+    // MARK: - Segmented Spectrum
 
-    /// Oscilloscope trace: the latest audio snapshot spread across the full width,
-    /// one vertical line per column from the bin's min to its max sample around the
-    /// midline. `gain` lifts quiet speech to a readable height.
-    static func scopeTrace(samples: [Float], size: CGSize, gain: CGFloat = 4) -> Path {
-        var path = Path()
-        let midY = size.height / 2
-        let maxHalf = midY - 1
-        let columnWidth: CGFloat = 2
-        let columns = max(1, Int(size.width / columnWidth))
-        guard !samples.isEmpty else {
-            // Flat midline when there is no signal.
-            path.move(to: CGPoint(x: 0, y: midY))
-            path.addLine(to: CGPoint(x: size.width, y: midY))
-            return path.strokedPath(StrokeStyle(lineWidth: 1))
+    /// Vintage spectrum columns: one column per band, `segmentCount` discrete
+    /// segments each; lit count tracks band energy, unlit segments stay ghosted.
+    /// Top lit segment gets the deep-gold "peak" accent.
+    private static let segmentCount = 7
+
+    @ViewBuilder
+    private func spectrum(bands: [Float]) -> some View {
+        GeometryReader { geo in
+            let columns = max(bands.count, 1)
+            let columnWidth = geo.size.width / CGFloat(columns)
+            let segmentHeight = (geo.size.height - CGFloat(Self.segmentCount - 1)) / CGFloat(Self.segmentCount)
+            HStack(spacing: 0) {
+                ForEach(0..<columns, id: \.self) { band in
+                    let level = band < bands.count ? bands[band] : 0
+                    let lit = Int((CGFloat(level) * CGFloat(Self.segmentCount)).rounded())
+                    VStack(spacing: 1) {
+                        ForEach((0..<Self.segmentCount).reversed(), id: \.self) { segment in
+                            RoundedRectangle(cornerRadius: 1)
+                                .fill(segment < lit
+                                      ? (segment == lit - 1 ? OWColor.accentDeep : OWColor.accent)
+                                      : OWColor.accent.opacity(0.12))
+                                .frame(height: segmentHeight)
+                        }
+                    }
+                    .frame(width: max(columnWidth - 2, 1))
+                    .padding(.horizontal, 1)
+                }
+            }
         }
-        let binSize = max(1, samples.count / columns)
-        for column in 0..<columns {
-            let start = column * binSize
-            guard start < samples.count else { break }
-            let bin = samples[start..<min(start + binSize, samples.count)]
-            let lo = CGFloat(bin.min() ?? 0)
-            let hi = CGFloat(bin.max() ?? 0)
-            let yTop = midY - min(maxHalf, max(1, hi * gain * maxHalf))
-            let yBottom = midY + min(maxHalf, max(1, -lo * gain * maxHalf))
-            let x = CGFloat(column) * columnWidth + 0.5
-            path.move(to: CGPoint(x: x, y: yTop))
-            path.addLine(to: CGPoint(x: x, y: yBottom))
-        }
-        return path.strokedPath(StrokeStyle(lineWidth: 1.2, lineCap: .round))
+        .clipped()
     }
 
-    /// Synthetic signed samples for the speaking fallback (used only when the
-    /// playback meter yields nothing) — same sine mix as before, centered on zero.
-    static func syntheticScopeSamples(count: Int, time: Double) -> [Float] {
-        (0..<count).map { i in
-            let t = Double(i) / Double(max(count - 1, 1))
-            let wave1 = sin(time * 3.0 + t * .pi * 4) * 0.35
-            let wave2 = sin(time * 1.8 + t * .pi * 2.5) * 0.25
-            let wave3 = sin(time * 5.0 + t * .pi * 7) * 0.1
-            return Float((wave1 + wave2 + wave3) * 0.35)
+    /// Synthetic band animation for the speaking fallback (meter silent).
+    static func syntheticBands(time: Double) -> [Float] {
+        (0..<SpectrumBands.bandCount).map { band in
+            let t = Double(band) / Double(SpectrumBands.bandCount - 1)
+            let v = 0.35 + 0.3 * sin(time * 2.4 + t * .pi * 3) + 0.15 * sin(time * 5.1 + t * .pi * 7)
+            return Float(min(max(v, 0), 1)) * Float(1 - t * 0.45)
         }
     }
 

@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OpenWhispererKit
 
 /// In-process gapless PCM player built on one `AVAudioEngine` + `AVAudioPlayerNode`. Sentences
 /// are scheduled as they synthesize; queued buffers play back-to-back with no gap. macOS plays to
@@ -30,36 +31,24 @@ final class AudioPlaybackEngine {
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
 
-        // Output-sample tap for the overlay's "Speaking…" oscilloscope. Installed once
+        // Output-band tap for the overlay's "Speaking…" spectrum display. Installed once
         // here (not per-utterance) so it lives for the engine's whole lifetime. Runs on
         // an AVAudioEngine render thread; PlaybackLevelMeter.push hops to the main queue.
         engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2_048, format: nil) { buffer, _ in
-            PlaybackLevelMeter.shared.push(samples: Self.downsampleScope(buffer: buffer))
+            PlaybackLevelMeter.shared.push(bands: Self.spectrumBands(buffer: buffer))
         }
     }
 
-    /// Downsample `buffer`'s channel-0 samples to ~`targetCount` signed points, keeping
-    /// the largest-magnitude sample per bin (sign preserved). Mirrors
-    /// `AudioRecorder.downsampleScope`'s shape.
-    private static func downsampleScope(buffer: AVAudioPCMBuffer, targetCount: Int = 96) -> [Float] {
-        guard let channelData = buffer.floatChannelData else { return [] }
-        let count = Int(buffer.frameLength)
-        guard count > 0 else { return [] }
-        let data = UnsafeBufferPointer(start: channelData[0], count: count)
-        let binSize = max(1, count / targetCount)
-        var result: [Float] = []
-        result.reserveCapacity(targetCount)
-        var start = 0
-        while start < count {
-            let end = min(start + binSize, count)
-            var peak: Float = 0
-            for i in start..<end where abs(data[i]) > abs(peak) {
-                peak = data[i]
-            }
-            result.append(peak)
-            start = end
+    /// Reduce `buffer`'s channel-0 samples to `SpectrumBands.bandCount` normalized band
+    /// energies. Mirrors `AudioRecorder.spectrumBands`'s shape.
+    private static func spectrumBands(buffer: AVAudioPCMBuffer) -> [Float] {
+        guard let channelData = buffer.floatChannelData else {
+            return [Float](repeating: 0, count: SpectrumBands.bandCount)
         }
-        return result
+        let count = Int(buffer.frameLength)
+        guard count > 0 else { return [Float](repeating: 0, count: SpectrumBands.bandCount) }
+        let samples = Array(UnsafeBufferPointer(start: channelData[0], count: count))
+        return SpectrumBands.bands(samples: samples, sampleRate: Float(buffer.format.sampleRate))
     }
 
     /// True when nothing is queued or playing.
