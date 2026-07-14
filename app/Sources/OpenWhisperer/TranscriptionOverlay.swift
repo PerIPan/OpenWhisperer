@@ -99,7 +99,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         hostingView.sizingOptions = [.minSize, .intrinsicContentSize, .preferredContentSize]
 
         let w = KeyableWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 240, height: 64),
+            contentRect: NSRect(x: 0, y: 0, width: 160, height: 36),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -108,16 +108,15 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.isReleasedWhenClosed = false
         w.isMovableByWindowBackground = true
         w.delegate = self
-        // Frosted background: system HUD blur of whatever is behind the window, with
-        // a faint warm tint so the surface still reads as OpenWhisperer. The hosting
-        // view's intrinsic size drives the window frame through the edge constraints.
+        // Frosted capsule: system HUD blur of whatever is behind the window, with a
+        // faint warm tint so the surface still reads as OpenWhisperer. Shaped via
+        // maskImage — mutating the effect view's own layer (cornerRadius/masksToBounds)
+        // silently breaks the behind-window blur.
         let effect = NSVisualEffectView()
         effect.material = .hudWindow
         effect.blendingMode = .behindWindow
         effect.state = .active
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = 12
-        effect.layer?.masksToBounds = true
+        effect.maskImage = Self.capsuleMask(height: OverlayView.pillHeight)
 
         let tint = NSView()
         tint.wantsLayer = true
@@ -142,11 +141,10 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.backgroundColor = .clear
         w.isOpaque = false
         w.hasShadow = true
-        w.minSize = NSSize(width: 200, height: 44)
 
         // Position bottom-right of screen
         if let screen = NSScreen.main {
-            let x = screen.visibleFrame.maxX - 260
+            let x = screen.visibleFrame.maxX - 180
             let y = screen.visibleFrame.minY + 20
             w.setFrameOrigin(NSPoint(x: x, y: y))
         }
@@ -169,6 +167,20 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         stopTTSPolling()
         window = nil
         isVisible = false
+    }
+
+    /// Stretchable capsule mask for the effect view — the sanctioned way to shape an
+    /// NSVisualEffectView (touching its layer breaks the material).
+    private static func capsuleMask(height: CGFloat) -> NSImage {
+        let radius = height / 2
+        let image = NSImage(size: NSSize(width: height + 1, height: height), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: 0, left: radius, bottom: 0, right: radius)
+        image.resizingMode = .stretch
+        return image
     }
 
     private func startTTSPolling() {
@@ -243,40 +255,45 @@ struct OverlayView: View {
     /// We do NOT take recorder as a direct init parameter anymore — doing so
     /// would freeze the reference at the moment NSHostingView was constructed.
     @ObservedObject var overlay: TranscriptionOverlay
+    /// Hover reveals the close affordance; the pill is otherwise control-free.
+    @State private var hovered = false
+
+    static let pillHeight: CGFloat = 36
+    static let pillWidth: CGFloat = 160
 
     var body: some View {
         // Derive the live recorder from overlay.currentRecorder each time body evaluates,
         // so WaveformBar always observes the instance that is actually recording.
         let recorder = overlay.currentRecorder
 
-        VStack(alignment: .leading, spacing: 4) {
-            // Slim close affordance (this is a persistent standby overlay).
-            HStack {
-                Spacer()
-                Button(action: { overlay.hide() }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(OWColor.inkFaint)
+        ZStack(alignment: .bottom) {
+            HStack(spacing: 8) {
+                WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError)
+                if hovered {
+                    Button(action: { overlay.hide() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(OWColor.inkFaint)
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.opacity)
                 }
-                .buttonStyle(.plain)
             }
-            .frame(height: 12)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
 
-            // Live waveform + status dot (no text — the words live in the menubar dropdown).
-            WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError)
-                .frame(height: 32)
-
-            // Silence countdown — hands-free only.
+            // Silence countdown — hands-free only, along the pill's bottom edge.
             if overlay.interactionMode == .handsFree {
                 SilenceProgressBar(recorder: recorder)
                     .frame(height: 1.5)
-                    .padding(.top, 2)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 3)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 6)
-        .padding(.bottom, 9)
-        .frame(width: 240, alignment: .leading)
+        .frame(width: Self.pillWidth, height: Self.pillHeight)
+        .onHover { inside in
+            withAnimation(.easeInOut(duration: 0.12)) { hovered = inside }
+        }
     }
 }
 
@@ -317,13 +334,10 @@ struct WaveformBar: View {
     )
 
     var body: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
-                Spacer()
-            }
+        HStack(spacing: 6) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
 
             // Mirrored line waveform
             GeometryReader { geo in

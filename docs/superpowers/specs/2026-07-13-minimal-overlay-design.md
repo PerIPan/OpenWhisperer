@@ -21,6 +21,11 @@ dot, no text**.
 | Error signal on the overlay | The status dot turns **danger red** while `statusIsError` (words live in the menu). |
 | Non-text elements | **Keep:** hands-free silence line, close button, drag-to-move, bottom-right default position, frosted surface (HUD blur + faint warm tint — changed from near-opaque during smoke, 2026-07-14), `overlay_hidden` flag + menu toggle (unchanged copy: "Show Overlay"). |
 
+> **2026-07-14 smoke iteration:** the card became a **frosted capsule pill** (~160×36,
+> single-row dot + wave, close button hover-reveal only). Shaping moved from
+> `layer.cornerRadius` to `NSVisualEffectView.maskImage` — the layer mutation was
+> silently breaking the behind-window blur (root cause of the "not translucent" report).
+
 ## Changes
 
 - `TranscriptionOverlay.swift`:
