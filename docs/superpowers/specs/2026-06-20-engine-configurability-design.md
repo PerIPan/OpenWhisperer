@@ -218,6 +218,21 @@ Kokoro TTS). Revisit triggers: jargon regression (wire FluidAudio's
 vocabulary boosting), noise-robustness complaints (the one axis Whisper
 clearly won).
 
+### Addendum (2026-07-14) — SpeechAnalyzer is the fallback candidate for the noise trigger
+
+A third-party LibriSpeech benchmark (2026-07; M2 Pro, macOS 26.5.1,
+transcripts published) puts Apple's SpeechAnalyzer at **2.12% WER
+test-clean / 4.56% test-other, ~3x faster than Whisper Small** — ahead of
+Whisper small/base/tiny and ~4x ahead of legacy SFSpeechRecognizer. That
+test-other number is the noise-robustness axis where Parakeet is weakest,
+so if that revisit trigger ever fires, spike SpeechAnalyzer before (or
+alongside) FluidAudio vocabulary boosting: zero model download (OS-managed
+assets) and no ANE contention with Kokoro. Known limits: macOS 26 API
+floor, ~30 locales, English-only benchmark on read audiobook speech —
+no evidence yet on jargon/filler-heavy dictation, where Parakeet was
+feel-tested good. Parakeet itself wasn't in the table; its published
+LibriSpeech numbers remain at-or-better. **No action now; Parakeet stays.**
+
 ## Success criteria (the feel-test)
 
 1. App launches defaulting to Nemotron STT + Kokoro TTS; dictation works.
