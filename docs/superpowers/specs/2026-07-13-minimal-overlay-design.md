@@ -31,6 +31,9 @@ dot, no text**.
 > fed by a pure `SpectrumBands` Goertzel filterbank in Kit from both the mic tap and the
 > playback tap. Pill grew to 180×44. Supersedes the brief oscilloscope iteration.
 
+> **2026-07-14, final trim:** the close button is gone entirely — the menu's
+> "Show Overlay" toggle is the only hide control.
+
 ## Changes
 
 - `TranscriptionOverlay.swift`:

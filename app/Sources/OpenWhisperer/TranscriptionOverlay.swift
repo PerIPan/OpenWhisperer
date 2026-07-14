@@ -256,8 +256,6 @@ struct OverlayView: View {
     /// We do NOT take recorder as a direct init parameter anymore — doing so
     /// would freeze the reference at the moment NSHostingView was constructed.
     @ObservedObject var overlay: TranscriptionOverlay
-    /// Hover reveals the close affordance; the pill is otherwise control-free.
-    @State private var hovered = false
 
     static let pillHeight: CGFloat = 44
     static let pillWidth: CGFloat = 180
@@ -270,15 +268,6 @@ struct OverlayView: View {
         ZStack(alignment: .bottom) {
             HStack(spacing: 8) {
                 WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError)
-                if hovered {
-                    Button(action: { overlay.hide() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(OWColor.inkFaint)
-                    }
-                    .buttonStyle(.plain)
-                    .transition(.opacity)
-                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
@@ -292,9 +281,6 @@ struct OverlayView: View {
             }
         }
         .frame(width: Self.pillWidth, height: Self.pillHeight)
-        .onHover { inside in
-            withAnimation(.easeInOut(duration: 0.12)) { hovered = inside }
-        }
     }
 }
 
