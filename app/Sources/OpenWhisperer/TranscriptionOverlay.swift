@@ -320,8 +320,7 @@ struct WaveformBar: View {
                              ? Array(repeating: 0, count: SpectrumBands.bandCount)
                              : playbackMeter.spectrumBands)
                 } else {
-                    spectrum(bands: recorder.spectrumBands)
-                        .opacity(recorder.state == .uploading ? 0.5 : recorder.state == .idle ? 0.25 : 1.0)
+                    spectrum(bands: recorder.spectrumBands.isEmpty ? Array(repeating: 0, count: SpectrumBands.bandCount) : recorder.spectrumBands)
                 }
             }
         }
