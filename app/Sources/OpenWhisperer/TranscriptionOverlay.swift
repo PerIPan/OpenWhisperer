@@ -110,7 +110,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.isMovableByWindowBackground = true
         w.delegate = self
         // Frosted capsule: system HUD blur of whatever is behind the window, with a
-        // faint warm tint so the surface still reads as OpenWhisperer. Shaped via
+        // whisper of warm tint so the surface still reads as OpenWhisperer. Shaped via
         // maskImage — mutating the effect view's own layer (cornerRadius/masksToBounds)
         // silently breaks the behind-window blur.
         let effect = NSVisualEffectView()
@@ -121,7 +121,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
 
         let tint = NSView()
         tint.wantsLayer = true
-        tint.layer?.backgroundColor = NSColor.ow(0xFAF7F1, 0x1E1B16).withAlphaComponent(0.18).cgColor
+        tint.layer?.backgroundColor = NSColor.ow(0xFAF7F1, 0x1E1B16).withAlphaComponent(0.06).cgColor
 
         tint.translatesAutoresizingMaskIntoConstraints = false
         hostingView.translatesAutoresizingMaskIntoConstraints = false
