@@ -304,20 +304,20 @@ struct WaveformBar: View {
             // REC lamp: a fixed panel fixture — unlit socket normally, blinking red
             // while recording. No other state lights it (the grid carries the rest).
             if recorder.state == .recording {
-                TimelineView(.animation(minimumInterval: 0.05)) { timeline in
-                    let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1)
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                    let t = timeline.date.timeIntervalSinceReferenceDate
+                    let pulse = (sin(t * 2 * .pi / 1.2) + 1) / 2
                     Circle()
                         .fill(OWColor.recording)
-                        .frame(width: 12, height: 12)
+                        .frame(width: 10, height: 10)
                         .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
                         .shadow(color: OWColor.recording.opacity(0.8), radius: 3)
-                        .opacity(phase < 0.55 ? 1 : 0.25)
-                        .animation(.easeInOut(duration: 0.1), value: phase < 0.55)
+                        .opacity(0.35 + 0.65 * pulse)
                 }
             } else {
                 Circle()
                     .fill(Color.black.opacity(0.35))
-                    .frame(width: 12, height: 12)
+                    .frame(width: 10, height: 10)
                     .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
             }
 
@@ -334,7 +334,6 @@ struct WaveformBar: View {
                     spectrum(bands: recorder.spectrumBands.isEmpty ? Array(repeating: 0, count: SpectrumBands.bandCount) : recorder.spectrumBands)
                 }
             }
-            .padding(.trailing, 8)
         }
     }
 

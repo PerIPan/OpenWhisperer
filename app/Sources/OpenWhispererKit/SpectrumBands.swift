@@ -5,7 +5,7 @@ import Foundation
 /// Accelerate) so it stays CLT-testable; ~12 × N multiplies per call is trivial
 /// at tap cadence.
 public enum SpectrumBands {
-    public static let bandCount = 12
+    public static let bandCount = 8
     /// Log-spaced centers, 80 Hz … 6 kHz (voice-focused).
     public static let centerFrequencies: [Float] = {
         let lo: Float = 80, hi: Float = 6_000
