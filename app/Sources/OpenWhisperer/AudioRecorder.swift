@@ -377,7 +377,7 @@ class AudioRecorder: ObservableObject {
         let count = Int(buffer.frameLength)
         guard count > 0 else { return [Float](repeating: 0, count: SpectrumBands.bandCount) }
         let samples = Array(UnsafeBufferPointer(start: channelData[0], count: count))
-        return SpectrumBands.bands(samples: samples, sampleRate: Float(buffer.format.sampleRate))
+        return SpectrumBands.bands(samples: samples, sampleRate: Float(buffer.format.sampleRate), gainDb: 14) // raw mic runs well below synthesized playback loudness
     }
 
     private func convert(buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {

@@ -33,5 +33,10 @@ func spectrumBandsFailures() -> [String] {
     let empty = SpectrumBands.bands(samples: [], sampleRate: 16_000)
     expect(empty.count == SpectrumBands.bandCount && empty.allSatisfy { $0 == 0 }, "empty", "got \(empty)")
 
+    // gainDb lifts band values (mic-vs-playback loudness compensation).
+    let boosted = SpectrumBands.bands(samples: sine440, sampleRate: 16_000, gainDb: 14)
+    expect(boosted[expected] > lit[expected], "gainBoosts",
+           "boosted \(boosted[expected]) vs \(lit[expected])")
+
     return failures
 }

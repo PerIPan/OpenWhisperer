@@ -14,7 +14,8 @@ public enum SpectrumBands {
     }()
 
     /// Normalized (0…1) energy per band, log-scaled so speech reads well.
-    public static func bands(samples: [Float], sampleRate: Float) -> [Float] {
+    /// - parameter gainDb: Per-source loudness compensation (dB); default 0 for TTS playback, ~14 for mic input.
+    public static func bands(samples: [Float], sampleRate: Float, gainDb: Float = 0) -> [Float] {
         guard !samples.isEmpty, sampleRate > 0 else {
             return [Float](repeating: 0, count: bandCount)
         }
@@ -34,7 +35,7 @@ public enum SpectrumBands {
             let power = s1 * s1 + s2 * s2 - coeff * s1 * s2
             let magnitude = sqrt(max(power, 0)) / (n / 2)
             // Log scaling: -60 dBFS … 0 dBFS → 0 … 1.
-            let db = 20 * log10(max(magnitude, 1e-9))
+            let db = 20 * log10(max(magnitude, 1e-9)) + gainDb
             return min(1, max(0, (db + 60) / 60))
         }
     }
