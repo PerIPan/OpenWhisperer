@@ -316,18 +316,9 @@ struct WaveformBar: View {
             // Vintage segmented spectrum display — see `spectrum(bands:)`.
             Group {
                 if isTTSPlaying && recorder.state == .idle {
-                    if !playbackMeter.spectrumBands.isEmpty {
-                        // Real playback bands — the meter's own @Published drives
-                        // re-render, no TimelineView needed.
-                        spectrum(bands: playbackMeter.spectrumBands)
-                    } else {
-                        // Fallback: synthetic band animation (meter silent — e.g. bands
-                        // haven't arrived yet, or between sentences).
-                        TimelineView(.animation(minimumInterval: 0.03)) { timeline in
-                            let time = timeline.date.timeIntervalSinceReferenceDate
-                            spectrum(bands: Self.syntheticBands(time: time))
-                        }
-                    }
+                    spectrum(bands: playbackMeter.spectrumBands.isEmpty
+                             ? Array(repeating: 0, count: SpectrumBands.bandCount)
+                             : playbackMeter.spectrumBands)
                 } else {
                     spectrum(bands: recorder.spectrumBands)
                         .opacity(recorder.state == .uploading ? 0.5 : recorder.state == .idle ? 0.25 : 1.0)
@@ -368,15 +359,6 @@ struct WaveformBar: View {
             }
         }
         .clipped()
-    }
-
-    /// Synthetic band animation for the speaking fallback (meter silent).
-    static func syntheticBands(time: Double) -> [Float] {
-        (0..<SpectrumBands.bandCount).map { band in
-            let t = Double(band) / Double(SpectrumBands.bandCount - 1)
-            let v = 0.35 + 0.3 * sin(time * 2.4 + t * .pi * 3) + 0.15 * sin(time * 5.1 + t * .pi * 7)
-            return Float(min(max(v, 0), 1)) * Float(1 - t * 0.45)
-        }
     }
 
     private var statusColor: Color {
