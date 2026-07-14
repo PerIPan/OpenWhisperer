@@ -20,6 +20,7 @@ struct KitTestRunner {
         failures += ttsVoiceRegistryFailures()
         failures += transcriptHistoryBufferFailures()
         failures += spectrumBandsFailures()
+        failures += dotMatrixFailures()
 
         if failures.isEmpty {
             print("✅ OpenWhispererKit: all checks passed")
