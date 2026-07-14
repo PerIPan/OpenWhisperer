@@ -309,9 +309,21 @@ struct WaveformBar: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 10, height: 10)
+            // Vintage tape-deck cue: the dot blinks ~1 Hz while recording, steady otherwise.
+            if recorder.state == .recording {
+                TimelineView(.animation(minimumInterval: 0.05)) { timeline in
+                    let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1)
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 10, height: 10)
+                        .opacity(phase < 0.55 ? 1 : 0.25)
+                        .animation(.easeInOut(duration: 0.1), value: phase < 0.55)
+                }
+            } else {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 10, height: 10)
+            }
 
             // Vintage segmented spectrum display — see `spectrum(bands:)`.
             Group {
