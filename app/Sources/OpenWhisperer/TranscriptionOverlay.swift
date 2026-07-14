@@ -337,23 +337,30 @@ struct WaveformBar: View {
         HStack(spacing: 6) {
             Circle()
                 .fill(statusColor)
-                .frame(width: 8, height: 8)
+                .frame(width: 10, height: 10)
 
             // Mirrored line waveform
             GeometryReader { geo in
-                if isTTSPlaying && recorder.state == .idle {
-                    TimelineView(.animation(minimumInterval: 0.03)) { timeline in
-                        let time = timeline.date.timeIntervalSinceReferenceDate
-                        let levels = Self.ttsLevels(count: 50, time: time)
-                        Self.mirroredLines(levels: levels, size: geo.size)
-                            .fill(Self.ttsGradient)
+                // Only draw as many bars as the available width holds (2pt bar + 1pt
+                // minimum gap), so the path never spills past the pill's edge — the
+                // hover close button shrinks this width further.
+                let maxBars = max(1, Int((geo.size.width + 1) / 3))
+                Group {
+                    if isTTSPlaying && recorder.state == .idle {
+                        TimelineView(.animation(minimumInterval: 0.03)) { timeline in
+                            let time = timeline.date.timeIntervalSinceReferenceDate
+                            let levels = Self.ttsLevels(count: maxBars, time: time)
+                            Self.mirroredLines(levels: levels, size: geo.size)
+                                .fill(Self.ttsGradient)
+                        }
+                    } else {
+                        let gradient = recorder.state == .listening ? Self.listeningGradient : Self.idleGradient
+                        Self.mirroredLines(levels: recorder.levelHistory.suffix(maxBars).map { CGFloat($0) }, size: geo.size)
+                            .fill(gradient)
+                            .opacity(recorder.state == .uploading ? 0.5 : recorder.state == .idle ? 0.25 : 1.0)
                     }
-                } else {
-                    let gradient = recorder.state == .listening ? Self.listeningGradient : Self.idleGradient
-                    Self.mirroredLines(levels: recorder.levelHistory.map { CGFloat($0) }, size: geo.size)
-                        .fill(gradient)
-                        .opacity(recorder.state == .uploading ? 0.5 : recorder.state == .idle ? 0.25 : 1.0)
                 }
+                .clipped()
             }
         }
     }
