@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import OpenWhispererKit
 
 /// Borderless window that accepts keyboard input (enables Cmd+C for text selection).
 private class KeyableWindow: NSWindow {
@@ -99,7 +100,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         hostingView.sizingOptions = [.minSize, .intrinsicContentSize, .preferredContentSize]
 
         let w = KeyableWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 240, height: 64),
+            contentRect: NSRect(x: 0, y: 0, width: 220, height: 52),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -108,25 +109,45 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.isReleasedWhenClosed = false
         w.isMovableByWindowBackground = true
         w.delegate = self
-        w.contentView = hostingView
+        // Smoked-glass dark instrument face: system HUD blur of whatever is behind
+        // the window, tinted dark so the gold segments glow like a vintage analyzer.
+        // Shaped via maskImage — mutating the effect view's own layer
+        // (cornerRadius/masksToBounds) silently breaks the behind-window blur.
+        let effect = NSVisualEffectView()
+        effect.material = .hudWindow
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        effect.maskImage = Self.faceplateMask(height: OverlayView.pillHeight)
+
+        let tint = NSView()
+        tint.wantsLayer = true
+        // Smoked glass: dark instrument face in BOTH appearances (a vintage faceplate
+        // doesn't change color with the room), still translucent over the blur.
+        tint.layer?.backgroundColor = NSColor.ow(0x1E1B16, 0x1E1B16).withAlphaComponent(0.75).cgColor
+
+        tint.translatesAutoresizingMaskIntoConstraints = false
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        effect.addSubview(tint)
+        effect.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            tint.topAnchor.constraint(equalTo: effect.topAnchor),
+            tint.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+            tint.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            tint.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: effect.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+            hostingView.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+        ])
+
+        w.contentView = effect
         w.backgroundColor = .clear
         w.isOpaque = false
         w.hasShadow = true
-        w.minSize = NSSize(width: 200, height: 44)
-
-        // Round corners
-        if let contentView = w.contentView {
-            contentView.wantsLayer = true
-            contentView.layer?.cornerRadius = 12
-            contentView.layer?.masksToBounds = true
-            // Warm "Open Whisperer" surface (cream / warm-dark) to match the menubar + site.
-            // Dark value matches OWColor.page dark (0x1E1B16). Near-opaque to avoid bleed-through.
-            contentView.layer?.backgroundColor = NSColor.ow(0xFAF7F1, 0x1E1B16).withAlphaComponent(0.97).cgColor
-        }
 
         // Position bottom-right of screen
         if let screen = NSScreen.main {
-            let x = screen.visibleFrame.maxX - 260
+            let x = screen.visibleFrame.maxX - 240
             let y = screen.visibleFrame.minY + 20
             w.setFrameOrigin(NSPoint(x: x, y: y))
         }
@@ -149,6 +170,21 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         stopTTSPolling()
         window = nil
         isVisible = false
+    }
+
+    /// Stretchable rounded-rect mask for the effect view — the sanctioned way to shape
+    /// an NSVisualEffectView (touching its layer breaks the material). Fixed 10pt
+    /// corners: a vintage faceplate, not a pill.
+    private static func faceplateMask(height: CGFloat) -> NSImage {
+        let radius: CGFloat = 10
+        let image = NSImage(size: NSSize(width: height + 1, height: height), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: 0, left: radius, bottom: 0, right: radius)
+        image.resizingMode = .stretch
+        return image
     }
 
     private func startTTSPolling() {
@@ -224,58 +260,31 @@ struct OverlayView: View {
     /// would freeze the reference at the moment NSHostingView was constructed.
     @ObservedObject var overlay: TranscriptionOverlay
 
+    static let pillHeight: CGFloat = 52
+    static let pillWidth: CGFloat = 220
+
     var body: some View {
         // Derive the live recorder from overlay.currentRecorder each time body evaluates,
         // so WaveformBar always observes the instance that is actually recording.
         let recorder = overlay.currentRecorder
 
-        VStack(alignment: .leading, spacing: 4) {
-            // Slim close affordance (this is a persistent standby overlay).
-            HStack {
-                Spacer()
-                Button(action: { overlay.hide() }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(OWColor.inkFaint)
-                }
-                .buttonStyle(.plain)
+        ZStack(alignment: .bottom) {
+            HStack(spacing: 8) {
+                WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError, statusText: overlay.statusText)
             }
-            .frame(height: 12)
+            .padding(.leading, 10)
+            .padding(.trailing, 14)
+            .padding(.vertical, 7)
 
-            // Live waveform + state word ("Standby" / "Recording…" / "Speaking…").
-            WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, pttKeyLabel: overlay.pttKeyLabel, interactionMode: overlay.interactionMode)
-                .frame(height: 32)
-
-            // Silence countdown — hands-free only.
+            // Silence countdown — hands-free only, along the pill's bottom edge.
             if overlay.interactionMode == .handsFree {
                 SilenceProgressBar(recorder: recorder)
                     .frame(height: 1.5)
-                    .padding(.top, 2)
-            }
-
-            // Model-loading / failure status. (Transcription history lives in the
-            // menubar dropdown; the overlay is a pure status widget.)
-            if let status = overlay.statusText {
-                HStack(spacing: 6) {
-                    Label(status, systemImage: overlay.statusIsError ? "exclamationmark.triangle.fill" : "arrow.down.circle")
-                        .font(.custom("Outfit", size: 10))
-                        .foregroundColor(overlay.statusIsError ? OWColor.danger : OWColor.inkSoft)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if overlay.statusIsError, let dm = overlay.dictationManager, dm.sttFailed {
-                        Spacer(minLength: 0)
-                        Button("Retry") { dm.retrySTT() }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.mini)
-                    }
-                }
-                .padding(.top, 4)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 3)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 6)
-        .padding(.bottom, 9)
-        .frame(width: 240, alignment: .leading)
+        .frame(width: Self.pillWidth, height: Self.pillHeight)
     }
 }
 
@@ -283,136 +292,134 @@ struct OverlayView: View {
 
 struct WaveformBar: View {
     @ObservedObject var recorder: AudioRecorder
+    @ObservedObject private var playbackMeter = PlaybackLevelMeter.shared
     var isTTSPlaying: Bool = false
-    var pttKeyLabel: String = "Ctrl"
-    var interactionMode: InteractionMode = .pressToTalk
-
-    /// Active/recording waveform: warm cream-gold → gold → deep gold (mirrors the site's EQ bars).
-    private static let waveGradient = LinearGradient(
-        colors: [Color.ow(0xE7CF9E, 0xE7CF9E), OWColor.accent, OWColor.accentDeep],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
-
-    /// Idle/standby waveform: muted warm neutral.
-    private static let idleGradient = LinearGradient(
-        colors: [OWColor.inkFaint, OWColor.inkSoft, OWColor.inkFaint],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
-
-    /// Listening gradient: gold tones.
-    private static let listeningGradient = LinearGradient(
-        colors: [OWColor.accent, OWColor.accentDeep, OWColor.accent],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
-
-    /// TTS-mode gradient: warm gold (the output counterpart to the recording gradient).
-    private static let ttsGradient = LinearGradient(
-        colors: [Color.ow(0xE7CF9E, 0xE7CF9E), OWColor.accent, OWColor.accentDeep],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
+    /// Paints the dot danger-red while model status is failed (the words live in the menu).
+    var statusIsError: Bool = false
+    /// Non-nil while a status word ("Loading…"/error) should take over the grid as a marquee.
+    var statusText: String? = nil
 
     var body: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 4) {
+        HStack(spacing: 6) {
+            // REC lamp: a fixed panel fixture — unlit socket normally, blinking red
+            // while recording. No other state lights it (the grid carries the rest).
+            if recorder.state == .recording {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                    let t = timeline.date.timeIntervalSinceReferenceDate
+                    let pulse = (sin(t * 2 * .pi / 1.2) + 1) / 2
+                    Circle()
+                        .fill(OWColor.recording)
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
+                        .shadow(color: OWColor.recording.opacity(0.8), radius: 3)
+                        .opacity(0.35 + 0.65 * pulse)
+                }
+            } else {
                 Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
-                Text(statusText)
-                    .font(.custom("Outfit", size: 10))
-                    .foregroundColor(statusColor)
-                Spacer()
-                if recorder.state == .recording {
-                    let hint: String = {
-                        switch interactionMode {
-                        case .holdToTalk: return "Release \(pttKeyLabel) to stop"
-                        case .handsFree: return "silence submits"
-                        case .pressToTalk: return "Press \(pttKeyLabel) to stop"
-                        }
-                    }()
-                    Text(hint)
-                        .font(.custom("Outfit", size: 9))
-                        .foregroundColor(.secondary)
-                }
+                    .fill(Color.black.opacity(0.35))
+                    .frame(width: 10, height: 10)
+                    .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
             }
 
-            // Mirrored line waveform
-            GeometryReader { geo in
-                if isTTSPlaying && recorder.state == .idle {
-                    TimelineView(.animation(minimumInterval: 0.03)) { timeline in
-                        let time = timeline.date.timeIntervalSinceReferenceDate
-                        let levels = Self.ttsLevels(count: 50, time: time)
-                        Self.mirroredLines(levels: levels, size: geo.size)
-                            .fill(Self.ttsGradient)
-                    }
+            // Vintage segmented spectrum display — see `spectrum(bands:)`. A status
+            // word takes over the grid as a scrolling LED marquee when present.
+            Group {
+                if statusText != nil {
+                    marquee(word: statusIsError ? "ERROR" : "LOADING", color: statusIsError ? OWColor.danger : OWColor.accent)
+                } else if isTTSPlaying && recorder.state == .idle {
+                    spectrum(bands: playbackMeter.spectrumBands.isEmpty
+                             ? Array(repeating: 0, count: SpectrumBands.bandCount)
+                             : playbackMeter.spectrumBands)
                 } else {
-                    let gradient = recorder.state == .listening ? Self.listeningGradient : Self.idleGradient
-                    Self.mirroredLines(levels: recorder.levelHistory.map { CGFloat($0) }, size: geo.size)
-                        .fill(gradient)
-                        .opacity(recorder.state == .uploading ? 0.5 : recorder.state == .idle ? 0.25 : 1.0)
+                    spectrum(bands: recorder.spectrumBands.isEmpty ? Array(repeating: 0, count: SpectrumBands.bandCount) : recorder.spectrumBands)
                 }
             }
         }
     }
 
-    // MARK: - Mirrored Lines
+    // MARK: - Segmented Spectrum
 
-    /// Vertical bars mirrored around center line, tapered at edges.
-    private static func mirroredLines(levels: [CGFloat], size: CGSize) -> Path {
-        guard !levels.isEmpty else { return Path() }
+    /// Vintage spectrum columns: one column per band, `segmentCount` discrete
+    /// segments each; lit count tracks band energy, unlit segments stay ghosted.
+    /// Top lit segment gets the deep-gold "peak" accent.
+    private static let segmentCount = 7
 
-        let n = levels.count
-        let barWidth: CGFloat = 2
-        let gap: CGFloat = max(1, (size.width - barWidth * CGFloat(n)) / CGFloat(n - 1))
-        let step = barWidth + gap
-        let midY = size.height / 2
-        let maxHalf = midY - 1  // leave 1pt breathing room
-
-        var path = Path()
-        for (i, level) in levels.enumerated() {
-            let t = CGFloat(i) / CGFloat(max(n - 1, 1))
-            let taper = min(t * 5, (1 - t) * 5, 1.0)
-            let h = max(1, level * taper * maxHalf)
-            let x = CGFloat(i) * step
-            let rect = CGRect(x: x, y: midY - h, width: barWidth, height: h * 2)
-            path.addRoundedRect(in: rect, cornerSize: CGSize(width: 1, height: 1))
+    @ViewBuilder
+    private func spectrum(bands: [Float]) -> some View {
+        GeometryReader { geo in
+            let columns = max(bands.count, 1)
+            let columnWidth = geo.size.width / CGFloat(columns)
+            let segmentHeight = (geo.size.height - CGFloat(Self.segmentCount - 1) * 2) / CGFloat(Self.segmentCount)
+            HStack(spacing: 0) {
+                ForEach(0..<columns, id: \.self) { band in
+                    let level = band < bands.count ? bands[band] : 0
+                    let lit = Int((CGFloat(level) * CGFloat(Self.segmentCount)).rounded())
+                    VStack(spacing: 2) {
+                        ForEach((0..<Self.segmentCount).reversed(), id: \.self) { segment in
+                            let isLit = segment < lit
+                            let color = isLit
+                                ? (segment == lit - 1 ? OWColor.accentDeep : OWColor.accent)
+                                : OWColor.accent.opacity(0.15)
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(color)
+                                .shadow(color: isLit ? color.opacity(0.7) : .clear, radius: 2.5)
+                                .frame(height: segmentHeight)
+                        }
+                    }
+                    .frame(width: max(columnWidth - 4, 1))
+                    .padding(.horizontal, 2)
+                }
+            }
         }
-        return path
+        .clipped()
     }
 
-    /// Generate sine-wave levels for TTS animation.
-    private static func ttsLevels(count: Int, time: Double) -> [CGFloat] {
-        (0..<count).map { i in
-            let t = Double(i) / Double(count - 1)
-            let wave1 = sin(time * 3.0 + t * .pi * 4) * 0.35
-            let wave2 = sin(time * 1.8 + t * .pi * 2.5) * 0.25
-            let wave3 = sin(time * 5.0 + t * .pi * 7) * 0.1
-            return CGFloat(max(0.05, (wave1 + wave2 + wave3 + 0.5) * 0.8))
+    // MARK: - Status Marquee
+
+    /// LED marquee: scrolls the status word across the 12×7 grid, right to left,
+    /// with a full blank grid-width lead-in/out. ~8 columns/second.
+    @ViewBuilder
+    private func marquee(word: String, color: Color) -> some View {
+        let columns = DotMatrix.columns(for: word)
+        TimelineView(.periodic(from: .now, by: 0.12)) { timeline in
+            let gridWidth = SpectrumBands.bandCount
+            let cycle = columns.count + gridWidth
+            let step = Int(timeline.date.timeIntervalSinceReferenceDate / 0.12) % cycle
+            let window: [[Bool]] = (0..<gridWidth).map { cell in
+                let index = step - gridWidth + cell
+                return (index >= 0 && index < columns.count)
+                    ? columns[index]
+                    : Array(repeating: false, count: DotMatrix.rows)
+            }
+            matrix(window: window, color: color)
         }
     }
 
-    private var statusColor: Color {
-        if isTTSPlaying && recorder.state == .idle { return OWColor.accent }
-        switch recorder.state {
-        case .recording: return OWColor.recording
-        case .uploading: return OWColor.warn
-        case .listening: return OWColor.accentDeep
-        case .idle: return OWColor.live
+    /// Renders a 12-column window of 7-row cells with the same LED cell styling
+    /// (bloom on lit, ghost sockets unlit) as the spectrum.
+    private func matrix(window: [[Bool]], color: Color) -> some View {
+        GeometryReader { geo in
+            let columnWidth = geo.size.width / CGFloat(window.count)
+            let segmentHeight = (geo.size.height - CGFloat(DotMatrix.rows - 1) * 2) / CGFloat(DotMatrix.rows)
+            HStack(spacing: 0) {
+                ForEach(0..<window.count, id: \.self) { columnIndex in
+                    VStack(spacing: 2) {
+                        ForEach(0..<DotMatrix.rows, id: \.self) { row in
+                            let isLit = window[columnIndex][row]
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(isLit ? color : OWColor.accent.opacity(0.15))
+                                .shadow(color: isLit ? color.opacity(0.7) : .clear, radius: 2.5)
+                                .frame(height: segmentHeight)
+                        }
+                    }
+                    .frame(width: max(columnWidth - 4, 1))
+                    .padding(.horizontal, 2)
+                }
+            }
         }
+        .clipped()
     }
 
-    private var statusText: String {
-        if isTTSPlaying && recorder.state == .idle { return "Speaking..." }
-        switch recorder.state {
-        case .recording: return "Recording..."
-        case .uploading: return "Transcribing..."
-        case .listening: return "Listening..."
-        case .idle: return "Standby"
-        }
-    }
 }
 
 // MARK: - Silence Progress Bar

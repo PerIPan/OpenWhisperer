@@ -19,7 +19,29 @@ dot, no text**.
 | Overlay content | **Waveform + status dot only.** State label and hotkey hint removed. |
 | Model status (loading / failure + Retry) | **Menubar dropdown row** — the pattern built for the notch branch (closed PR #24, commit `d6951d7`), re-targeted at the overlay's existing `statusText`/`statusIsError`: shown only while non-nil; a Button `"<status> — Retry"` when failed, else a disabled Text; followed by a Divider. |
 | Error signal on the overlay | The status dot turns **danger red** while `statusIsError` (words live in the menu). |
-| Non-text elements | **Keep:** hands-free silence line, close button, drag-to-move, bottom-right default position, warm surface, `overlay_hidden` flag + menu toggle (unchanged copy: "Show Overlay"). |
+| Non-text elements | **Keep:** hands-free silence line, close button, drag-to-move, bottom-right default position, frosted surface (HUD blur + faint warm tint — changed from near-opaque during smoke, 2026-07-14), `overlay_hidden` flag + menu toggle (unchanged copy: "Show Overlay"). |
+
+> **2026-07-14 smoke iteration:** the card became a **frosted capsule pill** (~160×36,
+> single-row dot + wave, close button hover-reveal only). Shaping moved from
+> `layer.cornerRadius` to `NSVisualEffectView.maskImage` — the layer mutation was
+> silently breaking the behind-window blur (root cause of the "not translucent" report).
+
+> **2026-07-14, later:** the wave visual is now a **vintage segmented spectrum display**
+> (12 log-spaced voice bands × 7 LED-style segments, gold with deep-gold peak segment),
+> fed by a pure `SpectrumBands` Goertzel filterbank in Kit from both the mic tap and the
+> playback tap. Pill grew to 180×44. Supersedes the brief oscilloscope iteration.
+
+> **2026-07-14, final trim:** the close button is gone entirely — the menu's
+> "Show Overlay" toggle is the only hide control.
+
+> **2026-07-14, faceplate:** capsule → rounded rectangle (10pt corners), and the frost
+> is now smoked dark glass (0x1E1B16 @ 0.55 over the blur) in BOTH appearances — a
+> vintage instrument face; the gold segments and status dot glow against it.
+
+> **2026-07-14, dot matrix:** the 12×7 grid doubles as an LED marquee — "LOADING" /
+> "ERROR" scroll across it (5×7 font, `DotMatrix` in Kit) instead of coloring the dot.
+> The REC lamp is now a fixed socket that lights (blinking red, bloomed) only while
+> recording; no lamp state for speaking/idle.
 
 ## Changes
 

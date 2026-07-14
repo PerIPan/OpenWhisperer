@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OpenWhispererKit
 
 /// In-process gapless PCM player built on one `AVAudioEngine` + `AVAudioPlayerNode`. Sentences
 /// are scheduled as they synthesize; queued buffers play back-to-back with no gap. macOS plays to
@@ -29,6 +30,25 @@ final class AudioPlaybackEngine {
         format = fmt
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
+
+        // Output-band tap for the overlay's "Speaking…" spectrum display. Installed once
+        // here (not per-utterance) so it lives for the engine's whole lifetime. Runs on
+        // an AVAudioEngine render thread; PlaybackLevelMeter.push hops to the main queue.
+        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2_048, format: nil) { buffer, _ in
+            PlaybackLevelMeter.shared.push(bands: Self.spectrumBands(buffer: buffer))
+        }
+    }
+
+    /// Reduce `buffer`'s channel-0 samples to `SpectrumBands.bandCount` normalized band
+    /// energies. Mirrors `AudioRecorder.spectrumBands`'s shape.
+    private static func spectrumBands(buffer: AVAudioPCMBuffer) -> [Float] {
+        guard let channelData = buffer.floatChannelData else {
+            return [Float](repeating: 0, count: SpectrumBands.bandCount)
+        }
+        let count = Int(buffer.frameLength)
+        guard count > 0 else { return [Float](repeating: 0, count: SpectrumBands.bandCount) }
+        let samples = Array(UnsafeBufferPointer(start: channelData[0], count: count))
+        return SpectrumBands.bands(samples: samples, sampleRate: Float(buffer.format.sampleRate))
     }
 
     /// True when nothing is queued or playing.

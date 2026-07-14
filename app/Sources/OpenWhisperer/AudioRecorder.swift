@@ -19,6 +19,9 @@ class AudioRecorder: ObservableObject {
     @Published var state: State = .idle
     @Published var audioLevel: Float = 0.0
     @Published var levelHistory: [Float] = Array(repeating: 0, count: 50)
+    /// Normalized (0…1) per-band energy of the latest input buffer's channel-0 samples,
+    /// for the overlay's segmented spectrum display — see `SpectrumBands`.
+    @Published private(set) var spectrumBands: [Float] = []
     @Published var micPermission: Bool = false
     /// Set when the audio engine fails to configure or start, so the UI can surface it (T2.3).
     @Published var engineError: String?
@@ -222,10 +225,12 @@ class AudioRecorder: ObservableObject {
             self.onRawAudioBuffer?(buffer)
 
             let rms = self.computeRMS(buffer: buffer)
+            let bands = self.spectrumBands(buffer: buffer)
             DispatchQueue.main.async {
                 self.audioLevel = self.audioLevel * (1 - self.smoothing) + rms * self.smoothing
                 self.levelHistory.removeFirst()
                 self.levelHistory.append(self.audioLevel)
+                self.spectrumBands = bands
 
                 // Silence detection for hands-free mode
                 if self.silenceDetectionEnabled {
@@ -268,6 +273,7 @@ class AudioRecorder: ObservableObject {
 
         audioLevel = 0
         levelHistory = Array(repeating: 0, count: 50)
+        spectrumBands = []
     }
 
     /// Merge accumulated PCM buffers into normalized Float32 samples (16 kHz mono).
@@ -360,6 +366,18 @@ class AudioRecorder: ObservableObject {
         bufferLock.unlock()
         // Scale for UI display only (0–1 range for waveform)
         return min(rms * 120.0, 1.0)
+    }
+
+    /// Reduce `buffer`'s channel-0 samples to `SpectrumBands.bandCount` normalized band
+    /// energies for the overlay's segmented spectrum display.
+    private func spectrumBands(buffer: AVAudioPCMBuffer) -> [Float] {
+        guard let channelData = buffer.floatChannelData else {
+            return [Float](repeating: 0, count: SpectrumBands.bandCount)
+        }
+        let count = Int(buffer.frameLength)
+        guard count > 0 else { return [Float](repeating: 0, count: SpectrumBands.bandCount) }
+        let samples = Array(UnsafeBufferPointer(start: channelData[0], count: count))
+        return SpectrumBands.bands(samples: samples, sampleRate: Float(buffer.format.sampleRate), gainDb: 20) // raw mic runs well below synthesized playback loudness
     }
 
     private func convert(buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
