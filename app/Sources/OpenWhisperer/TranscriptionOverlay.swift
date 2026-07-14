@@ -100,7 +100,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         hostingView.sizingOptions = [.minSize, .intrinsicContentSize, .preferredContentSize]
 
         let w = KeyableWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 180, height: 44),
+            contentRect: NSRect(x: 0, y: 0, width: 220, height: 52),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -147,7 +147,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
 
         // Position bottom-right of screen
         if let screen = NSScreen.main {
-            let x = screen.visibleFrame.maxX - 200
+            let x = screen.visibleFrame.maxX - 240
             let y = screen.visibleFrame.minY + 20
             w.setFrameOrigin(NSPoint(x: x, y: y))
         }
@@ -260,8 +260,8 @@ struct OverlayView: View {
     /// would freeze the reference at the moment NSHostingView was constructed.
     @ObservedObject var overlay: TranscriptionOverlay
 
-    static let pillHeight: CGFloat = 44
-    static let pillWidth: CGFloat = 180
+    static let pillHeight: CGFloat = 52
+    static let pillWidth: CGFloat = 220
 
     var body: some View {
         // Derive the live recorder from overlay.currentRecorder each time body evaluates,
