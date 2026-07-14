@@ -123,7 +123,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         tint.wantsLayer = true
         // Smoked glass: dark instrument face in BOTH appearances (a vintage faceplate
         // doesn't change color with the room), still translucent over the blur.
-        tint.layer?.backgroundColor = NSColor.ow(0x1E1B16, 0x1E1B16).withAlphaComponent(0.55).cgColor
+        tint.layer?.backgroundColor = NSColor.ow(0x1E1B16, 0x1E1B16).withAlphaComponent(0.75).cgColor
 
         tint.translatesAutoresizingMaskIntoConstraints = false
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -272,7 +272,8 @@ struct OverlayView: View {
             HStack(spacing: 8) {
                 WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError)
             }
-            .padding(.horizontal, 14)
+            .padding(.leading, 10)
+            .padding(.trailing, 14)
             .padding(.vertical, 7)
 
             // Silence countdown — hands-free only, along the pill's bottom edge.
@@ -304,14 +305,16 @@ struct WaveformBar: View {
                     let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1)
                     Circle()
                         .fill(statusColor)
-                        .frame(width: 10, height: 10)
+                        .frame(width: 12, height: 12)
+                        .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
                         .opacity(phase < 0.55 ? 1 : 0.25)
                         .animation(.easeInOut(duration: 0.1), value: phase < 0.55)
                 }
             } else {
                 Circle()
                     .fill(statusColor)
-                    .frame(width: 10, height: 10)
+                    .frame(width: 12, height: 12)
+                    .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
             }
 
             // Vintage segmented spectrum display — see `spectrum(bands:)`.
@@ -340,22 +343,25 @@ struct WaveformBar: View {
         GeometryReader { geo in
             let columns = max(bands.count, 1)
             let columnWidth = geo.size.width / CGFloat(columns)
-            let segmentHeight = (geo.size.height - CGFloat(Self.segmentCount - 1)) / CGFloat(Self.segmentCount)
+            let segmentHeight = (geo.size.height - CGFloat(Self.segmentCount - 1) * 2) / CGFloat(Self.segmentCount)
             HStack(spacing: 0) {
                 ForEach(0..<columns, id: \.self) { band in
                     let level = band < bands.count ? bands[band] : 0
                     let lit = Int((CGFloat(level) * CGFloat(Self.segmentCount)).rounded())
-                    VStack(spacing: 1) {
+                    VStack(spacing: 2) {
                         ForEach((0..<Self.segmentCount).reversed(), id: \.self) { segment in
-                            RoundedRectangle(cornerRadius: 1)
-                                .fill(segment < lit
-                                      ? (segment == lit - 1 ? OWColor.accentDeep : OWColor.accent)
-                                      : OWColor.accent.opacity(0.12))
+                            let isLit = segment < lit
+                            let color = isLit
+                                ? (segment == lit - 1 ? OWColor.accentDeep : OWColor.accent)
+                                : OWColor.accent.opacity(0.15)
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(color)
+                                .shadow(color: isLit ? color.opacity(0.7) : .clear, radius: 2.5)
                                 .frame(height: segmentHeight)
                         }
                     }
-                    .frame(width: max(columnWidth - 2, 1))
-                    .padding(.horizontal, 1)
+                    .frame(width: max(columnWidth - 4, 1))
+                    .padding(.horizontal, 2)
                 }
             }
         }
