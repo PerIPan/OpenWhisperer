@@ -10,7 +10,7 @@ The transcription overlay's spectrum display becomes **selectable between three 
 
 1. **LED Bars** (default) — ~24 columns × ~12 LED segments, classic green→yellow→red vertical gradient, falling peak caps, mirrored reflection along the bottom (~10% height, 25% alpha).
 2. **Graph** — smooth filled spectrum curve, steel-blue fill, orange-red peak line. (The demo draws two fills for stereo L/R; our feeds are mono, so the two-color spirit survives as fill + peak line.)
-3. **Curtain** — ~96 thin full-height bars, prism (rainbow) hue sweep across the width, per-bar opacity tracking band level, hotter response curve (demo runs −60…−30 dB).
+3. **Curtain** — ~96 thin full-height bars, each filled with a *vertical* prism ramp (crimson top → blue bottom, matching the demo's rendered output), per-bar opacity tracking band level, hotter response curve (demo runs −60…−30 dB). *(Corrected 2026-07-16 after an on-device comparison: the first cut swept hues horizontally across bars, which is not the demo's look.)*
 
 The style is chosen from **Settings → General → Overlay → "Analyzer style"** and applies to both spectrum sources (mic while recording, TTS playback via `PlaybackLevelMeter`).
 

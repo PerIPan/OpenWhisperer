@@ -151,7 +151,17 @@ struct CurtainStyleView: View {
 
     private static let responseGain: Float = 1.8   // remaps our −60…0 normalize toward the demo's hotter window
     private static let barSpace: CGFloat = 0.1     // demo barSpace .1
-    private static let hueSweep = 300.0 / 360.0    // red → violet
+    /// Vertical prism ramp shown inside every full-height bar (top → bottom);
+    /// only the bar's opacity tracks its band level. Stops eyeballed from the
+    /// demo's rendered output (clean-room), not taken from its gradient table.
+    private static let prism = Gradient(colors: [
+        Color(red: 0.85, green: 0.20, blue: 0.35),   // crimson (top)
+        Color(red: 0.95, green: 0.55, blue: 0.20),   // orange
+        Color(red: 0.95, green: 0.90, blue: 0.20),   // yellow
+        Color(red: 0.35, green: 0.80, blue: 0.35),   // green
+        Color(red: 0.15, green: 0.65, blue: 0.70),   // teal
+        Color(red: 0.15, green: 0.35, blue: 0.85),   // blue (bottom)
+    ])
 
     var body: some View {
         Canvas { context, size in
@@ -162,12 +172,13 @@ struct CurtainStyleView: View {
             for i in 0..<n {
                 let level = Double(min(1, bands[i] * Self.responseGain))
                 guard level > 0.02 else { continue }
-                let hue = Double(i) / Double(max(n - 1, 1)) * Self.hueSweep
                 let rect = CGRect(x: CGFloat(i) * colWidth, y: 0,
                                   width: barWidth, height: size.height)
+                context.opacity = level
                 context.fill(Path(rect),
-                             with: .color(Color(hue: hue, saturation: 0.9, brightness: 1)
-                                 .opacity(level)))
+                             with: .linearGradient(Self.prism,
+                                                   startPoint: CGPoint(x: rect.midX, y: 0),
+                                                   endPoint: CGPoint(x: rect.midX, y: size.height)))
             }
         }
     }
