@@ -100,16 +100,20 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         // the update inside the existing live view tree — no NSHostingView rebuild needed.
         let hostingView = FirstMouseHostingView(rootView: OverlayView(overlay: self))
 
-        // FIX: sizingOptions ensures the hosting view participates in layout
-        // and does not clip the SwiftUI render layer, which can suppress CA commits.
-        hostingView.sizingOptions = [.minSize, .intrinsicContentSize, .preferredContentSize]
+        // Window size is owned by us (restored pref + user drag-resize); the root
+        // view has no fixed frame, so don't let intrinsic-size constraints fight
+        // the resizable window.
+        hostingView.sizingOptions = []
 
+        let size = OverlaySize.parse(try? String(contentsOf: Paths.overlaySize, encoding: .utf8))
         let w = KeyableWindow(
-            contentRect: NSRect(x: 0, y: 0, width: OverlayView.pillWidth, height: OverlayView.pillHeight),
-            styleMask: [.borderless],
+            contentRect: NSRect(x: 0, y: 0, width: size.width, height: size.height),
+            styleMask: [.borderless, .resizable],   // .resizable = invisible edge grips, no chrome
             backing: .buffered,
             defer: false
         )
+        w.contentMinSize = NSSize(width: OverlaySize.minWidth, height: OverlaySize.minHeight)
+        w.contentMaxSize = NSSize(width: OverlaySize.maxWidth, height: OverlaySize.maxHeight)
         w.level = .floating
         w.isReleasedWhenClosed = false
         w.isMovableByWindowBackground = true
@@ -122,7 +126,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         effect.material = .hudWindow
         effect.blendingMode = .behindWindow
         effect.state = .active
-        effect.maskImage = Self.faceplateMask(height: OverlayView.pillHeight)
+        effect.maskImage = Self.faceplateMask()
 
         let tint = NSView()
         tint.wantsLayer = true
@@ -150,9 +154,9 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.isOpaque = false
         w.hasShadow = true
 
-        // Position bottom-right of screen
+        // Position bottom-right of screen (margin holds regardless of restored width)
         if let screen = NSScreen.main {
-            let x = screen.visibleFrame.maxX - 240
+            let x = screen.visibleFrame.maxX - size.width - 20
             let y = screen.visibleFrame.minY + 20
             w.setFrameOrigin(NSPoint(x: x, y: y))
         }
@@ -177,17 +181,25 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         isVisible = false
     }
 
+    /// Persist the user's drag-resize (borderless window: frame == content size).
+    func windowDidEndLiveResize(_ notification: Notification) {
+        guard let w = notification.object as? NSWindow else { return }
+        let size = OverlaySize(width: w.frame.width, height: w.frame.height)
+        try? size.fileValue.write(to: Paths.overlaySize, atomically: true, encoding: .utf8)
+    }
+
     /// Stretchable rounded-rect mask for the effect view — the sanctioned way to shape
-    /// an NSVisualEffectView (touching its layer breaks the material). Fixed 10pt
-    /// corners: a vintage faceplate, not a pill.
-    private static func faceplateMask(height: CGFloat) -> NSImage {
+    /// an NSVisualEffectView (touching its layer breaks the material). Cap insets on
+    /// all four edges so the 10pt corners stay crisp at any drag-resized size.
+    private static func faceplateMask() -> NSImage {
         let radius: CGFloat = 10
-        let image = NSImage(size: NSSize(width: height + 1, height: height), flipped: false) { rect in
+        let side = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
             NSColor.black.setFill()
             NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
             return true
         }
-        image.capInsets = NSEdgeInsets(top: 0, left: radius, bottom: 0, right: radius)
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
         image.resizingMode = .stretch
         return image
     }
@@ -265,9 +277,6 @@ struct OverlayView: View {
     /// would freeze the reference at the moment NSHostingView was constructed.
     @ObservedObject var overlay: TranscriptionOverlay
 
-    static let pillHeight: CGFloat = 84   // grew from 52 for the analyzer styles (2026-07-16 spec)
-    static let pillWidth: CGFloat = 220
-
     var body: some View {
         // Derive the live recorder from overlay.currentRecorder each time body evaluates,
         // so WaveformBar always observes the instance that is actually recording.
@@ -289,7 +298,8 @@ struct OverlayView: View {
                     .padding(.bottom, 3)
             }
         }
-        .frame(width: Self.pillWidth, height: Self.pillHeight)
+        // No fixed frame: the hosting view fills the (resizable) window; the
+        // renderers, marquee, and silence bar are all geometry-relative.
     }
 }
 

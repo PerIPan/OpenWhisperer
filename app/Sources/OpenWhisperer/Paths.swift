@@ -95,6 +95,9 @@ enum Paths {
     /// Overlay analyzer style: led_bars | graph | curtain (see OverlayStyle.parse).
     static let overlayStyle = appSupport.appendingPathComponent("overlay_style")
 
+    /// Overlay window size ("WxH", e.g. "220x84"; see OverlaySize.parse).
+    static let overlaySize = appSupport.appendingPathComponent("overlay_size")
+
     /// Selected AI platform (claudeCode, codexCLI)
     static let selectedPlatform = appSupport.appendingPathComponent("selected_platform")
 
