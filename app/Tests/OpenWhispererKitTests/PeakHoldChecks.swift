@@ -27,15 +27,22 @@ func peakHoldFailures() -> [String] {
     peaks = hold.update(bands: [0.55, 0.1], at: 0.8)
     expect(peaks[0] == 0.55, "floorsAtBand", "got \(peaks[0])")
 
-    // A new maximum re-arms the hold.
+    // A new maximum re-arms the hold. (Non-zero floor: exact all-zeros now
+    // means "idle" and clears the caps — see quietResets below.)
     peaks = hold.update(bands: [0.9, 0.1], at: 1.0)
     expect(peaks[0] == 0.9, "rearm", "got \(peaks[0])")
-    peaks = hold.update(bands: [0.0, 0.0], at: 1.4)
+    peaks = hold.update(bands: [0.01, 0.01], at: 1.4)
     expect(peaks[0] == 0.9, "rearmHolds", "got \(peaks[0])")
 
     // Band-count changes (style switch mid-flight) reset cleanly.
     peaks = hold.update(bands: [0.3], at: 2.0)
     expect(peaks == [0.3], "resize", "got \(peaks)")
+
+    // All-zero input = idle: caps clear immediately so the render timeline
+    // can pause without freezing caps mid-air.
+    peaks = hold.update(bands: [0.9, 0.4], at: 3.0)
+    peaks = hold.update(bands: [0, 0], at: 3.1)
+    expect(peaks == [0, 0], "quietResets", "got \(peaks)")
 
     return failures
 }
