@@ -22,6 +22,7 @@ struct KitTestRunner {
         failures += spectrumBandsFailures()
         failures += dotMatrixFailures()
         failures += overlayStyleFailures()
+        failures += peakHoldFailures()
 
         if failures.isEmpty {
             print("✅ OpenWhispererKit: all checks passed")
