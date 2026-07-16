@@ -5,7 +5,7 @@ import Foundation
 /// and `OverlayStyle`: bad/missing input never breaks the overlay.
 public struct OverlaySize: Equatable {
     public static let minWidth: Double = 180, minHeight: Double = 64
-    public static let maxWidth: Double = 800, maxHeight: Double = 400
+    public static let maxWidth: Double = 1_600, maxHeight: Double = 1_000
     public static let defaultSize = OverlaySize(width: 220, height: 84)
 
     public let width: Double

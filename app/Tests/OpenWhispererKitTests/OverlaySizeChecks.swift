@@ -24,8 +24,8 @@ func overlaySizeFailures() -> [String] {
 
     let low = OverlaySize.parse("100x40")
     expect(low.width == 180 && low.height == 64, "clampLow", "got \(low.fileValue)")
-    let high = OverlaySize.parse("2000x900")
-    expect(high.width == 800 && high.height == 400, "clampHigh", "got \(high.fileValue)")
+    let high = OverlaySize.parse("2400x1200")
+    expect(high.width == 1_600 && high.height == 1_000, "clampHigh", "got \(high.fileValue)")
     let mixed = OverlaySize.parse("100x120")
     expect(mixed.width == 180 && mixed.height == 120, "clampIndependent", "got \(mixed.fileValue)")
 
