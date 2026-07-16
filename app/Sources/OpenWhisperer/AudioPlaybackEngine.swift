@@ -15,6 +15,7 @@ final class AudioPlaybackEngine {
     private let format: AVAudioFormat
     private let lock = NSLock()
     private var pending = 0
+    private var configChangeObserver: NSObjectProtocol?
 
     /// Invoked when the last queued buffer finishes playing (queue drained).
     var onDrained: (@Sendable () -> Void)?
@@ -37,6 +38,37 @@ final class AudioPlaybackEngine {
         engine.mainMixerNode.installTap(onBus: 0, bufferSize: 2_048, format: nil) { buffer, _ in
             PlaybackLevelMeter.shared.push(bands: Self.spectrumBands(buffer: buffer))
         }
+
+        // The system posts this when the audio configuration changes (sleep/wake,
+        // output-device switch, sample-rate change): the engine stops and any
+        // scheduled buffers' completions are silently lost. Without this handler,
+        // `pending` never returns to zero, the drain never fires, and the controller
+        // wedges every future utterance behind a lock that never clears (observed
+        // 2026-07-17 after an overnight sleep). Reset and report so it recovers.
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+        ) { [weak self] _ in
+            self?.handleConfigurationChange()
+        }
+    }
+
+    deinit {
+        if let configChangeObserver {
+            NotificationCenter.default.removeObserver(configChangeObserver)
+        }
+    }
+
+    /// Treat a configuration change like an interruption: drop the dead buffers'
+    /// accounting, stop the graph so the next schedule starts fresh against the
+    /// new device, and signal the controller if an utterance was in flight.
+    private func handleConfigurationChange() {
+        lock.lock()
+        let hadPending = pending > 0
+        pending = 0
+        lock.unlock()
+        player.stop()
+        engine.stop()
+        if hadPending { onPlaybackError?() }
     }
 
     /// Reduce `buffer`'s channel-0 samples to `SpectrumBands.bandCount` normalized band
