@@ -152,7 +152,9 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.contentView = effect
         w.backgroundColor = .clear
         w.isOpaque = false
-        w.hasShadow = true
+        // No system shadow: its rendering includes a faint light rim that reads as
+        // a border around the dark faceplate in dark mode. The instrument sits flat.
+        w.hasShadow = false
 
         // Position bottom-right of screen (margin holds regardless of restored width)
         if let screen = NSScreen.main {
@@ -283,12 +285,9 @@ struct OverlayView: View {
         let recorder = overlay.currentRecorder
 
         ZStack(alignment: .bottom) {
-            HStack(spacing: 8) {
-                WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError, statusText: overlay.statusText, style: overlay.analyzerStyle)
-            }
-            .padding(.leading, 10)
-            .padding(.trailing, 14)
-            .padding(.vertical, 7)
+            // Edge-to-edge: the analyzer runs to the faceplate's edges (the window
+            // mask clips the rounded corners).
+            WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError, statusText: overlay.statusText, style: overlay.analyzerStyle)
 
             // Silence countdown — hands-free only, along the pill's bottom edge.
             if overlay.interactionMode == .handsFree {
@@ -317,42 +316,22 @@ struct WaveformBar: View {
     var style: OverlayStyle = .defaultStyle
 
     var body: some View {
-        HStack(spacing: 6) {
-            // REC lamp: a fixed panel fixture — unlit socket normally, blinking red
-            // while recording. No other state lights it (the grid carries the rest).
-            if recorder.state == .recording {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-                    let t = timeline.date.timeIntervalSinceReferenceDate
-                    let pulse = (sin(t * 2 * .pi / 1.2) + 1) / 2
-                    Circle()
-                        .fill(OWColor.recording)
-                        .frame(width: 10, height: 10)
-                        .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
-                        .shadow(color: OWColor.recording.opacity(0.8), radius: 3)
-                        .opacity(0.35 + 0.65 * pulse)
-                }
+        // Analyzer display — one of the selectable styles (SpectrumStyles.swift).
+        // A status word takes over the area as a scrolling LED marquee when present.
+        // (The REC lamp retired 2026-07-17: the live mic spectrum itself is the
+        // recording indication.)
+        Group {
+            if statusText != nil {
+                marquee(word: statusIsError ? "ERROR" : "LOADING", color: statusIsError ? OWColor.danger : OWColor.accent)
             } else {
-                Circle()
-                    .fill(Color.black.opacity(0.35))
-                    .frame(width: 10, height: 10)
-                    .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
-            }
-
-            // Analyzer display — one of the selectable styles (SpectrumStyles.swift).
-            // A status word takes over the area as a scrolling LED marquee when present.
-            Group {
-                if statusText != nil {
-                    marquee(word: statusIsError ? "ERROR" : "LOADING", color: statusIsError ? OWColor.danger : OWColor.accent)
-                } else {
-                    let live = (isTTSPlaying && recorder.state == .idle)
-                        ? playbackMeter.spectrumBands : recorder.spectrumBands
-                    let bands = live.isEmpty
-                        ? [Float](repeating: 0, count: SpectrumBands.bandCount) : live
-                    switch style {
-                    case .ledBars: LEDBarsStyleView(bands: bands)
-                    case .graph: GraphStyleView(bands: bands)
-                    case .curtain: CurtainStyleView(bands: bands)
-                    }
+                let live = (isTTSPlaying && recorder.state == .idle)
+                    ? playbackMeter.spectrumBands : recorder.spectrumBands
+                let bands = live.isEmpty
+                    ? [Float](repeating: 0, count: SpectrumBands.bandCount) : live
+                switch style {
+                case .ledBars: LEDBarsStyleView(bands: bands)
+                case .graph: GraphStyleView(bands: bands)
+                case .curtain: CurtainStyleView(bands: bands)
                 }
             }
         }
