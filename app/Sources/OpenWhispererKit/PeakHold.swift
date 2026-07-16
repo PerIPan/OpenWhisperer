@@ -16,6 +16,14 @@ public struct PeakHold {
 
     /// Advance to `time` and fold in the live `bands`; returns current peak levels.
     public mutating func update(bands: [Float], at time: Double) -> [Float] {
+        // All-zero input means "idle" (the taps publish zeros when nothing is
+        // recording or playing): clear the caps immediately so the render
+        // timeline can pause without freezing caps mid-air.
+        if bands.allSatisfy({ $0 == 0 }) {
+            peaks = bands
+            heldAt = [Double](repeating: time, count: bands.count)
+            return peaks
+        }
         if peaks.count != bands.count {
             peaks = bands
             heldAt = [Double](repeating: time, count: bands.count)
