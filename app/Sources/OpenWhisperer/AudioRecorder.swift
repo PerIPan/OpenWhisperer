@@ -227,6 +227,12 @@ class AudioRecorder: ObservableObject {
             let rms = self.computeRMS(buffer: buffer)
             let bands = self.spectrumBands(buffer: buffer)
             DispatchQueue.main.async {
+                // Drop stale publishes: a tap callback can enqueue this block just
+                // before stopRecording() (also on main) removes the tap and clears
+                // the published state — landing after the clear and freezing a
+                // leftover spectrum frame on the overlay. stopRecording nils the
+                // engine before clearing, so a nil engine marks this block stale.
+                guard self.engine != nil else { return }
                 self.audioLevel = self.audioLevel * (1 - self.smoothing) + rms * self.smoothing
                 self.levelHistory.removeFirst()
                 self.levelHistory.append(self.audioLevel)
