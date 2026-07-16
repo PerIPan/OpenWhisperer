@@ -92,6 +92,9 @@ enum Paths {
     /// (menu toggle off, or the overlay's X button). Absent = show on launch.
     static let overlayHidden = appSupport.appendingPathComponent("overlay_hidden")
 
+    /// Overlay analyzer style: led_bars | graph | curtain (see OverlayStyle.parse).
+    static let overlayStyle = appSupport.appendingPathComponent("overlay_style")
+
     /// Selected AI platform (claudeCode, codexCLI)
     static let selectedPlatform = appSupport.appendingPathComponent("selected_platform")
 

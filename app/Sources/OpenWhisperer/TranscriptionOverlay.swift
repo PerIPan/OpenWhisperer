@@ -25,6 +25,10 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     /// The current PTT key label shown in the overlay (e.g. "Ctrl", "fn").
     @Published var pttKeyLabel: String = "Ctrl"
 
+    /// Active analyzer style (LED bars / graph / curtain). Read from the pref
+    /// file on show(); Settings writes the file and updates this directly.
+    @Published var analyzerStyle: OverlayStyle = .defaultStyle
+
     /// Current interaction mode — determines hint text during recording.
     @Published var interactionMode: InteractionMode = .pressToTalk
 
@@ -71,6 +75,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
 
     func show() {
         try? FileManager.default.removeItem(at: Paths.overlayHidden)
+        analyzerStyle = OverlayStyle.parse(try? String(contentsOf: Paths.overlayStyle, encoding: .utf8))
         if let w = window {
             // FIX: Never recreate NSHostingView on an already-constructed window.
             // Recreating it tears down the entire SwiftUI render tree, cancels
@@ -100,7 +105,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         hostingView.sizingOptions = [.minSize, .intrinsicContentSize, .preferredContentSize]
 
         let w = KeyableWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 220, height: 52),
+            contentRect: NSRect(x: 0, y: 0, width: OverlayView.pillWidth, height: OverlayView.pillHeight),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -260,7 +265,7 @@ struct OverlayView: View {
     /// would freeze the reference at the moment NSHostingView was constructed.
     @ObservedObject var overlay: TranscriptionOverlay
 
-    static let pillHeight: CGFloat = 52
+    static let pillHeight: CGFloat = 84   // grew from 52 for the analyzer styles (2026-07-16 spec)
     static let pillWidth: CGFloat = 220
 
     var body: some View {
@@ -270,7 +275,7 @@ struct OverlayView: View {
 
         ZStack(alignment: .bottom) {
             HStack(spacing: 8) {
-                WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError, statusText: overlay.statusText)
+                WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError, statusText: overlay.statusText, style: overlay.analyzerStyle)
             }
             .padding(.leading, 10)
             .padding(.trailing, 14)
@@ -298,6 +303,8 @@ struct WaveformBar: View {
     var statusIsError: Bool = false
     /// Non-nil while a status word ("Loading…"/error) should take over the grid as a marquee.
     var statusText: String? = nil
+    /// Active analyzer style — which renderer fills the display area.
+    var style: OverlayStyle = .defaultStyle
 
     var body: some View {
         HStack(spacing: 6) {
@@ -321,68 +328,39 @@ struct WaveformBar: View {
                     .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
             }
 
-            // Vintage segmented spectrum display — see `spectrum(bands:)`. A status
-            // word takes over the grid as a scrolling LED marquee when present.
+            // Analyzer display — one of the selectable styles (SpectrumStyles.swift).
+            // A status word takes over the area as a scrolling LED marquee when present.
             Group {
                 if statusText != nil {
                     marquee(word: statusIsError ? "ERROR" : "LOADING", color: statusIsError ? OWColor.danger : OWColor.accent)
-                } else if isTTSPlaying && recorder.state == .idle {
-                    spectrum(bands: playbackMeter.spectrumBands.isEmpty
-                             ? Array(repeating: 0, count: SpectrumBands.bandCount)
-                             : playbackMeter.spectrumBands)
                 } else {
-                    spectrum(bands: recorder.spectrumBands.isEmpty ? Array(repeating: 0, count: SpectrumBands.bandCount) : recorder.spectrumBands)
-                }
-            }
-        }
-    }
-
-    // MARK: - Segmented Spectrum
-
-    /// Vintage spectrum columns: one column per band, `segmentCount` discrete
-    /// segments each; lit count tracks band energy, unlit segments stay ghosted.
-    /// Top lit segment gets the deep-gold "peak" accent.
-    private static let segmentCount = 7
-
-    @ViewBuilder
-    private func spectrum(bands: [Float]) -> some View {
-        GeometryReader { geo in
-            let columns = max(bands.count, 1)
-            let columnWidth = geo.size.width / CGFloat(columns)
-            let segmentHeight = (geo.size.height - CGFloat(Self.segmentCount - 1) * 2) / CGFloat(Self.segmentCount)
-            HStack(spacing: 0) {
-                ForEach(0..<columns, id: \.self) { band in
-                    let level = band < bands.count ? bands[band] : 0
-                    let lit = Int((CGFloat(level) * CGFloat(Self.segmentCount)).rounded())
-                    VStack(spacing: 2) {
-                        ForEach((0..<Self.segmentCount).reversed(), id: \.self) { segment in
-                            let isLit = segment < lit
-                            let color = isLit
-                                ? (segment == lit - 1 ? OWColor.accentDeep : OWColor.accent)
-                                : OWColor.accent.opacity(0.15)
-                            RoundedRectangle(cornerRadius: 1.5)
-                                .fill(color)
-                                .shadow(color: isLit ? color.opacity(0.7) : .clear, radius: 2.5)
-                                .frame(height: segmentHeight)
-                        }
+                    let live = (isTTSPlaying && recorder.state == .idle)
+                        ? playbackMeter.spectrumBands : recorder.spectrumBands
+                    let bands = live.isEmpty
+                        ? [Float](repeating: 0, count: SpectrumBands.bandCount) : live
+                    switch style {
+                    case .ledBars: LEDBarsStyleView(bands: bands)
+                    case .graph: GraphStyleView(bands: bands)
+                    case .curtain: CurtainStyleView(bands: bands)
                     }
-                    .frame(width: max(columnWidth - 4, 1))
-                    .padding(.horizontal, 2)
                 }
             }
         }
-        .clipped()
     }
 
     // MARK: - Status Marquee
 
-    /// LED marquee: scrolls the status word across the 12×7 grid, right to left,
+    /// Marquee window width in dot-matrix cell columns — its own constant now
+    /// (the old code borrowed the vintage spectrum's band count).
+    private static let marqueeColumns = 24
+
+    /// LED marquee: scrolls the status word across the cell grid, right to left,
     /// with a full blank grid-width lead-in/out. ~8 columns/second.
     @ViewBuilder
     private func marquee(word: String, color: Color) -> some View {
         let columns = DotMatrix.columns(for: word)
         TimelineView(.periodic(from: .now, by: 0.12)) { timeline in
-            let gridWidth = SpectrumBands.bandCount
+            let gridWidth = Self.marqueeColumns
             let cycle = columns.count + gridWidth
             let step = Int(timeline.date.timeIntervalSinceReferenceDate / 0.12) % cycle
             let window: [[Bool]] = (0..<gridWidth).map { cell in
@@ -395,8 +373,9 @@ struct WaveformBar: View {
         }
     }
 
-    /// Renders a 12-column window of 7-row cells with the same LED cell styling
-    /// (bloom on lit, ghost sockets unlit) as the spectrum.
+    /// Renders a cell-column window of 7-row dot-matrix cells: lit dots bloom,
+    /// unlit cells stay transparent (the vintage ghost sockets retired with the
+    /// gold grid, keeping the marquee style-agnostic).
     private func matrix(window: [[Bool]], color: Color) -> some View {
         GeometryReader { geo in
             let columnWidth = geo.size.width / CGFloat(window.count)
@@ -407,7 +386,7 @@ struct WaveformBar: View {
                         ForEach(0..<DotMatrix.rows, id: \.self) { row in
                             let isLit = window[columnIndex][row]
                             RoundedRectangle(cornerRadius: 1.5)
-                                .fill(isLit ? color : OWColor.accent.opacity(0.15))
+                                .fill(isLit ? color : Color.clear)
                                 .shadow(color: isLit ? color.opacity(0.7) : .clear, radius: 2.5)
                                 .frame(height: segmentHeight)
                         }
