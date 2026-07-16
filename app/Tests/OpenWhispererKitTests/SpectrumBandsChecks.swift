@@ -38,5 +38,23 @@ func spectrumBandsFailures() -> [String] {
     expect(boosted[expected] > lit[expected], "gainBoosts",
            "boosted \(boosted[expected]) vs \(lit[expected])")
 
+    // 96-band layout (overlay analyzer styles, 2026-07-16 spec)
+    expect(SpectrumBands.bandCount == 96, "bandCount96", "got \(SpectrumBands.bandCount)")
+    expect(abs(SpectrumBands.centerFrequencies.first! - 50) < 0.5, "lo50", "got \(SpectrumBands.centerFrequencies.first!)")
+    expect(abs(SpectrumBands.centerFrequencies.last! - 7_500) < 0.5, "hi7500", "got \(SpectrumBands.centerFrequencies.last!)")
+    expect(SpectrumBands.centerFrequencies.last! < 8_000, "underMicNyquist", "top center must stay below 8 kHz")
+    expect(zip(SpectrumBands.centerFrequencies, SpectrumBands.centerFrequencies.dropFirst()).allSatisfy { $0 < $1 },
+           "monotonic", "centers must ascend")
+
+    // aggregate: max-pooling reducer
+    let agg = SpectrumBands.aggregate([0.1, 0.9, 0.2, 0.3, 0.8, 0.1], into: 3)
+    expect(agg == [0.9, 0.3, 0.8], "aggregateMax", "got \(agg)")
+    let remainder = SpectrumBands.aggregate([1, 2, 3, 4, 5], into: 2)
+    expect(remainder == [2, 5], "aggregateRemainder", "got \(remainder)")
+    expect(SpectrumBands.aggregate([], into: 4) == [0, 0, 0, 0], "aggregateEmpty", "empty input → zeros")
+    expect(SpectrumBands.aggregate([1, 2], into: 0) == [], "aggregateZero", "count 0 → []")
+    let identity = SpectrumBands.aggregate([0.5, 0.6], into: 2)
+    expect(identity == [0.5, 0.6], "aggregateIdentity", "got \(identity)")
+
     return failures
 }

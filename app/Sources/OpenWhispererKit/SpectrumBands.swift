@@ -5,13 +5,27 @@ import Foundation
 /// Accelerate) so it stays CLT-testable; ~12 × N multiplies per call is trivial
 /// at tap cadence.
 public enum SpectrumBands {
-    public static let bandCount = 8
-    /// Log-spaced centers, 80 Hz … 6 kHz (voice-focused).
+    /// One shared analysis resolution for every overlay style (styles that render
+    /// fewer columns reduce via `aggregate`). 96 log-spaced centers, 50 Hz … 7.5 kHz —
+    /// the top center stays under the 16 kHz mic feed's 8 kHz Nyquist.
+    public static let bandCount = 96
     public static let centerFrequencies: [Float] = {
-        let lo: Float = 80, hi: Float = 6_000
+        let lo: Float = 50, hi: Float = 7_500
         let ratio = pow(hi / lo, 1 / Float(bandCount - 1))
         return (0..<bandCount).map { lo * pow(ratio, Float($0)) }
     }()
+
+    /// Max-pool `bands` down to `count` columns (e.g. 96 → 24 for LED bars).
+    /// Group boundaries are proportional, so non-divisible counts distribute evenly.
+    public static func aggregate(_ bands: [Float], into count: Int) -> [Float] {
+        guard count > 0 else { return [] }
+        guard !bands.isEmpty else { return [Float](repeating: 0, count: count) }
+        return (0..<count).map { i in
+            let j0 = i * bands.count / count
+            let j1 = max(j0 + 1, (i + 1) * bands.count / count)
+            return bands[j0..<min(j1, bands.count)].max() ?? 0
+        }
+    }
 
     /// Normalized (0…1) energy per band, log-scaled so speech reads well.
     /// - parameter gainDb: Per-source loudness compensation (dB); default 0 for TTS playback, ~14 for mic input.

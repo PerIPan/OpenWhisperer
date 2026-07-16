@@ -50,7 +50,6 @@ enum OWColor {
     static let inkFaint = Color.ow(0x978C7E, 0x877D6F)
     // Accent (gold)
     static let accent = Color.ow(0xC0A06A, 0xCBA86A)
-    static let accentDeep = Color.ow(0x98763F, 0xD8B677)
     // Fills
     static let pillFill = Color.ow(0xEADFC8, 0x342D24)
     // Status semantics — warm equivalents of system red/amber/green so dots + badges don't
