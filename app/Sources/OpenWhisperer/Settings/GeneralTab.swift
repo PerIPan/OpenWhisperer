@@ -1,5 +1,6 @@
 import SwiftUI
 import ServiceManagement
+import OpenWhispererKit
 
 struct GeneralTab: View {
     @EnvironmentObject var serverManager: ServerManager
@@ -10,6 +11,8 @@ struct GeneralTab: View {
     @State private var launchAtLoginLoaded = false
     @State private var handsFree = false
     @State private var diagnosticsCopied = false
+    @State private var overlayStyle: OverlayStyle = .defaultStyle
+    @State private var overlayStyleLoaded = false
 
     var body: some View {
         Form {
@@ -27,6 +30,19 @@ struct GeneralTab: View {
                             DispatchQueue.main.async { launchAtLogin = service.status == .enabled }
                         }
                     }
+            }
+
+            Section("Overlay") {
+                Picker("Analyzer style", selection: $overlayStyle) {
+                    Text("LED Bars").tag(OverlayStyle.ledBars)
+                    Text("Graph").tag(OverlayStyle.graph)
+                    Text("Curtain").tag(OverlayStyle.curtain)
+                }
+                .onChange(of: overlayStyle) { _, newValue in
+                    guard overlayStyleLoaded else { return }
+                    try? newValue.rawValue.write(to: Paths.overlayStyle, atomically: true, encoding: .utf8)
+                    TranscriptionOverlay.shared.analyzerStyle = newValue
+                }
             }
 
             Section("Permissions") {
@@ -79,6 +95,8 @@ struct GeneralTab: View {
             }
             dictationManager.recorder.checkPermission()
             if handsFree { dictationManager.keywordDetector.checkPermission() }
+            overlayStyle = OverlayStyle.parse(try? String(contentsOf: Paths.overlayStyle, encoding: .utf8))
+            DispatchQueue.main.async { overlayStyleLoaded = true }
         }
     }
 
