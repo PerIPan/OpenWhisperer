@@ -19,7 +19,9 @@ public enum VoiceMarker {
     }
 
     /// Prepend the marker for MCP-tier targets; return the text unchanged otherwise.
+    /// Empty text always passes through — a collapsed transcript must not become a bare marker.
     public static func apply(_ text: String, bundleID: String?) -> String {
-        shouldMark(bundleID: bundleID) ? "\(glyph) \(text)" : text
+        guard !text.isEmpty else { return text }
+        return shouldMark(bundleID: bundleID) ? "\(glyph) \(text)" : text
     }
 }

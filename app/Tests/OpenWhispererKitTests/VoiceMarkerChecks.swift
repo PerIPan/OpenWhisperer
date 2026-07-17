@@ -37,5 +37,10 @@ func voiceMarkerFailures() -> [String] {
         failures.append("VoiceMarker.apply: text changed for nil bundle")
     }
 
+    // Empty text must never gain a marker.
+    if VoiceMarker.apply("", bundleID: "com.anthropic.claudefordesktop") != "" {
+        failures.append("VoiceMarker.apply: empty text must never gain a marker")
+    }
+
     return failures
 }
