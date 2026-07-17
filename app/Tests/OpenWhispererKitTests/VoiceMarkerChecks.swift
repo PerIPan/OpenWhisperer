@@ -27,7 +27,7 @@ func voiceMarkerFailures() -> [String] {
     }
 
     // The footer is an exact-match trailing instruction naming the speak tool.
-    if VoiceMarker.footer != "\u{1F399} dictated — reply aloud first via the OpenWhisperer speak tool." {
+    if VoiceMarker.footer != "\u{1F399} dictated — please reply aloud first using the OpenWhisperer speak tool." {
         failures.append("VoiceMarker.footer: unexpected text, got '\(VoiceMarker.footer)'")
     }
 

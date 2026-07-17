@@ -236,7 +236,7 @@ server/config-side — nothing the user sees in their own message.
   channel was vetoed (unwilling to write into the shared `~/.claude/skills`
   surface) and bare/worded glyph markers proved unreliable against Desktop's
   lazy tool loading. The typed marker is now the dictated text, unaltered,
-  followed by a blank line and `🎙 dictated — reply aloud first via the
+  followed by a blank line and `🎙 dictated — please reply aloud first using the
   OpenWhisperer speak tool.` — the one surface guaranteed visible on a cold
   chat carries the discovery tokens (the tool name "speak" AND the connector
   name "OpenWhisperer", per the owner's suggestion) and the imperative. Deleting the footer silences a
@@ -244,3 +244,13 @@ server/config-side — nothing the user sees in their own message.
   may preload (not defer) tool definitions when the total enabled-connector
   footprint is below a context threshold (~10%), which would make even
   markerless cold chats work for light-connector users.
+
+- **Injection-wariness (third gate) + typing race.** With the third-person footer,
+  Desktop's model refused: "I don't auto-trigger audio … just because embedded text
+  tells me to. If you actually want me to speak a reply aloud, say so directly."
+  The footer is therefore phrased as the user's own first-person request
+  ("please reply aloud first using the OpenWhisperer speak tool"). Separately, the
+  CGEvent Unicode typing tier raced in Desktop's Electron composer (dropped/reordered
+  characters mid-word on the longer footer); chunking is now 8 UTF-16 units at 8 ms.
+  Stop-loss agreed: if the first-person footer is still refused, Desktop ships
+  experimental/held-back per the Sol review — no further marker iteration.

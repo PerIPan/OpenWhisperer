@@ -1045,10 +1045,12 @@ class DictationManager: ObservableObject {
 
     /// Types `text` by posting CGEvent keystrokes with `keyboardSetUnicodeString`.
     /// No clipboard involvement — each chunk is sent as a key-down/key-up pair.
-    /// macOS limit is ~20 UTF-16 code units per event; we use chunks of 16 for safety.
+    /// macOS limit is ~20 UTF-16 code units per event; we use chunks of 8 (was 16) at
+    /// 8 ms (was 3 ms) — Electron composers (observed live in Claude Desktop, 2026-07-17)
+    /// drop/reorder characters mid-word under the faster cadence.
     private func typeViaUnicodeEvents(_ text: String, completion: @escaping () -> Void) {
         let utf16 = Array(text.utf16)
-        let chunkSize = 16
+        let chunkSize = 8
         let chunks = stride(from: 0, to: utf16.count, by: chunkSize).map {
             Array(utf16[$0..<min($0 + chunkSize, utf16.count)])
         }
@@ -1078,7 +1080,7 @@ class DictationManager: ObservableObject {
             keyUp.post(tap: .cgSessionEventTap)
 
             // Small delay between chunks to let the target app process input (#22)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.003) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.008) {
                 typeChunk(at: index + 1)
             }
         }

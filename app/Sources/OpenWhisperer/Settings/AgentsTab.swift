@@ -68,7 +68,7 @@ struct AgentsTab: View {
         case .antigravity:
             return "Writes the speak MCP server into ~/.gemini/config/mcp_config.json and the PreInvocation hook into ~/.gemini/config/hooks.json. Start a new agy session afterward."
         case .claudeDesktop:
-            return "Registers the speak tool in claude_desktop_config.json. Restart Claude Desktop after applying; dictated prompts get a trailing \u{201C}🎙 dictated — reply aloud first via the OpenWhisperer speak tool.\u{201D} footer that cues spoken replies."
+            return "Registers the speak tool in claude_desktop_config.json. Restart Claude Desktop after applying; dictated prompts get a trailing \u{201C}🎙 dictated — please reply aloud first using the OpenWhisperer speak tool.\u{201D} footer that cues spoken replies."
         }
     }
 }
@@ -221,7 +221,7 @@ struct HowItWorksSheet: View {
             result = [
                 SheetSection(
                     heading: "What Auto-Apply does",
-                    body: "Claude Desktop has no hook system, so the whole integration is the MCP entry — nothing to trust. Auto-Apply registers the speak tool (as a stdio server) in claude_desktop_config.json. Dictating into Claude Desktop appends a trailing footer line to the transcript — \"🎙 dictated — reply aloud first via the OpenWhisperer speak tool.\" — which names both the connector and the speak tool (so Desktop's lazy tool loading picks it up) and carries the server's standing instruction to call it first (every turn, if you set replies to always). Playback runs in this menubar app. Delete that footer line before sending to keep a turn silent; type it yourself to force one. Restart Claude Desktop afterward."),
+                    body: "Claude Desktop has no hook system, so the whole integration is the MCP entry — nothing to trust. Auto-Apply registers the speak tool (as a stdio server) in claude_desktop_config.json. Dictating into Claude Desktop appends a trailing footer line to the transcript — \"🎙 dictated — please reply aloud first using the OpenWhisperer speak tool.\" — which names both the connector and the speak tool (so Desktop's lazy tool loading picks it up) and carries the server's standing instruction to call it first (every turn, if you set replies to always). Playback runs in this menubar app. Delete that footer line before sending to keep a turn silent; type it yourself to force one. Restart Claude Desktop afterward."),
                 SheetSection(
                     heading: "Do it by hand",
                     body: """

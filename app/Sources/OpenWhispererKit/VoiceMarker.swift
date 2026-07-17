@@ -17,8 +17,12 @@ public enum VoiceMarker {
     /// U+1F399 STUDIO MICROPHONE, bare — text presentation (monochrome) where honored.
     public static let glyph = "\u{1F399}"
 
-    /// The trailing instruction footer appended to marked transcripts.
-    public static let footer = "\(glyph) dictated — reply aloud first via the OpenWhisperer speak tool."
+    /// The trailing instruction footer appended to marked transcripts. Phrased as the user's
+    /// own first-person request ("please…") — live testing on Claude Desktop showed the model
+    /// refuses third-person embedded instructions as injection-like ("If you actually want me
+    /// to speak a reply aloud, say so directly"), but complies once the footer reads as a
+    /// direct ask.
+    public static let footer = "\(glyph) dictated — please reply aloud first using the OpenWhisperer speak tool."
 
     /// Bundle IDs whose dictations are marked (the MCP tier).
     public static let targetBundleIDs: Set<String> = ["com.anthropic.claudefordesktop"]
