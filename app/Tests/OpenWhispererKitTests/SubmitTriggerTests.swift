@@ -29,6 +29,7 @@ struct KitTestRunner {
         failures += mcpInstructionsFailures()
         failures += mcpBridgeFailures()
         failures += desktopConfigMergeFailures()
+        failures += desktopSkillFailures()
 
         if failures.isEmpty {
             print("✅ OpenWhispererKit: all checks passed")

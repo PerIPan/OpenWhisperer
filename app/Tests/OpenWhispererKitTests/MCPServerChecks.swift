@@ -184,15 +184,15 @@ func mcpServerFailures() -> [String] {
         }
     }
 
-    // tools/list with guidance → speak description carries it; list_voices does not.
+    // tools/list with guidance → speak description STARTS with it (read first); list_voices does not.
     let listReq = #"{"jsonrpc":"2.0","id":10,"method":"tools/list"}"#
     if case let .json(data) = server.handle(Data(listReq.utf8), guidance: "SPEAK-FIRST GUIDANCE"),
        let r = decode(data),
        let tools = (r["result"] as? [String: Any])?["tools"] as? [[String: Any]] {
         let speak = tools.first { ($0["name"] as? String) == "speak" }
         let voices = tools.first { ($0["name"] as? String) == "list_voices" }
-        if ((speak?["description"] as? String)?.contains("SPEAK-FIRST GUIDANCE")) != true {
-            failures.append("tools/list: speak description missing guidance")
+        if ((speak?["description"] as? String)?.hasPrefix("SPEAK-FIRST GUIDANCE")) != true {
+            failures.append("tools/list: speak description does not start with guidance")
         }
         if ((voices?["description"] as? String)?.contains("SPEAK-FIRST GUIDANCE")) == true {
             failures.append("tools/list: guidance leaked into list_voices description")

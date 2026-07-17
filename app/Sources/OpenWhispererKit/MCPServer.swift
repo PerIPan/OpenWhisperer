@@ -55,7 +55,7 @@ public struct MCPServer {
         case "tools/list":
             var speakDescription = "Synthesize and play the given text aloud through OpenWhisperer's "
                 + "local voice (text-to-speech). Fire-and-forget: returns immediately while audio plays; subsequent requests are automatically queued by the engine to play sequentially and gaplessly. To orchestrate a multi-actor conversation or dialogue, do NOT write scripts or add delays/sleeps; instead, call this tool sequentially multiple times with different voice IDs (discovered using the list_voices tool)."
-            if let guidance { speakDescription += "\n\n" + guidance }
+            if let guidance { speakDescription = guidance + "\n\n" + speakDescription }
             let speak: [String: Any] = [
                 "name": "speak",
                 "description": speakDescription,

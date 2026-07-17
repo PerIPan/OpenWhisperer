@@ -187,3 +187,47 @@ spike protocol above, mirroring the 13/13 methodology.
   while bare `🎙 …` never does. The typed marker is therefore `🎙 speak ` (leading),
   `VoiceMarker.phrase`. The personal-preferences line is superseded and no longer
   recommended in setup copy; it remains here only as a record.
+
+## Reverted: `🎙 speak` wording (2026-07-17, later same day)
+
+The `"🎙 speak"` word trick above is **reverted**. The marker is back to the bare
+`🎙` glyph (`VoiceMarker.glyph`, no `phrase`), for the same reason it was added
+in the first place, seen from the other side: a word in the transcript buys
+*probability*, not *certainty*. A follow-up probe using a `🎤`+`speak` variant
+failed to cold-load the tools reliably — the matcher's behavior isn't a stable
+API to lean on, and baking a word into every dictated transcript to chase it is
+the wrong trade. Reliability instead comes from three independent pieces, none
+of which touch what gets typed into the prompt:
+
+1. **A bundled, always-visible skill.** `DesktopSkill` (Kit) ships a
+   `~/.claude/skills/openwhisperer-voice/SKILL.md`. Claude Desktop (like Claude
+   Code) keeps every personal skill's `name` + `description` in the model's
+   context at all times via progressive disclosure — unlike MCP tool
+   descriptions, which Desktop loads lazily by relevance-matching the user
+   message. The skill's description itself is the trigger ("whenever the
+   user's message begins with 🎙 …"), so it fires cold, on the very first
+   dictated turn of a brand-new chat, without needing any word in the
+   transcript to accidentally relevance-match a tool name.
+   `ConfigManager.applyToClaudeDesktop()` installs it alongside the MCP config
+   entry during Auto-Apply; a skill-write failure doesn't fail the apply (the
+   config half still works), it's reported as a degraded-but-successful apply.
+   The skill file is shared with Claude Code's skills directory but is inert
+   there — no platform types a 🎙 marker into a CLI prompt, so its trigger
+   condition never matches.
+2. **Imperative anti-ask wording.** `MCPInstructions.standing` now appends,
+   after the "exactly once" sentence: *"Never ask whether to speak — the
+   leading 🎙 itself is the request"* (voice mode) or *"Never ask whether to
+   speak — call it on every turn"* (always mode). The skill carries the same
+   imperative. This targets a distinct failure mode from cold-start discovery:
+   a model that *has* loaded the tools but treats speaking as optional and
+   asks the user first.
+3. **Guidance prepended, not appended, to the speak tool description.**
+   `MCPServer.handle`'s `tools/list` now builds the description as
+   `guidance + "\n\n" + original` (was the reverse). Whatever the model reads
+   first is more likely to shape behavior; the standing instruction is now the
+   first text of the description rather than a trailing addendum after the
+   tool's mechanical explanation.
+
+Net effect: the transcript typed into Claude Desktop's composer is unchanged
+from the original design (bare `🎙 text`, no word). All three mitigations live
+server/config-side — nothing the user sees in their own message.

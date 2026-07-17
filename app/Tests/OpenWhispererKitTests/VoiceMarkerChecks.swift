@@ -12,11 +12,6 @@ func voiceMarkerFailures() -> [String] {
         failures.append("VoiceMarker.glyph: expected a single scalar, got \(VoiceMarker.glyph.unicodeScalars.count)")
     }
 
-    // The phrase is the glyph plus the word that trips Claude Desktop's tool matcher.
-    if VoiceMarker.phrase != "\u{1F399} speak" {
-        failures.append("VoiceMarker.phrase: expected '🎙 speak', got '\(VoiceMarker.phrase)'")
-    }
-
     // Claude Desktop is in the v1 allowlist.
     if !VoiceMarker.shouldMark(bundleID: "com.anthropic.claudefordesktop") {
         failures.append("VoiceMarker.shouldMark: Claude Desktop bundle not matched")
@@ -31,8 +26,8 @@ func voiceMarkerFailures() -> [String] {
         failures.append("VoiceMarker.shouldMark: Slack must not match")
     }
 
-    // apply prepends "🎙 speak " for targets and passes through otherwise.
-    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "\u{1F399} speak hello" {
+    // apply prepends the bare glyph for targets and passes through otherwise.
+    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "\u{1F399} hello" {
         failures.append("VoiceMarker.apply: marker not prepended for Claude Desktop")
     }
     if VoiceMarker.apply("hello", bundleID: "com.apple.Notes") != "hello" {

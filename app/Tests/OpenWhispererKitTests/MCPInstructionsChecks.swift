@@ -14,16 +14,17 @@ func mcpInstructionsFailures() -> [String] {
     // Voice mode: keys off the marker glyph, speak-first, marker treated as invisible.
     let voice = MCPInstructions.standing(mode: .voice, style: nil, voice: nil)
     if !voice.contains(VoiceMarker.glyph) { failures.append("standing(voice): missing marker glyph") }
-    if !voice.contains("\u{1F399} speak") { failures.append("standing(voice): missing '🎙 speak' phrase") }
     if !voice.contains("begins with") { failures.append("standing(voice): missing 'begins with' condition") }
     if !voice.contains("`speak`") { failures.append("standing(voice): missing speak tool reference") }
     if !voice.contains("exactly once") { failures.append("standing(voice): missing 'exactly once'") }
     if !voice.contains("never mention") { failures.append("standing(voice): marker/tool must be unmentionable") }
+    if !voice.contains("Never ask whether to speak") { failures.append("standing(voice): missing 'Never ask whether to speak'") }
 
     // Always mode: every turn, no marker condition.
     let always = MCPInstructions.standing(mode: .always, style: nil, voice: nil)
     if !always.contains("every user turn") { failures.append("standing(always): missing 'every user turn'") }
     if always.contains("begins with") { failures.append("standing(always): must not carry the marker condition") }
+    if !always.contains("Never ask whether to speak") { failures.append("standing(always): missing 'Never ask whether to speak'") }
 
     // Style length phrases mirror resolve_length_phrase.
     let terse = MCPInstructions.standing(mode: .voice, style: "terse", voice: nil)

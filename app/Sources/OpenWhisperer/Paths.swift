@@ -1,4 +1,5 @@
 import Foundation
+import OpenWhispererKit
 
 enum Paths {
     /// ~/Library/Application Support/OpenWhisperer
@@ -119,6 +120,19 @@ enum Paths {
     static let claudeDesktopConfig = {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Claude/claude_desktop_config.json")
+    }()
+
+    /// Personal Claude skills directory (~/.claude/skills). Shared with Claude Code;
+    /// skills are inert there since no platform types markers into a CLI prompt.
+    static let claudeSkillsDir: URL = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude").appendingPathComponent("skills")
+    }()
+
+    /// The bundled `openwhisperer-voice` skill's SKILL.md destination — the cold-start
+    /// tool-discovery channel for Claude Desktop (see DesktopSkill).
+    static let claudeDesktopSkill: URL = {
+        claudeSkillsDir.appendingPathComponent(DesktopSkill.name).appendingPathComponent("SKILL.md")
     }()
 
     /// Codex CLI config (~/.codex/config.toml)

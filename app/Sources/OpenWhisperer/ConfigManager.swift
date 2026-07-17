@@ -276,11 +276,12 @@ enum ConfigManager {
             instructions: """
             OpenWhisperer adds its speak tool to Claude Desktop via MCP — no hooks needed.
 
-            1. Click Auto-Apply (writes the entry into claude_desktop_config.json).
-            2. Quit and reopen Claude Desktop so it launches the server.
-            3. Dictate into Claude Desktop: the transcript gets a leading 🎙 speak that cues
-               the spoken reply. Delete the 🎙 speak before sending to keep a turn silent;
-               type 🎙 speak yourself to force one.
+            1. Click Auto-Apply (writes the entry into claude_desktop_config.json and
+               installs a small "openwhisperer-voice" skill into ~/.claude/skills).
+            2. Quit and reopen Claude Desktop so it launches the server and loads the skill.
+            3. Dictate into Claude Desktop: the transcript gets a leading 🎙 that cues the
+               spoken reply. Delete the 🎙 before sending to keep a turn silent; type 🎙
+               yourself to force one.
 
             Keep the OpenWhisperer menubar app running — it does the actual speaking.
             """
@@ -288,8 +289,11 @@ enum ConfigManager {
         window.show()
     }
 
-    /// Claude Desktop has no hook system; the whole integration is the MCP entry. The
-    /// standing instruction + 🎙 marker replace the UserPromptSubmit handshake (see
+    /// Claude Desktop has no hook system; the whole integration is the MCP entry plus a
+    /// bundled skill. The standing instruction + bare 🎙 marker replace the UserPromptSubmit
+    /// handshake; the skill (always in the model's context via progressive disclosure) is
+    /// what makes cold-start tool discovery reliable, since Desktop's lazy MCP tool loading
+    /// never surfaces the speak tool's description on its own (see
     /// docs/superpowers/specs/2026-07-17-mcp-only-voice-design.md).
     static func applyToClaudeDesktop() -> (success: Bool, message: String) {
         guard let exe = Bundle.main.executablePath else {
@@ -316,10 +320,21 @@ enum ConfigManager {
         }
         do {
             try out.write(to: Paths.claudeDesktopConfig, options: .atomic)
-            return (true, "speak tool registered — restart Claude Desktop to load it")
         } catch {
             return (false, "Write failed: \(error.localizedDescription)")
         }
+
+        // The skill write is best-effort: the config write already succeeded, so a skill
+        // failure shouldn't read as a failed apply — just degraded cold-start discovery.
+        do {
+            try fm.createDirectory(
+                at: Paths.claudeDesktopSkill.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+            try Data(DesktopSkill.markdown.utf8).write(to: Paths.claudeDesktopSkill, options: .atomic)
+        } catch {
+            return (true, "speak tool registered, but the voice skill failed to install (\(error.localizedDescription)) — retry Auto-Apply or copy it manually to \(Paths.claudeDesktopSkill.path)")
+        }
+        return (true, "speak tool + voice skill installed — restart Claude Desktop to load them")
     }
 
     // MARK: - Antigravity CLI (agy): mcp_config.json + hooks.json
@@ -440,9 +455,10 @@ enum ConfigManager {
         case .pi: return checkPiConfigured()
         case .antigravity: return checkAntigravityConfigured()
         case .claudeDesktop:
-            return DesktopConfigMerge.isConfigured(
+            let configured = DesktopConfigMerge.isConfigured(
                 configJSON: try? Data(contentsOf: Paths.claudeDesktopConfig),
                 executablePath: Bundle.main.executablePath ?? "")
+            return configured && FileManager.default.fileExists(atPath: Paths.claudeDesktopSkill.path)
         }
     }
 

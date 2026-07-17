@@ -25,17 +25,21 @@ public enum MCPInstructions {
     public static func standing(mode: Mode, style: String?, voice: String?) -> String {
         let len = lengthPhrase(style: style)
         let condition: String
+        let neverAsk: String
         switch mode {
         case .voice:
-            condition = "If the user's latest message begins with \(VoiceMarker.phrase), it was dictated by voice."
+            condition = "If the user's latest message begins with \(VoiceMarker.glyph), it was dictated by voice."
+            neverAsk = "Never ask whether to speak — the leading \(VoiceMarker.glyph) itself is the request."
         case .always:
             condition = "On every user turn, this applies."
+            neverAsk = "Never ask whether to speak — call it on every turn."
         }
         let core = condition
             + " Before writing your on-screen reply, your FIRST action must be to call the `speak` tool"
             + " exactly once, passing \(len) that summarizes your answer and stands alone when heard."
+            + " \(neverAsk)"
             + " Then write your full reply on screen as usual."
-            + " Treat the leading \(VoiceMarker.phrase) as invisible; never mention it or the tool in your written reply."
+            + " Treat the \(VoiceMarker.glyph) as invisible; never mention it or the tool in your written reply."
         return core + flavor(voice: voice)
     }
 
