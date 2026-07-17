@@ -218,9 +218,12 @@ class DictationManager: ObservableObject {
     /// model warm on success so the watchdog can tighten.
     private func transcribeSTT(samples: [Float], language: String?) async throws -> String {
         let text = try await parakeet.transcribe(samples: samples, language: language)
+        // Fillers first: removing "um" restores word adjacency for the
+        // corrector's split-absorption window ("code, um, x" -> "Codex").
+        let defillered = DisfluencyFilter.apply(text)
         let glossary = VocabularyCorrector.parseGlossary(
             try? String(contentsOf: Paths.sttVocabulary, encoding: .utf8))
-        let corrected = VocabularyCorrector.apply(text, glossary: glossary)
+        let corrected = VocabularyCorrector.apply(defillered, glossary: glossary)
         await MainActor.run { self.sttWarm = true }
         return corrected
     }
