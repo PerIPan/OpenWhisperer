@@ -19,7 +19,7 @@ All changes live in `TranscriptionOverlay.swift`'s window construction, behind a
 
 1. **No dimming when unfocused** — the glass must stay live like `state = .active` does today. If it dims, the glass path is abandoned and the untinted `NSVisualEffectView` fallback ships on *all* OS versions.
 2. **Foreground unaltered** — bright gold sample content (explicit RGB, non-vibrancy colors) must render untinted on top of the glass.
-3. **Dark-face comparison** — the spike cycles three variants, each with sample gold LED content, eyeballed over light *and* dark desktops: untinted `.regular` glass, `.regular` with a faint dark `tintColor` (a ghost of the old smoked face), and `.clear` style. Whichever reads best becomes the default; the others remain one-line tweaks.
+3. **Dark-face comparison** — **each click on the spike window cycles to the next variant** (accepts-first-mouse, so clicking never requires focusing it; the variant name flashes briefly so you know what you're looking at), each with sample gold LED content, eyeballed over light *and* dark desktops: untinted `.regular` glass, `.regular` with a faint dark `tintColor` (a ghost of the old smoked face), `.clear` style, and the untinted `NSVisualEffectView` fallback (what macOS 14–25 users get). Whichever reads best becomes the default; the others remain one-line tweaks. Click-to-cycle is spike-only — the shipped overlay keeps a fixed default (a click handler would fight drag-to-move and Cmd+C).
 
 ## Kept unchanged
 
