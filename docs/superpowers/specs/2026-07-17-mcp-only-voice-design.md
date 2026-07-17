@@ -363,3 +363,26 @@ server/config-side — nothing the user sees in their own message.
   loopback-only-by-design app. That is more setup friction than the hook
   path this tier exists to undercut. At most a power-user recipe someday;
   not a supported path.
+
+- **Skill channel revisited and VALIDATED (2026-07-18, owner-initiated).**
+  After the name-channel failure the owner reopened the vetoed skill idea.
+  Three-step probe (`openwhisperer-voice-probe`, sentinel QUINCE,
+  description = 🎙 trigger + "call the OpenWhisperer speak tool first"):
+  1. Local `~/.claude/skills` install: NOT surfaced — Desktop does not read
+     Claude Code's personal skills directory (it listed 15 cloud-side
+     skills; the probe was absent).
+  2. Account-level upload (Settings → Capabilities → Skills): surfaced,
+     description VERBATIM in cold context — skills are not summarized,
+     settling the session's earlier open assumption.
+  3. Behavior: PASSED — brand-new chat, first dictated 🎙 turn spoke.
+     No warm-up, no nudge, no prior mention of OpenWhisperer. This closes
+     the exact cold-chat hole the shipped design documents.
+  The account route also dissolves the original veto rather than bending
+  it: nothing ever writes into the shared `~/.claude/skills`, and Claude
+  Code sessions never see the skill. Cost: upload is UI-only and
+  per-account — Auto-Apply cannot do it, so it becomes a one-time manual
+  step (same shape as Codex's hook-trust). Design constraint if adopted:
+  the skill must stay STATIC (users won't re-upload on every pref change) —
+  trigger + speak-first only; all dynamic shaping (style, voice, persona,
+  response mode) keeps riding the per-request tool description. Product
+  decision (fold into PR #31 vs follow-up) pending owner.
