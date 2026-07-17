@@ -1,7 +1,7 @@
 # Overlay widget-glass faceplate — design
 
 **Date:** 2026-07-17
-**Status:** Approved (Hakan, in-session)
+**Status:** **Rejected after live on-device trial** (Hakan, 2026-07-17, same day). Fully implemented on branch `overlay-widget-glass` (commit `019c7cd`), installed, and reverted: the analyzer palettes don't read over dark backdrops through untinted `.regular` glass, and Hakan chose reversion over tuning — the escalation knobs below (faint dark `tintColor`, brighter palettes) were deliberately left untried. The smoked-glass dark faceplate stays shipped. Don't re-propose glass without new evidence; if revived, start at those knobs. Findings that remain valid: `NSGlassEffectView` is in the CLT 26.5 SDK, glass does **not** dim in a never-key floating window, foreground RGB content renders unaltered, and `.regular` frost handles mixed light/dark backdrops best of the four spiked variants.
 **Supersedes:** the smoked-glass *dark* instrument face (`.hudWindow` blur + `0x1E1B16` @ 0.75-alpha tint, PRs #27/#28). Hakan judged the overlay too opaque against a macOS desktop-widget reference; this records the direction change per the project's decision-record rule.
 
 ## What
