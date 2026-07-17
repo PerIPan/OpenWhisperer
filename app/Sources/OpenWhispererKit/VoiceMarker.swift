@@ -18,7 +18,7 @@ public enum VoiceMarker {
     public static let glyph = "\u{1F399}"
 
     /// The trailing instruction footer appended to marked transcripts.
-    public static let footer = "\(glyph) dictated — reply aloud first via the speak tool."
+    public static let footer = "\(glyph) dictated — reply aloud first via the OpenWhisperer speak tool."
 
     /// Bundle IDs whose dictations are marked (the MCP tier).
     public static let targetBundleIDs: Set<String> = ["com.anthropic.claudefordesktop"]

@@ -279,7 +279,7 @@ enum ConfigManager {
             1. Click Auto-Apply (writes the entry into claude_desktop_config.json).
             2. Quit and reopen Claude Desktop so it launches the server and loads the tool.
             3. Dictate into Claude Desktop: the transcript gets a trailing footer line —
-               "🎙 dictated — reply aloud first via the speak tool." — that cues the
+               "🎙 dictated — reply aloud first via the OpenWhisperer speak tool." — that cues the
                spoken reply. Delete that footer line before sending to keep a turn
                silent; type it yourself to force one.
 
