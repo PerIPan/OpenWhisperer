@@ -8,6 +8,8 @@ enum OpenWhispererMain {
     static func main() {
         if CommandLine.arguments.contains("--serve-tts") {
             ServeTTSMode.run()
+        } else if CommandLine.arguments.contains("--mcp-stdio") {
+            MCPStdioMode.run()
         } else if let flagIndex = CommandLine.arguments.firstIndex(of: "--diag-parakeet") {
             // Headless Parakeet probe — downloads/loads the TDT v3 CoreML models, then
             // transcribes any audio files listed after the flag. Exercises the full STT
