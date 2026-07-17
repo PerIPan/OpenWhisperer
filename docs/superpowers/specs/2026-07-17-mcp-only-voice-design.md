@@ -280,3 +280,12 @@ server/config-side — nothing the user sees in their own message.
   instruction keys on the signature line and carries the protocol. Declarative
   rather than imperative: pending one live cold-chat probe to confirm the
   softer form still triggers the tool load.
+
+- **Shipping form (owner-final): the closing line `Speak back.`** The glyph is
+  retired: an eyesore in dark mode, a surrogate pair the Electron composer's
+  chunk-reorder race scrambles, and functionally unnecessary — a partially
+  delivered connector fragment still triggered loading, and "speak" is the
+  strongest measured discovery anchor. Two ASCII words, imperative, minimal
+  race exposure. Typing cadence lowered again (6 UTF-16 units / 16 ms) as
+  insurance for long transcripts; the Electron reorder race is a standing
+  Desktop hazard to investigate properly post-merge (AX insertion fails there).

@@ -1,16 +1,8 @@
 import OpenWhispererKit
 
-/// Checks for `VoiceMarker` — the MCP-tier leading dictation marker.
+/// Checks for `VoiceMarker` — the MCP-tier trailing dictation marker.
 func voiceMarkerFailures() -> [String] {
     var failures: [String] = []
-
-    // The glyph is exactly bare U+1F399 (no variation selector).
-    if VoiceMarker.glyph != "\u{1F399}" {
-        failures.append("VoiceMarker.glyph: expected bare U+1F399, got \(VoiceMarker.glyph.unicodeScalars.map { String(format: "U+%04X", $0.value) }.joined(separator: " "))")
-    }
-    if VoiceMarker.glyph.unicodeScalars.count != 1 {
-        failures.append("VoiceMarker.glyph: expected a single scalar, got \(VoiceMarker.glyph.unicodeScalars.count)")
-    }
 
     // Claude Desktop is in the v1 allowlist.
     if !VoiceMarker.shouldMark(bundleID: "com.anthropic.claudefordesktop") {
@@ -26,14 +18,14 @@ func voiceMarkerFailures() -> [String] {
         failures.append("VoiceMarker.shouldMark: Slack must not match")
     }
 
-    // The signature is an exact-match trailing line naming the connector.
-    if VoiceMarker.signature != "\u{1F399} Sent with OpenWhisperer." {
-        failures.append("VoiceMarker.signature: unexpected text, got '\(VoiceMarker.signature)'")
+    // The marker is an exact-match trailing line.
+    if VoiceMarker.marker != "Speak back." {
+        failures.append("VoiceMarker.marker: unexpected text, got '\(VoiceMarker.marker)'")
     }
 
-    // apply appends the signature line, on its own paragraph, for targets; passes through
+    // apply appends the marker line, on its own paragraph, for targets; passes through
     // unchanged otherwise.
-    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "hello\n\n\u{1F399} Sent with OpenWhisperer." {
+    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "hello\n\nSpeak back." {
         failures.append("VoiceMarker.apply: marker not applied for Claude Desktop")
     }
     if VoiceMarker.apply("hello", bundleID: "com.apple.Notes") != "hello" {

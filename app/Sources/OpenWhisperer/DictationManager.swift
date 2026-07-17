@@ -1050,7 +1050,7 @@ class DictationManager: ObservableObject {
     /// drop/reorder characters mid-word under the faster cadence.
     private func typeViaUnicodeEvents(_ text: String, completion: @escaping () -> Void) {
         let utf16 = Array(text.utf16)
-        let chunkSize = 8
+        let chunkSize = 6
         let chunks = stride(from: 0, to: utf16.count, by: chunkSize).map {
             Array(utf16[$0..<min($0 + chunkSize, utf16.count)])
         }
@@ -1079,8 +1079,11 @@ class DictationManager: ObservableObject {
             keyDown.post(tap: .cgSessionEventTap)
             keyUp.post(tap: .cgSessionEventTap)
 
-            // Small delay between chunks to let the target app process input (#22)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.008) {
+            // Small delay between chunks to let the target app process input (#22).
+            // Electron composers (e.g. Claude Desktop) reorder chunks under synthetic
+            // input — observed live even at 8 units/8 ms — so this is deliberately
+            // slower/smaller as insurance against the chunk-reorder race.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) {
                 typeChunk(at: index + 1)
             }
         }
