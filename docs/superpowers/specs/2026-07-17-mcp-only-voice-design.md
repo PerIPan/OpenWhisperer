@@ -254,3 +254,12 @@ server/config-side — nothing the user sees in their own message.
   characters mid-word on the longer footer); chunking is now 8 UTF-16 units at 8 ms.
   Stop-loss agreed: if the first-person footer is still refused, Desktop ships
   experimental/held-back per the Sol review — no further marker iteration.
+
+- **Parked refinement (owner idea, pending footer validation): once-per-chat
+  footer.** Since loaded tools persist within a Desktop conversation, the full
+  footer is only strictly needed on a chat's first dictation; later turns could
+  revert to the bare 🎙 for a cleaner transcript. Blocked on a reliable "new
+  chat" signal — the app cannot currently distinguish a fresh Desktop
+  conversation from a continuing one (candidate heuristics: dictation idle-gap,
+  per-Desktop-launch first dictation), and every heuristic has a
+  bare-mic-in-cold-chat failure mode. Design deliberately deferred.
