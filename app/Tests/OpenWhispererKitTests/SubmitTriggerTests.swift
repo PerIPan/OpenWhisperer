@@ -27,6 +27,7 @@ struct KitTestRunner {
         failures += vocabularyCorrectorFailures()
         failures += voiceMarkerFailures()
         failures += mcpInstructionsFailures()
+        failures += mcpBridgeFailures()
 
         if failures.isEmpty {
             print("✅ OpenWhispererKit: all checks passed")
