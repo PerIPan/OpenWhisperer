@@ -25,6 +25,7 @@ struct KitTestRunner {
         failures += peakHoldFailures()
         failures += overlaySizeFailures()
         failures += vocabularyCorrectorFailures()
+        failures += voiceMarkerFailures()
 
         if failures.isEmpty {
             print("✅ OpenWhispererKit: all checks passed")
