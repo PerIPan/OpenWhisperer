@@ -20,7 +20,7 @@ enum MCPStdioMode {
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = body
-            request.timeoutInterval = 120  // speak synthesis on a cold model can be slow
+            request.timeoutInterval = 120  // generous hang guard; /mcp replies fast (speak is acknowledged before playback)
 
             let done = DispatchSemaphore(value: 0)
             var reply: Data?

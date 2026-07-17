@@ -296,15 +296,26 @@ enum ConfigManager {
             return (false, "Cannot resolve the app binary path")
         }
         let fm = FileManager.default
-        try? fm.createDirectory(
-            at: Paths.claudeDesktopConfig.deletingLastPathComponent(),
-            withIntermediateDirectories: true)
-        let existing = try? Data(contentsOf: Paths.claudeDesktopConfig)
+        do {
+            try fm.createDirectory(
+                at: Paths.claudeDesktopConfig.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+        } catch {
+            return (false, "Couldn't create the Claude config directory: \(error.localizedDescription)")
+        }
+        var existing: Data?
+        if fm.fileExists(atPath: Paths.claudeDesktopConfig.path) {
+            do {
+                existing = try Data(contentsOf: Paths.claudeDesktopConfig)
+            } catch {
+                return (false, "Couldn't read claude_desktop_config.json: \(error.localizedDescription)")
+            }
+        }
         guard let out = DesktopConfigMerge.merged(existingJSON: existing, executablePath: exe) else {
-            return (false, "Failed to serialize claude_desktop_config.json")
+            return (false, "claude_desktop_config.json exists but isn't a valid JSON object — fix or remove it, then retry")
         }
         do {
-            try out.write(to: Paths.claudeDesktopConfig)
+            try out.write(to: Paths.claudeDesktopConfig, options: .atomic)
             return (true, "speak tool registered — restart Claude Desktop to load it")
         } catch {
             return (false, "Write failed: \(error.localizedDescription)")
@@ -430,7 +441,8 @@ enum ConfigManager {
         case .antigravity: return checkAntigravityConfigured()
         case .claudeDesktop:
             return DesktopConfigMerge.isConfigured(
-                configJSON: try? Data(contentsOf: Paths.claudeDesktopConfig))
+                configJSON: try? Data(contentsOf: Paths.claudeDesktopConfig),
+                executablePath: Bundle.main.executablePath ?? "")
         }
     }
 
