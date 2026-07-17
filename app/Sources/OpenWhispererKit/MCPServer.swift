@@ -20,7 +20,7 @@ public struct MCPServer {
 
     public init() {}
 
-    public func handle(_ body: Data, isVoiceCached: (String) -> Bool = { _ in false }) -> MCPOutcome {
+    public func handle(_ body: Data, isVoiceCached: (String) -> Bool = { _ in false }, guidance: String? = nil) -> MCPOutcome {
         guard let msg = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
             return .json(Self.errorResponse(id: NSNull(), code: -32700, message: "Parse error"))
         }
@@ -39,20 +39,26 @@ public struct MCPServer {
             // Echo the client's requested protocol version when it sends one, so we interop with
             // whatever Claude Code release connects; fall back to ours otherwise.
             let version = (params["protocolVersion"] as? String) ?? Self.protocolVersion
-            return .json(Self.resultResponse(id: requestID, result: [
+            var result: [String: Any] = [
                 "protocolVersion": version,
                 "capabilities": ["tools": [String: Any]()],
                 "serverInfo": ["name": "OpenWhisperer", "version": "1.0"],
-            ]))
+            ]
+            // The standing voice instruction (MCP tier): marker-gated, so it is inert for
+            // clients whose prompts never carry the marker (hook platforms).
+            if let guidance { result["instructions"] = guidance }
+            return .json(Self.resultResponse(id: requestID, result: result))
 
         case "ping":
             return .json(Self.resultResponse(id: requestID, result: [String: Any]()))
 
         case "tools/list":
+            var speakDescription = "Synthesize and play the given text aloud through OpenWhisperer's "
+                + "local voice (text-to-speech). Fire-and-forget: returns immediately while audio plays; subsequent requests are automatically queued by the engine to play sequentially and gaplessly. To orchestrate a multi-actor conversation or dialogue, do NOT write scripts or add delays/sleeps; instead, call this tool sequentially multiple times with different voice IDs (discovered using the list_voices tool)."
+            if let guidance { speakDescription += "\n\n" + guidance }
             let speak: [String: Any] = [
                 "name": "speak",
-                "description": "Synthesize and play the given text aloud through OpenWhisperer's "
-                    + "local voice (text-to-speech). Fire-and-forget: returns immediately while audio plays; subsequent requests are automatically queued by the engine to play sequentially and gaplessly. To orchestrate a multi-actor conversation or dialogue, do NOT write scripts or add delays/sleeps; instead, call this tool sequentially multiple times with different voice IDs (discovered using the list_voices tool).",
+                "description": speakDescription,
                 "inputSchema": [
                     "type": "object",
                     "properties": [
