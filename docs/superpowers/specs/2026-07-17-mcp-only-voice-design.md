@@ -305,3 +305,19 @@ server/config-side — nothing the user sees in their own message.
   Bonus capture: Desktop connects twice (clientInfo `claude-ai` and
   `local-agent-mode-OpenWhisperer`) and advertises the MCP-UI extension.
   Setup copy carries the warm-up caveat honestly (Sol-review condition).
+
+- **Controlled experiment closes the instructions question (2026-07-18).** To
+  falsify the remaining "our custom implementation vs the official SDK"
+  hypothesis, a minimal local STDIO server built with `@modelcontextprotocol/sdk`
+  (the same SDK the owner's Frankfurter connector uses) carrying a sentinel
+  instruction was registered in `claude_desktop_config.json` alongside ours.
+  Desktop's own log shows it connected cleanly and served initialize +
+  tools/list — yet the model's server inventory listed only cloud/account
+  connectors (claude-in-chrome and Frankfurter with instructions, the rest
+  without); NEITHER local stdio server appeared at all. Verdict: Claude
+  Desktop surfaces server identity and `initialize.instructions` from the
+  account/cloud layer only; local stdio servers exist solely behind lazy tool
+  loading. Not our implementation, not the SDK, not stdout buffering (our
+  bridge writes via unbuffered FileHandle syscalls, and every response was
+  observed round-tripping on the wire). Platform gap — revisit only if
+  Desktop ever surfaces stdio server instructions.
