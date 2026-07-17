@@ -26,14 +26,15 @@ func voiceMarkerFailures() -> [String] {
         failures.append("VoiceMarker.shouldMark: Slack must not match")
     }
 
-    // The footer is an exact-match trailing instruction naming the speak tool.
-    if VoiceMarker.footer != "\u{1F399} dictated — please reply aloud first using the OpenWhisperer speak tool." {
-        failures.append("VoiceMarker.footer: unexpected text, got '\(VoiceMarker.footer)'")
+    // The trigger is an exact-match trailing line naming the connector.
+    if VoiceMarker.trigger != "Use OpenWhisperer." {
+        failures.append("VoiceMarker.trigger: unexpected text, got '\(VoiceMarker.trigger)'")
     }
 
-    // apply appends the footer, on its own paragraph, for targets and passes through otherwise.
-    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "hello\n\n\(VoiceMarker.footer)" {
-        failures.append("VoiceMarker.apply: footer not appended for Claude Desktop")
+    // apply prefixes the leading glyph and appends the trigger, on its own paragraph, for
+    // targets; passes through unchanged otherwise.
+    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "\u{1F399} hello\n\nUse OpenWhisperer." {
+        failures.append("VoiceMarker.apply: marker not applied for Claude Desktop")
     }
     if VoiceMarker.apply("hello", bundleID: "com.apple.Notes") != "hello" {
         failures.append("VoiceMarker.apply: text changed for non-target bundle")
@@ -42,9 +43,9 @@ func voiceMarkerFailures() -> [String] {
         failures.append("VoiceMarker.apply: text changed for nil bundle")
     }
 
-    // Empty text must never gain a footer.
+    // Empty text must never gain a marker.
     if VoiceMarker.apply("", bundleID: "com.anthropic.claudefordesktop") != "" {
-        failures.append("VoiceMarker.apply: empty text must never gain a footer")
+        failures.append("VoiceMarker.apply: empty text must never gain a marker")
     }
 
     return failures

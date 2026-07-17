@@ -11,10 +11,11 @@ func mcpInstructionsFailures() -> [String] {
     if MCPInstructions.mode(from: "always\n") != .always { failures.append("mode: 'always\\n' should parse as .always") }
     if MCPInstructions.mode(from: "bogus") != .voice { failures.append("mode: unknown should fall back to .voice") }
 
-    // Voice mode: keys off the trailing footer, speak-first, footer treated as invisible.
+    // Voice mode: keys off the leading glyph, speak-first, marker treated as invisible.
     let voice = MCPInstructions.standing(mode: .voice, style: nil, voice: nil)
     if !voice.contains(VoiceMarker.glyph) { failures.append("standing(voice): missing marker glyph") }
-    if !voice.contains("dictated footer") { failures.append("standing(voice): missing 'dictated footer' condition") }
+    if !voice.contains("begins with \u{1F399}") { failures.append("standing(voice): missing 'begins with 🎙' condition") }
+    if !voice.contains("Use OpenWhisperer.") { failures.append("standing(voice): missing 'Use OpenWhisperer.' trigger reference") }
     if !voice.contains("`speak`") { failures.append("standing(voice): missing speak tool reference") }
     if !voice.contains("exactly once") { failures.append("standing(voice): missing 'exactly once'") }
     if !voice.contains("never mention") { failures.append("standing(voice): marker/tool must be unmentionable") }

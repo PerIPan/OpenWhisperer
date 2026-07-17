@@ -1,28 +1,30 @@
 import Foundation
 
 /// The MCP-tier dictation marker. Apps with no hook system (Claude Desktop) get voice-gating
-/// from a trailing instruction footer appended to the transcript: the MCP server's standing
+/// from a leading bare glyph plus a trailing trigger line: the MCP server's standing
 /// instruction (`MCPInstructions`) tells the model to call `speak` first when the latest user
-/// message ends with it. Only allowlisted bundles get the footer — a terminal's frontmost app
-/// tells us nothing about whether an agent, a shell, or vim has focus, so CLI hosts must never
-/// be listed (see docs/superpowers/specs/2026-07-17-mcp-only-voice-design.md).
+/// message begins with the glyph. Only allowlisted bundles get marked — a terminal's frontmost
+/// app tells us nothing about whether an agent, a shell, or vim has focus, so CLI hosts must
+/// never be listed (see docs/superpowers/specs/2026-07-17-mcp-only-voice-design.md).
 ///
-/// The marker is a trailing footer, not a leading tag, because Claude Desktop guarantees the
-/// model sees ONLY the user message on a cold chat: tool descriptions load lazily, and
-/// `initialize.instructions` is discarded. The footer both names the `speak` tool (which fires
-/// Desktop's tool discovery) and carries the imperative (defeats ask-instead-of-call). It's
-/// typed via the existing insertion tiers; if a composer ever treats an injected "\n" as submit,
-/// the separator needs revisiting — see the spec's Live findings.
+/// The leading bare glyph is the voice marker — the standing instruction keys on it, and it's
+/// treated as invisible (never mentioned in the model's written reply). The trailing trigger
+/// line is a separate, terse concern: Claude Desktop loads MCP tool descriptions lazily and
+/// discards `initialize.instructions`, so a cold chat needs *something* in the transcript that
+/// relevance-matches and fires tool discovery. A direct first-person ask naming the connector —
+/// "Use OpenWhisperer." — live-validated as the shortest line that clears Desktop's three gates
+/// (lazy tool loading, ask-hedging, injection-wariness); see the spec's Live findings. A
+/// "first-dictation-per-chat-only" trigger (skip it once tools are already loaded) is parked
+/// pending a reliable chat-boundary signal. Both lines are typed via the existing insertion
+/// tiers; if a composer ever treats an injected "\n" as submit, the separator needs revisiting.
 public enum VoiceMarker {
     /// U+1F399 STUDIO MICROPHONE, bare — text presentation (monochrome) where honored.
     public static let glyph = "\u{1F399}"
 
-    /// The trailing instruction footer appended to marked transcripts. Phrased as the user's
-    /// own first-person request ("please…") — live testing on Claude Desktop showed the model
-    /// refuses third-person embedded instructions as injection-like ("If you actually want me
-    /// to speak a reply aloud, say so directly"), but complies once the footer reads as a
-    /// direct ask.
-    public static let footer = "\(glyph) dictated — please reply aloud first using the OpenWhisperer speak tool."
+    /// The trailing trigger line appended to marked transcripts, on its own paragraph. A
+    /// terse, direct first-person ask naming the connector — the shortest wording that
+    /// live-validated through Desktop's tool-loading, ask-hedging, and injection-wariness gates.
+    public static let trigger = "Use OpenWhisperer."
 
     /// Bundle IDs whose dictations are marked (the MCP tier).
     public static let targetBundleIDs: Set<String> = ["com.anthropic.claudefordesktop"]
@@ -32,11 +34,11 @@ public enum VoiceMarker {
         return targetBundleIDs.contains(bundleID)
     }
 
-    /// Append the footer, on its own paragraph, for MCP-tier targets; return the text
-    /// unchanged otherwise. Empty text always passes through — a collapsed transcript must
-    /// not become a bare footer.
+    /// Prefix the leading glyph and append the trailing trigger line, on its own paragraph,
+    /// for MCP-tier targets; return the text unchanged otherwise. Empty text always passes
+    /// through — a collapsed transcript must not become a bare marker.
     public static func apply(_ text: String, bundleID: String?) -> String {
         guard !text.isEmpty else { return text }
-        return shouldMark(bundleID: bundleID) ? "\(text)\n\n\(footer)" : text
+        return shouldMark(bundleID: bundleID) ? "\(glyph) \(text)\n\n\(trigger)" : text
     }
 }

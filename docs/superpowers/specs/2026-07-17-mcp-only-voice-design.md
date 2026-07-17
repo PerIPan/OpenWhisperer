@@ -263,3 +263,11 @@ server/config-side — nothing the user sees in their own message.
   conversation from a continuing one (candidate heuristics: dictation idle-gap,
   per-Desktop-launch first dictation), and every heuristic has a
   bare-mic-in-cold-chat failure mode. Design deliberately deferred.
+
+- **Final validated form (owner experiment): leading bare 🎙 + trailing "Use
+  OpenWhisperer." line.** A terse connector-naming ask — even misspelled
+  ("OpenWhisper") — cleared all three gates live: tools loaded, speak called,
+  no hedging. The long first-person footer is superseded; the standing
+  instruction keys on the leading glyph again, and treats the trigger line as
+  invisible. The trigger is typed on every dictation until a chat-boundary
+  signal makes the parked first-dictation-only refinement safe.
