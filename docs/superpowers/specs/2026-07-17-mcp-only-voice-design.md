@@ -149,3 +149,20 @@ Pure logic lands in `OpenWhispererKit`: marker-append decision, instruction
 text builder (mode lines, persona, style), `clientInfo` scoping. Existing
 `HookTests` remain the guard for the unchanged hook path. End-to-end: manual
 spike protocol above, mirroring the 13/13 methodology.
+
+## Addendum (implementation, 2026-07-17)
+
+- **`clientInfo` scoping dropped.** The MCP transport is stateless (no session
+  header; a fresh `MCPServer` per request), so correlating `initialize` with
+  later `tools/list` calls would need new session plumbing. Unnecessary: the
+  standing instruction is marker-gated, and markers are only ever typed into
+  allowlisted apps, so identical instructions are inert on hook platforms. In
+  `always` mode the instruction and the hook nudge agree rather than conflict.
+  Side effect kept: any MCP-connected platform gains type-🎙-to-force-speak.
+- **Regeneration is per-request, not per-`tools/list`** — strictly fresher
+  than specced; settings changes apply without reconnect wherever the client
+  re-reads tool schemas.
+- **Connectivity spike resolved by inspection:** `claude_desktop_config.json`
+  is stdio-only (`command`/`args`), so the `--mcp-stdio` bridge is the route;
+  the HTTP-connector question is moot for v1. Bundle ID confirmed:
+  `com.anthropic.claudefordesktop`.
