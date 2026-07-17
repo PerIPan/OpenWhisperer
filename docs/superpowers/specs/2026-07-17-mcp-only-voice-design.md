@@ -321,3 +321,20 @@ server/config-side — nothing the user sees in their own message.
   bridge writes via unbuffered FileHandle syscalls, and every response was
   observed round-tripping on the wire). Platform gap — revisit only if
   Desktop ever surfaces stdio server instructions.
+
+- **Mechanism identified + mcp-remote cross-check (2026-07-18).** The model's
+  own testimony named the layer: local stdio servers reach it through a
+  `remote-devices` device-bridge aggregation (config pref
+  `remoteToolsDeviceName`), which re-namespaces tools as
+  `mcp__remote-devices__OpenWhisperer__*`, exposes their NAMES cold as
+  deferred tools, forwards per-tool descriptions on load — and drops
+  server-level instructions in transit ("the remote-devices bridge it comes
+  through also didn't provide server-level instructions"). Swapping our
+  bridge for the `npx mcp-remote` shim (the same shim Frankfurter's README
+  suggests) produced the identical result, closing the hypothesis space:
+  implementation, SDK, and shim all equivalent; the dropping is the
+  aggregator's. One untapped always-visible channel noted for the backlog:
+  the deferred tool NAME itself is in the model's cold context — a
+  self-documenting name (e.g. `speak_when_message_starts_with_mic`) would act
+  as a standing instruction, at the cost of renaming the tool for every
+  platform. Deliberately not pursued now.
