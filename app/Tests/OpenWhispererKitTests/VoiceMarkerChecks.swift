@@ -1,6 +1,6 @@
 import OpenWhispererKit
 
-/// Checks for `VoiceMarker` — the MCP-tier trailing dictation marker.
+/// Checks for `VoiceMarker` — the MCP-tier leading dictation marker.
 func voiceMarkerFailures() -> [String] {
     var failures: [String] = []
 
@@ -18,15 +18,14 @@ func voiceMarkerFailures() -> [String] {
         failures.append("VoiceMarker.shouldMark: Slack must not match")
     }
 
-    // The marker is an exact-match trailing line.
-    if VoiceMarker.marker != "Speak back." {
-        failures.append("VoiceMarker.marker: unexpected text, got '\(VoiceMarker.marker)'")
+    // The glyph is a bare, single-scalar U+1F399 STUDIO MICROPHONE.
+    if VoiceMarker.glyph != "\u{1F399}" {
+        failures.append("VoiceMarker.glyph: unexpected text, got '\(VoiceMarker.glyph)'")
     }
 
-    // apply appends the marker line, on its own paragraph, for targets; passes through
-    // unchanged otherwise.
-    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "hello\n\nSpeak back." {
-        failures.append("VoiceMarker.apply: marker not applied for Claude Desktop")
+    // apply prepends the glyph for targets; passes through unchanged otherwise.
+    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "\u{1F399} hello" {
+        failures.append("VoiceMarker.apply: glyph not applied for Claude Desktop")
     }
     if VoiceMarker.apply("hello", bundleID: "com.apple.Notes") != "hello" {
         failures.append("VoiceMarker.apply: text changed for non-target bundle")

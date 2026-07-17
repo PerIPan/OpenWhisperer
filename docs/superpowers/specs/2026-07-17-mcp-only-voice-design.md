@@ -289,3 +289,19 @@ server/config-side — nothing the user sees in their own message.
   race exposure. Typing cadence lowered again (6 UTF-16 units / 16 ms) as
   insurance for long transcripts; the Electron reorder race is a standing
   Desktop hazard to investigate properly post-merge (AX insertion fails there).
+
+- **Owner-final decision: pure leading 🎙, warm-up cost accepted.** After the
+  full iteration arc (bare glyph → "🎙 speak" → skill (vetoed) → instruction
+  footer (injection-refused) → "Use OpenWhisperer." → "Sent with OpenWhisperer."
+  signature → "Speak back." (failed cold) → connector-name variants), the owner
+  chose the original aesthetic with the cold-start cost documented rather than
+  papered over: a new chat's first dictated turn may be silent until any
+  OpenWhisperer mention loads the tools; thereafter 🎙 turns speak reliably.
+  Wire capture (tee on the stdio bridge) closed the server-instructions
+  question for good: Desktop's stdio client speaks protocol 2025-11-25 and our
+  `initialize.instructions` goes back intact, but Desktop only surfaces
+  server-level instructions for cloud/account connectors (verified against the
+  owner's own Frankfurter connector) — a platform gap, not fixable locally.
+  Bonus capture: Desktop connects twice (clientInfo `claude-ai` and
+  `local-agent-mode-OpenWhisperer`) and advertises the MCP-UI extension.
+  Setup copy carries the warm-up caveat honestly (Sol-review condition).

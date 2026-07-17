@@ -278,9 +278,13 @@ enum ConfigManager {
 
             1. Click Auto-Apply (writes the entry into claude_desktop_config.json).
             2. Quit and reopen Claude Desktop so it launches the server and loads the tool.
-            3. Dictate into Claude Desktop: the transcript gets a trailing
-               "Speak back." line that cues the spoken reply.
-               Delete it before sending to keep a turn silent; type it yourself to force one.
+            3. Dictate into Claude Desktop: the transcript gets a leading 🎙 that
+               cues the spoken reply. Delete it before sending to keep a turn silent;
+               type it yourself to force one.
+
+            Heads-up: in a brand-new chat, the first dictated message may stay silent —
+            Claude Desktop loads its tools on demand. Mention OpenWhisperer once (or ask
+            it to speak), and every 🎙 turn after that speaks reliably.
 
             Keep the OpenWhisperer menubar app running — it does the actual speaking.
             """
@@ -289,8 +293,8 @@ enum ConfigManager {
     }
 
     /// Claude Desktop has no hook system; the whole integration is the MCP entry. The
-    /// standing instruction + trailing "Speak back." line replace
-    /// the UserPromptSubmit handshake (see docs/superpowers/specs/2026-07-17-mcp-only-voice-design.md).
+    /// standing instruction + leading 🎙 glyph replace the UserPromptSubmit handshake
+    /// (see docs/superpowers/specs/2026-07-17-mcp-only-voice-design.md).
     static func applyToClaudeDesktop() -> (success: Bool, message: String) {
         guard let exe = Bundle.main.executablePath else {
             return (false, "Cannot resolve the app binary path")

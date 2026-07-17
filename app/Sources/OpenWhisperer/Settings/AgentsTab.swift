@@ -68,7 +68,7 @@ struct AgentsTab: View {
         case .antigravity:
             return "Writes the speak MCP server into ~/.gemini/config/mcp_config.json and the PreInvocation hook into ~/.gemini/config/hooks.json. Start a new agy session afterward."
         case .claudeDesktop:
-            return "Registers the speak tool in claude_desktop_config.json. Restart Claude Desktop after applying; dictated prompts get a trailing \u{201C}Speak back.\u{201D} line that cues spoken replies."
+            return "Registers the speak tool in claude_desktop_config.json. Restart Claude Desktop after applying; dictated prompts get a leading 🎙 that cues the spoken reply. Heads-up: a brand-new chat's first dictated message may stay silent until you mention OpenWhisperer once — after that, every 🎙 turn speaks."
         }
     }
 }
@@ -221,7 +221,7 @@ struct HowItWorksSheet: View {
             result = [
                 SheetSection(
                     heading: "What Auto-Apply does",
-                    body: "Claude Desktop has no hook system, so the whole integration is the MCP entry — nothing to trust. Auto-Apply registers the speak tool (as a stdio server) in claude_desktop_config.json. Dictating into Claude Desktop appends a trailing \"Speak back.\" line, on its own paragraph — a terse imperative naming the speak tool, which fires Desktop's lazy tool loading — and carries the server's standing instruction to call it first (every turn, if you set replies to always). Playback runs in this menubar app. Delete the line before sending to keep a turn silent; type it yourself to force one. Restart Claude Desktop afterward."),
+                    body: "Claude Desktop has no hook system, so the whole integration is the MCP entry — nothing to trust. Auto-Apply registers the speak tool (as a stdio server) in claude_desktop_config.json. Dictating into Claude Desktop prepends a leading 🎙 to the transcript, which carries the server's standing instruction to call the speak tool first (every turn, if you set replies to always). Playback runs in this menubar app. Delete the 🎙 before sending to keep a turn silent; type it yourself to force one. Heads-up: in a brand-new chat, Claude Desktop loads its tools on demand, so the first dictated message may stay silent — mention OpenWhisperer once (or ask it to speak), and every 🎙 turn after that speaks reliably. Restart Claude Desktop afterward."),
                 SheetSection(
                     heading: "Do it by hand",
                     body: """
