@@ -46,6 +46,9 @@ enum Paths {
     /// absent/"auto" = model auto-detect)
     static let sttLanguage = appSupport.appendingPathComponent("stt_language")
 
+    /// Optional STT glossary (comma/newline-separated terms; see VocabularyCorrector).
+    static let sttVocabulary = appSupport.appendingPathComponent("stt_vocabulary")
+
     /// TTS voice file (tts-hook.sh reads voice name from this)
     static let ttsVoice = appSupport.appendingPathComponent("tts_voice")
 

@@ -17,6 +17,7 @@ struct InputTab: View {
     @State private var customFocusApp = ""
     @State private var installedApps: [AppEntry] = []
     @State private var saveDebounce: DispatchWorkItem?
+    @State private var vocabulary = ""
     @State private var loaded = false
 
     /// Parakeet TDT v3's coverage is 25 European languages; this offers the common
@@ -44,6 +45,7 @@ struct InputTab: View {
         Form {
             dictationSection
             languageSection
+            vocabularySection
             appFocusSection
         }
         .formStyle(.grouped)
@@ -138,6 +140,28 @@ struct InputTab: View {
             }
         } header: {
             Text("Language")
+        }
+    }
+
+    // MARK: Custom vocabulary
+
+    private var vocabularySection: some View {
+        Section {
+            TextEditor(text: $vocabulary)
+                .font(.body.monospaced())
+                .frame(minHeight: 56)
+                .onChange(of: vocabulary) { _, newValue in
+                    guard loaded else { return }
+                    if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        try? FileManager.default.removeItem(at: Paths.sttVocabulary)
+                    } else {
+                        try? newValue.write(to: Paths.sttVocabulary, atomically: true, encoding: .utf8)
+                    }
+                }
+        } header: {
+            Text("Custom vocabulary")
+        } footer: {
+            Text("Words or phrases, separated by commas or new lines. Dictated near-misses are corrected to these spellings.")
         }
     }
 
@@ -265,6 +289,9 @@ struct InputTab: View {
            !savedLang.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let lang = savedLang.trimmingCharacters(in: .whitespacesAndNewlines)
             if Self.languages.contains(where: { $0.id == lang }) { selectedLanguage = lang }
+        }
+        if let savedVocabulary = try? String(contentsOf: Paths.sttVocabulary, encoding: .utf8) {
+            vocabulary = savedVocabulary
         }
         autoSubmit = FileManager.default.fileExists(atPath: Paths.autoSubmitFlag.path)
         autoFocusEnabled = FileManager.default.fileExists(atPath: Paths.autoFocusApp.path)
