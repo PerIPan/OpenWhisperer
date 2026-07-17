@@ -64,11 +64,17 @@ class DictationManager: ObservableObject {
     /// The PID of the app that was frontmost when the user pressed the hotkey.
     /// Captured on the main thread at press-time, before any focus shifts.
     private var targetPID: pid_t = 0
+    /// The bundle ID of the app captured alongside `targetPID`, threaded through to
+    /// the result handlers so `VoiceMarker.apply` can decide whether to prepend the
+    /// marker. Captured at the same time as the PID (not re-derived at result time)
+    /// since a PID could in principle be reused between hotkey press and typing.
+    private var targetBundleID: String?
     /// The last "real" (regular, Dock-bearing) app the user activated. Used as the
     /// target when dictation is triggered while ANY menubar-owned UI is frontmost —
     /// our own popover or another menubar utility/agent (all .accessory) — so text
     /// still lands in the app the user was actually working in.
     private var lastRegularAppPID: pid_t = 0
+    private var lastRegularAppBundleID: String?
     private var activationObserver: NSObjectProtocol?
     /// The PID of the app the user was in before auto-focus switched away.
     /// Used by "with return" to re-activate the origin app after text insertion.
@@ -139,6 +145,7 @@ class DictationManager: ObservableObject {
            front.activationPolicy == .regular,
            front.bundleIdentifier != Bundle.main.bundleIdentifier {
             lastRegularAppPID = front.processIdentifier
+            lastRegularAppBundleID = front.bundleIdentifier
         }
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -149,6 +156,7 @@ class DictationManager: ObservableObject {
                   app.activationPolicy == .regular,
                   app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
             self.lastRegularAppPID = app.processIdentifier
+            self.lastRegularAppBundleID = app.bundleIdentifier
         }
     }
 
@@ -274,12 +282,15 @@ class DictationManager: ObservableObject {
            front.activationPolicy == .regular,
            front.bundleIdentifier != Bundle.main.bundleIdentifier {
             targetPID = front.processIdentifier
+            targetBundleID = front.bundleIdentifier
             lastRegularAppPID = targetPID
+            lastRegularAppBundleID = targetBundleID
             os_log(.default, log: dictLog, "Captured target PID %d (%{public}@)", targetPID, front.localizedName ?? "?")
         } else if lastRegularAppPID != 0 {
             // Frontmost is a menubar UI (our popover / another utility / an agent) —
             // fall back to the last real app the user was working in.
             targetPID = lastRegularAppPID
+            targetBundleID = lastRegularAppBundleID
             os_log(.default, log: dictLog, "Frontmost not a regular app; using last regular PID %d", targetPID)
         }
         // else: keep the previous targetPID
@@ -439,6 +450,7 @@ class DictationManager: ObservableObject {
     private func handsFreeFlushAndTranscribe() {
         let language = readLanguage()
         let pid = targetPID
+        let bundleID = targetBundleID
 
         guard let samples = recorder.flushAndContinueFloat() else {
             recorder.resumeListening()
@@ -481,7 +493,7 @@ class DictationManager: ObservableObject {
             }
             if Task.isCancelled { return }  // dropped by mode switch / watchdog (T1.4)
             await MainActor.run { [weak self] in
-                self?.handleHandsFreeResult(result, pid: pid)
+                self?.handleHandsFreeResult(result, pid: pid, bundleID: bundleID)
             }
         }
     }
@@ -489,7 +501,7 @@ class DictationManager: ObservableObject {
     /// Main-thread completion for a hands-free transcription. Strips the trailing submit
     /// phrase (as the server used to), types the text, and always presses Enter
     /// (hands-free auto-submits). Resumes listening only if still hands-free (T1.4).
-    private func handleHandsFreeResult(_ result: Result<String, Error>, pid: pid_t) {
+    private func handleHandsFreeResult(_ result: Result<String, Error>, pid: pid_t, bundleID: String?) {
         activeTranscribeTask = nil
         uploadWatchdog?.cancel()
         uploadWatchdog = nil
@@ -499,11 +511,12 @@ class DictationManager: ObservableObject {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             let (cleaned, _) = SubmitTrigger.process(trimmed)
             if !cleaned.isEmpty {
-                os_log(.default, log: dictLog, "HF transcribed: %{public}@", cleaned)
-                lastTranscription = cleaned
+                let finalText = VoiceMarker.apply(cleaned, bundleID: bundleID)
+                os_log(.default, log: dictLog, "HF transcribed: %{public}@", finalText)
+                lastTranscription = finalText
                 error = nil
                 isTyping = true
-                insertText(cleaned, intoPID: pid, forceSubmit: true) { [weak self] in
+                insertText(finalText, intoPID: pid, forceSubmit: true) { [weak self] in
                     guard let self else { return }
                     self.isTyping = false
                     guard self.interactionMode == .handsFree else { return }
@@ -602,6 +615,7 @@ class DictationManager: ObservableObject {
 
         let language = readLanguage()
         let pid = targetPID  // capture on main thread right now
+        let bundleID = targetBundleID
 
         // Cancel any previous watchdog before creating a new one (C-5)
         uploadWatchdog?.cancel()
@@ -645,7 +659,7 @@ class DictationManager: ObservableObject {
             }
             if Task.isCancelled { return }  // dropped by mode switch / watchdog (T1.2)
             await MainActor.run { [weak self] in
-                self?.handlePushToTalkResult(result, pid: pid)
+                self?.handlePushToTalkResult(result, pid: pid, bundleID: bundleID)
             }
         }
     }
@@ -654,7 +668,7 @@ class DictationManager: ObservableObject {
     /// flag is set, strip the trailing trigger phrase (as the server used to) and let
     /// `insertText` press Enter — it already does so whenever the flag exists, so there
     /// is exactly one Enter and no double-submit.
-    private func handlePushToTalkResult(_ result: Result<String, Error>, pid: pid_t) {
+    private func handlePushToTalkResult(_ result: Result<String, Error>, pid: pid_t, bundleID: String?) {
         activeTranscribeTask = nil
         uploadWatchdog?.cancel()
         uploadWatchdog = nil
@@ -665,7 +679,8 @@ class DictationManager: ObservableObject {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             let autoSubmit = FileManager.default.fileExists(atPath: Paths.autoSubmitFlag.path)
-            let finalText = autoSubmit ? SubmitTrigger.process(trimmed).cleaned : trimmed
+            let cleaned = autoSubmit ? SubmitTrigger.process(trimmed).cleaned : trimmed
+            let finalText = VoiceMarker.apply(cleaned, bundleID: bundleID)
             os_log(.default, log: dictLog, "Transcribed: %{public}@, inserting into PID %d", finalText, pid)
             lastTranscription = finalText
             error = nil
@@ -1030,10 +1045,12 @@ class DictationManager: ObservableObject {
 
     /// Types `text` by posting CGEvent keystrokes with `keyboardSetUnicodeString`.
     /// No clipboard involvement — each chunk is sent as a key-down/key-up pair.
-    /// macOS limit is ~20 UTF-16 code units per event; we use chunks of 16 for safety.
+    /// macOS limit is ~20 UTF-16 code units per event; we use chunks of 8 (was 16) at
+    /// 8 ms (was 3 ms) — Electron composers (observed live in Claude Desktop, 2026-07-17)
+    /// drop/reorder characters mid-word under the faster cadence.
     private func typeViaUnicodeEvents(_ text: String, completion: @escaping () -> Void) {
         let utf16 = Array(text.utf16)
-        let chunkSize = 16
+        let chunkSize = 6
         let chunks = stride(from: 0, to: utf16.count, by: chunkSize).map {
             Array(utf16[$0..<min($0 + chunkSize, utf16.count)])
         }
@@ -1062,8 +1079,11 @@ class DictationManager: ObservableObject {
             keyDown.post(tap: .cgSessionEventTap)
             keyUp.post(tap: .cgSessionEventTap)
 
-            // Small delay between chunks to let the target app process input (#22)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.003) {
+            // Small delay between chunks to let the target app process input (#22).
+            // Electron composers (e.g. Claude Desktop) reorder chunks under synthetic
+            // input — observed live even at 8 units/8 ms — so this is deliberately
+            // slower/smaller as insurance against the chunk-reorder race.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) {
                 typeChunk(at: index + 1)
             }
         }

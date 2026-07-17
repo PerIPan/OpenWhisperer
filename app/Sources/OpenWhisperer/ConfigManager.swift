@@ -9,6 +9,7 @@ enum Platform: String, CaseIterable {
     case codexCLI = "codexCLI"
     case pi = "pi"
     case antigravity = "antigravity"
+    case claudeDesktop = "claudeDesktop"
 
     var label: String {
         switch self {
@@ -16,6 +17,7 @@ enum Platform: String, CaseIterable {
         case .codexCLI: return "Codex CLI"
         case .pi: return "Pi"
         case .antigravity: return "Antigravity"
+        case .claudeDesktop: return "Claude Desktop"
         }
     }
 
@@ -266,6 +268,65 @@ enum ConfigManager {
         FileManager.default.fileExists(atPath: Paths.piExtensionDest.path)
     }
 
+    // MARK: - Claude Desktop: claude_desktop_config.json (MCP only, no hooks)
+
+    static func showClaudeDesktopInstructions() {
+        let window = InstructionWindow(
+            title: "Claude Desktop Setup",
+            instructions: """
+            OpenWhisperer adds its speak tool to Claude Desktop via MCP — no hooks needed.
+
+            1. Click Auto-Apply (writes the entry into claude_desktop_config.json).
+            2. Quit and reopen Claude Desktop so it launches the server and loads the tool.
+            3. Dictate into Claude Desktop: the transcript gets a leading 🎙 that
+               cues the spoken reply. Delete it before sending to keep a turn silent;
+               type it yourself to force one.
+
+            Heads-up: in a brand-new chat, the first dictated message may stay silent —
+            Claude Desktop loads its tools on demand. Mention OpenWhisperer once (or ask
+            it to speak), and every 🎙 turn after that speaks reliably.
+
+            Keep the OpenWhisperer menubar app running — it does the actual speaking.
+            """
+        )
+        window.show()
+    }
+
+    /// Claude Desktop has no hook system; the whole integration is the MCP entry. The
+    /// standing instruction + leading 🎙 glyph replace the UserPromptSubmit handshake
+    /// (see docs/superpowers/specs/2026-07-17-mcp-only-voice-design.md).
+    static func applyToClaudeDesktop() -> (success: Bool, message: String) {
+        guard let exe = Bundle.main.executablePath else {
+            return (false, "Cannot resolve the app binary path")
+        }
+        let fm = FileManager.default
+        do {
+            try fm.createDirectory(
+                at: Paths.claudeDesktopConfig.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+        } catch {
+            return (false, "Couldn't create the Claude config directory: \(error.localizedDescription)")
+        }
+        var existing: Data?
+        if fm.fileExists(atPath: Paths.claudeDesktopConfig.path) {
+            do {
+                existing = try Data(contentsOf: Paths.claudeDesktopConfig)
+            } catch {
+                return (false, "Couldn't read claude_desktop_config.json: \(error.localizedDescription)")
+            }
+        }
+        guard let out = DesktopConfigMerge.merged(existingJSON: existing, executablePath: exe) else {
+            return (false, "claude_desktop_config.json exists but isn't a valid JSON object — fix or remove it, then retry")
+        }
+        do {
+            try out.write(to: Paths.claudeDesktopConfig, options: .atomic)
+        } catch {
+            return (false, "Write failed: \(error.localizedDescription)")
+        }
+
+        return (true, "speak tool registered — restart Claude Desktop to load it")
+    }
+
     // MARK: - Antigravity CLI (agy): mcp_config.json + hooks.json
 
     static func showAntigravityInstructions() {
@@ -373,6 +434,7 @@ enum ConfigManager {
         case .codexCLI: return applyHookToCodexConfig()
         case .pi: return applyToPi()
         case .antigravity: return applyToAntigravity()
+        case .claudeDesktop: return applyToClaudeDesktop()
         }
     }
 
@@ -382,6 +444,10 @@ enum ConfigManager {
         case .codexCLI: return checkCodexHookConfigured()
         case .pi: return checkPiConfigured()
         case .antigravity: return checkAntigravityConfigured()
+        case .claudeDesktop:
+            return DesktopConfigMerge.isConfigured(
+                configJSON: try? Data(contentsOf: Paths.claudeDesktopConfig),
+                executablePath: Bundle.main.executablePath ?? "")
         }
     }
 
@@ -391,6 +457,7 @@ enum ConfigManager {
         case .codexCLI: showCodexConfigInstructions()
         case .pi: showPiInstructions()
         case .antigravity: showAntigravityInstructions()
+        case .claudeDesktop: showClaudeDesktopInstructions()
         }
     }
 

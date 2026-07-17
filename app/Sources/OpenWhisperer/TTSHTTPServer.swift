@@ -148,7 +148,7 @@ final class TTSHTTPServer {
                 let size = (attrs?[.size] as? NSNumber)?.uint64Value ?? 0
                 return size > 1000
             }
-            switch MCPServer().handle(req.body, isVoiceCached: isVoiceCached) {
+            switch MCPServer().handle(req.body, isVoiceCached: isVoiceCached, guidance: Self.speakGuidance()) {
             case .json(let data):
                 respond(conn, "200 OK", data, contentType: "application/json")
             case .accepted:
@@ -180,6 +180,15 @@ final class TTSHTTPServer {
     /// Used by the blocking WAV path when the request omits a `speed`.
     private static func userSpeed() -> Float {
         TTSSpeed.parse(try? String(contentsOf: Paths.ttsSpeed, encoding: .utf8))
+    }
+
+    /// The MCP tier's standing voice instruction, rebuilt from prefs on every request so
+    /// settings changes (mode, style, voice/persona) apply without a client reconnect.
+    private static func speakGuidance() -> String {
+        let mode = MCPInstructions.mode(
+            from: try? String(contentsOf: Paths.ttsResponseMode, encoding: .utf8))
+        let style = try? String(contentsOf: Paths.ttsStyle, encoding: .utf8)
+        return MCPInstructions.standing(mode: mode, style: style, voice: userVoice())
     }
 
     private func respond(_ conn: NWConnection, _ status: String, _ body: Data, contentType: String = "text/plain") {

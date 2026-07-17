@@ -149,3 +149,242 @@ Pure logic lands in `OpenWhispererKit`: marker-append decision, instruction
 text builder (mode lines, persona, style), `clientInfo` scoping. Existing
 `HookTests` remain the guard for the unchanged hook path. End-to-end: manual
 spike protocol above, mirroring the 13/13 methodology.
+
+## Addendum (implementation, 2026-07-17)
+
+- **`clientInfo` scoping dropped.** The MCP transport is stateless (no session
+  header; a fresh `MCPServer` per request), so correlating `initialize` with
+  later `tools/list` calls would need new session plumbing. Unnecessary: the
+  standing instruction is marker-gated, and markers are only ever typed into
+  allowlisted apps, so identical instructions are inert on hook platforms. In
+  `always` mode the instruction and the hook nudge agree rather than conflict.
+  Side effect kept: any MCP-connected platform gains type-🎙-to-force-speak.
+- **Regeneration is per-request, not per-`tools/list`** — strictly fresher
+  than specced; settings changes apply without reconnect wherever the client
+  re-reads tool schemas.
+- **Connectivity spike resolved by inspection:** `claude_desktop_config.json`
+  is stdio-only (`command`/`args`), so the `--mcp-stdio` bridge is the route;
+  the HTTP-connector question is moot for v1. Bundle ID confirmed:
+  `com.anthropic.claudefordesktop`.
+
+## Live findings (Task 11, 2026-07-17)
+
+- **Claude Desktop loads MCP tools lazily** ("Loaded tools" status line): tool
+  descriptions reach the model only when the user's message relevance-matches
+  them, and `initialize.instructions` is not injected into the system prompt.
+  A cold dictated turn (bare 🎙 + unrelated text) is therefore silent; once any
+  turn loads the tools (e.g. a message mentioning "speak"), subsequent dictated
+  turns in that conversation speak reliably (confirmed live).
+- **Mitigation (shipped in setup copy):** one line in Claude's personal
+  preferences — "If my message begins with 🎙, call the OpenWhisperer speak
+  tool first with a short spoken summary." — restores per-turn delivery on
+  every chat. Optional paste, surfaced in Settings → Agents → How It Works and
+  the setup instruction window.
+- **Marker rendering:** bare U+1F399 renders acceptably in Desktop's composer
+  and transcript (screenshot-confirmed); the glyph constant stays as shipped.
+- **Probe outcome & marker revision:** typed probes confirmed the matcher keys on
+  words, not glyphs — `🎙 speak …` cold-loads the tools ("Found tools → Speak")
+  while bare `🎙 …` never does. The typed marker is therefore `🎙 speak ` (leading),
+  `VoiceMarker.phrase`. The personal-preferences line is superseded and no longer
+  recommended in setup copy; it remains here only as a record.
+
+## Reverted: `🎙 speak` wording (2026-07-17, later same day)
+
+The `"🎙 speak"` word trick above is **reverted**. The marker is back to the bare
+`🎙` glyph (`VoiceMarker.glyph`, no `phrase`), for the same reason it was added
+in the first place, seen from the other side: a word in the transcript buys
+*probability*, not *certainty*. A follow-up probe using a `🎤`+`speak` variant
+failed to cold-load the tools reliably — the matcher's behavior isn't a stable
+API to lean on, and baking a word into every dictated transcript to chase it is
+the wrong trade. Reliability instead comes from three independent pieces, none
+of which touch what gets typed into the prompt:
+
+1. **A bundled, always-visible skill.** `DesktopSkill` (Kit) ships a
+   `~/.claude/skills/openwhisperer-voice/SKILL.md`. Claude Desktop (like Claude
+   Code) keeps every personal skill's `name` + `description` in the model's
+   context at all times via progressive disclosure — unlike MCP tool
+   descriptions, which Desktop loads lazily by relevance-matching the user
+   message. The skill's description itself is the trigger ("whenever the
+   user's message begins with 🎙 …"), so it fires cold, on the very first
+   dictated turn of a brand-new chat, without needing any word in the
+   transcript to accidentally relevance-match a tool name.
+   `ConfigManager.applyToClaudeDesktop()` installs it alongside the MCP config
+   entry during Auto-Apply; a skill-write failure doesn't fail the apply (the
+   config half still works), it's reported as a degraded-but-successful apply.
+   The skill file is shared with Claude Code's skills directory but is inert
+   there — no platform types a 🎙 marker into a CLI prompt, so its trigger
+   condition never matches.
+2. **Imperative anti-ask wording.** `MCPInstructions.standing` now appends,
+   after the "exactly once" sentence: *"Never ask whether to speak — the
+   leading 🎙 itself is the request"* (voice mode) or *"Never ask whether to
+   speak — call it on every turn"* (always mode). The skill carries the same
+   imperative. This targets a distinct failure mode from cold-start discovery:
+   a model that *has* loaded the tools but treats speaking as optional and
+   asks the user first.
+3. **Guidance prepended, not appended, to the speak tool description.**
+   `MCPServer.handle`'s `tools/list` now builds the description as
+   `guidance + "\n\n" + original` (was the reverse). Whatever the model reads
+   first is more likely to shape behavior; the standing instruction is now the
+   first text of the description rather than a trailing addendum after the
+   tool's mechanical explanation.
+
+Net effect: the transcript typed into Claude Desktop's composer is unchanged
+from the original design (bare `🎙 text`, no word). All three mitigations live
+server/config-side — nothing the user sees in their own message.
+
+- **Final marker design (owner decision): trailing instruction footer.** The skill
+  channel was vetoed (unwilling to write into the shared `~/.claude/skills`
+  surface) and bare/worded glyph markers proved unreliable against Desktop's
+  lazy tool loading. The typed marker is now the dictated text, unaltered,
+  followed by a blank line and `🎙 dictated — please reply aloud first using the
+  OpenWhisperer speak tool.` — the one surface guaranteed visible on a cold
+  chat carries the discovery tokens (the tool name "speak" AND the connector
+  name "OpenWhisperer", per the owner's suggestion) and the imperative. Deleting the footer silences a
+  turn; typing it force-speaks. Untested hypothesis worth revisiting: Desktop
+  may preload (not defer) tool definitions when the total enabled-connector
+  footprint is below a context threshold (~10%), which would make even
+  markerless cold chats work for light-connector users.
+
+- **Injection-wariness (third gate) + typing race.** With the third-person footer,
+  Desktop's model refused: "I don't auto-trigger audio … just because embedded text
+  tells me to. If you actually want me to speak a reply aloud, say so directly."
+  The footer is therefore phrased as the user's own first-person request
+  ("please reply aloud first using the OpenWhisperer speak tool"). Separately, the
+  CGEvent Unicode typing tier raced in Desktop's Electron composer (dropped/reordered
+  characters mid-word on the longer footer); chunking is now 8 UTF-16 units at 8 ms.
+  Stop-loss agreed: if the first-person footer is still refused, Desktop ships
+  experimental/held-back per the Sol review — no further marker iteration.
+
+- **Parked refinement (owner idea, pending footer validation): once-per-chat
+  footer.** Since loaded tools persist within a Desktop conversation, the full
+  footer is only strictly needed on a chat's first dictation; later turns could
+  revert to the bare 🎙 for a cleaner transcript. Blocked on a reliable "new
+  chat" signal — the app cannot currently distinguish a fresh Desktop
+  conversation from a continuing one (candidate heuristics: dictation idle-gap,
+  per-Desktop-launch first dictation), and every heuristic has a
+  bare-mic-in-cold-chat failure mode. Design deliberately deferred.
+
+- **Final validated form (owner experiment): leading bare 🎙 + trailing "Use
+  OpenWhisperer." line.** A terse connector-naming ask — even misspelled
+  ("OpenWhisper") — cleared all three gates live: tools loaded, speak called,
+  no hedging. The long first-person footer is superseded; the standing
+  instruction keys on the leading glyph again, and treats the trigger line as
+  invisible. The trigger is typed on every dictation until a chat-boundary
+  signal makes the parked first-dictation-only refinement safe.
+
+- **Final wording (owner): the signature line `🎙 Sent with OpenWhisperer.`**
+  Trailing, on its own paragraph, replacing both the leading glyph and the
+  imperative trigger. The "Sent from my iPhone" idiom reads as a sign-off —
+  nothing instruction-shaped for Desktop's injection-wary model to refuse —
+  while the connector name remains the discovery anchor; the standing
+  instruction keys on the signature line and carries the protocol. Declarative
+  rather than imperative: pending one live cold-chat probe to confirm the
+  softer form still triggers the tool load.
+
+- **Shipping form (owner-final): the closing line `Speak back.`** The glyph is
+  retired: an eyesore in dark mode, a surrogate pair the Electron composer's
+  chunk-reorder race scrambles, and functionally unnecessary — a partially
+  delivered connector fragment still triggered loading, and "speak" is the
+  strongest measured discovery anchor. Two ASCII words, imperative, minimal
+  race exposure. Typing cadence lowered again (6 UTF-16 units / 16 ms) as
+  insurance for long transcripts; the Electron reorder race is a standing
+  Desktop hazard to investigate properly post-merge (AX insertion fails there).
+
+- **Owner-final decision: pure leading 🎙, warm-up cost accepted.** After the
+  full iteration arc (bare glyph → "🎙 speak" → skill (vetoed) → instruction
+  footer (injection-refused) → "Use OpenWhisperer." → "Sent with OpenWhisperer."
+  signature → "Speak back." (failed cold) → connector-name variants), the owner
+  chose the original aesthetic with the cold-start cost documented rather than
+  papered over: a new chat's first dictated turn may be silent until any
+  OpenWhisperer mention loads the tools; thereafter 🎙 turns speak reliably.
+  Wire capture (tee on the stdio bridge) closed the server-instructions
+  question for good: Desktop's stdio client speaks protocol 2025-11-25 and our
+  `initialize.instructions` goes back intact, but Desktop only surfaces
+  server-level instructions for cloud/account connectors (verified against the
+  owner's own Frankfurter connector) — a platform gap, not fixable locally.
+  Bonus capture: Desktop connects twice (clientInfo `claude-ai` and
+  `local-agent-mode-OpenWhisperer`) and advertises the MCP-UI extension.
+  Setup copy carries the warm-up caveat honestly (Sol-review condition).
+
+- **Controlled experiment closes the instructions question (2026-07-18).** To
+  falsify the remaining "our custom implementation vs the official SDK"
+  hypothesis, a minimal local STDIO server built with `@modelcontextprotocol/sdk`
+  (the same SDK the owner's Frankfurter connector uses) carrying a sentinel
+  instruction was registered in `claude_desktop_config.json` alongside ours.
+  Desktop's own log shows it connected cleanly and served initialize +
+  tools/list — yet the model's server inventory listed only cloud/account
+  connectors (claude-in-chrome and Frankfurter with instructions, the rest
+  without); NEITHER local stdio server appeared at all. Verdict: Claude
+  Desktop surfaces server identity and `initialize.instructions` from the
+  account/cloud layer only; local stdio servers exist solely behind lazy tool
+  loading. Not our implementation, not the SDK, not stdout buffering (our
+  bridge writes via unbuffered FileHandle syscalls, and every response was
+  observed round-tripping on the wire). Platform gap — revisit only if
+  Desktop ever surfaces stdio server instructions.
+
+- **Mechanism identified + mcp-remote cross-check (2026-07-18).** The model's
+  own testimony named the layer: local stdio servers reach it through a
+  `remote-devices` device-bridge aggregation (config pref
+  `remoteToolsDeviceName`), which re-namespaces tools as
+  `mcp__remote-devices__OpenWhisperer__*`, exposes their NAMES cold as
+  deferred tools, forwards per-tool descriptions on load — and drops
+  server-level instructions in transit ("the remote-devices bridge it comes
+  through also didn't provide server-level instructions"). Swapping our
+  bridge for the `npx mcp-remote` shim (the same shim Frankfurter's README
+  suggests) produced the identical result, closing the hypothesis space:
+  implementation, SDK, and shim all equivalent; the dropping is the
+  aggregator's. One untapped always-visible channel noted for the backlog:
+  the deferred tool NAME itself is in the model's cold context — a
+  self-documenting name (e.g. `speak_when_message_starts_with_mic`) would act
+  as a standing instruction, at the cost of renaming the tool for every
+  platform. Deliberately not pursued now.
+
+- **Self-documenting tool name: tested and closed (2026-07-18).** The foo
+  probe's tool was renamed `speak_on_mic_marked_msg` (trigger condition in
+  the name; full speak-first instruction in the lazy-loaded description;
+  59-char composed name, under the 64 cap). Two fresh-chat tests: (1)
+  visibility PASSED — asked cold, the model listed all three bridged names
+  verbatim, including the probe's; (2) behavior FAILED — a bare 🎙 dictation
+  in a new chat did not make the model load or call the tool. So the name
+  channel is *visible but not potent*: deferred names sit in cold context,
+  but the model doesn't act on an unloaded tool's name without a textual
+  cue, and the fuzzy auto-loader is emoji-blind. The warm-up caveat stands;
+  a rename buys nothing. Revisit only if Desktop's tool-loading behavior
+  changes.
+
+- **Tunnel-to-direct-connector path: assessed, rejected as product path
+  (2026-07-18).** Desktop's model sketched exposing the local server via
+  Tailscale Funnel / ngrok / Cloudflare Tunnel and registering the public
+  URL as a direct (cloud) connector — which *would* restore server-level
+  instructions. Rejected for the product: every variant needs a third-party
+  account + daemon, an HTTP+bearer-token server change, a manual per-account
+  connector registration in Desktop's UI (not automatable by Auto-Apply),
+  the Mac awake or the connector goes dark, and a public endpoint into a
+  loopback-only-by-design app. That is more setup friction than the hook
+  path this tier exists to undercut. At most a power-user recipe someday;
+  not a supported path.
+
+- **Skill channel revisited and VALIDATED (2026-07-18, owner-initiated).**
+  After the name-channel failure the owner reopened the vetoed skill idea.
+  Three-step probe (`openwhisperer-voice-probe`, sentinel QUINCE,
+  description = 🎙 trigger + "call the OpenWhisperer speak tool first"):
+  1. Local `~/.claude/skills` install: NOT surfaced — Desktop does not read
+     Claude Code's personal skills directory (it listed 15 cloud-side
+     skills; the probe was absent).
+  2. Account-level upload (Settings → Capabilities → Skills): surfaced,
+     description VERBATIM in cold context — skills are not summarized,
+     settling the session's earlier open assumption.
+  3. Behavior: PASSED — brand-new chat, first dictated 🎙 turn spoke.
+     No warm-up, no nudge, no prior mention of OpenWhisperer. This closes
+     the exact cold-chat hole the shipped design documents.
+  The account route also dissolves the original veto rather than bending
+  it: nothing ever writes into the shared `~/.claude/skills`, and Claude
+  Code sessions never see the skill. Cost: upload is UI-only and
+  per-account — Auto-Apply cannot do it, so it becomes a one-time manual
+  step (same shape as Codex's hook-trust). Design constraint if adopted:
+  the skill must stay STATIC (users won't re-upload on every pref change) —
+  trigger + speak-first only; all dynamic shaping (style, voice, persona,
+  response mode) keeps riding the per-request tool description. Owner
+  decision (2026-07-18): PARKED — PR #31 merges unchanged; the validated
+  skill stays recorded here as a ready-to-go follow-up (bundle zip +
+  one-time upload step in setup copy) whenever wanted.

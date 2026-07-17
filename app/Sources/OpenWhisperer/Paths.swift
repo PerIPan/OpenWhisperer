@@ -1,4 +1,5 @@
 import Foundation
+import OpenWhispererKit
 
 enum Paths {
     /// ~/Library/Application Support/OpenWhisperer
@@ -113,6 +114,12 @@ enum Paths {
     /// Claude Code user config (~/.claude.json) — holds user-scope MCP servers under `mcpServers`.
     static let claudeJSON: URL = {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude.json")
+    }()
+
+    /// Claude Desktop's MCP config (stdio servers only — hence the --mcp-stdio bridge).
+    static let claudeDesktopConfig = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Claude/claude_desktop_config.json")
     }()
 
     /// Codex CLI config (~/.codex/config.toml)

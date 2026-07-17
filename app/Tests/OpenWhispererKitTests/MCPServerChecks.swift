@@ -167,5 +167,39 @@ func mcpServerFailures() -> [String] {
         failures.append("list_voices tool: expected .json outcome")
     }
 
+    // initialize with guidance → instructions field present; without → absent.
+    let initReq = #"{"jsonrpc":"2.0","id":9,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"Claude Desktop","version":"1"}}}"#
+    if case let .json(data) = server.handle(Data(initReq.utf8), guidance: "SPEAK-FIRST GUIDANCE"),
+       let r = decode(data) {
+        let result = r["result"] as? [String: Any]
+        if (result?["instructions"] as? String) != "SPEAK-FIRST GUIDANCE" {
+            failures.append("initialize: guidance not surfaced as instructions")
+        }
+    } else {
+        failures.append("initialize+guidance: expected .json outcome")
+    }
+    if case let .json(data) = server.handle(Data(initReq.utf8)), let r = decode(data) {
+        if (r["result"] as? [String: Any])?["instructions"] != nil {
+            failures.append("initialize: instructions present without guidance")
+        }
+    }
+
+    // tools/list with guidance → speak description STARTS with it (read first); list_voices does not.
+    let listReq = #"{"jsonrpc":"2.0","id":10,"method":"tools/list"}"#
+    if case let .json(data) = server.handle(Data(listReq.utf8), guidance: "SPEAK-FIRST GUIDANCE"),
+       let r = decode(data),
+       let tools = (r["result"] as? [String: Any])?["tools"] as? [[String: Any]] {
+        let speak = tools.first { ($0["name"] as? String) == "speak" }
+        let voices = tools.first { ($0["name"] as? String) == "list_voices" }
+        if ((speak?["description"] as? String)?.hasPrefix("SPEAK-FIRST GUIDANCE")) != true {
+            failures.append("tools/list: speak description does not start with guidance")
+        }
+        if ((voices?["description"] as? String)?.contains("SPEAK-FIRST GUIDANCE")) == true {
+            failures.append("tools/list: guidance leaked into list_voices description")
+        }
+    } else {
+        failures.append("tools/list+guidance: expected .json outcome with tools")
+    }
+
     return failures
 }
