@@ -26,9 +26,14 @@ func voiceMarkerFailures() -> [String] {
         failures.append("VoiceMarker.shouldMark: Slack must not match")
     }
 
-    // apply prepends the bare glyph for targets and passes through otherwise.
-    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "\u{1F399} hello" {
-        failures.append("VoiceMarker.apply: marker not prepended for Claude Desktop")
+    // The footer is an exact-match trailing instruction naming the speak tool.
+    if VoiceMarker.footer != "\u{1F399} dictated — reply aloud first via the speak tool." {
+        failures.append("VoiceMarker.footer: unexpected text, got '\(VoiceMarker.footer)'")
+    }
+
+    // apply appends the footer, on its own paragraph, for targets and passes through otherwise.
+    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "hello\n\n\(VoiceMarker.footer)" {
+        failures.append("VoiceMarker.apply: footer not appended for Claude Desktop")
     }
     if VoiceMarker.apply("hello", bundleID: "com.apple.Notes") != "hello" {
         failures.append("VoiceMarker.apply: text changed for non-target bundle")
@@ -37,9 +42,9 @@ func voiceMarkerFailures() -> [String] {
         failures.append("VoiceMarker.apply: text changed for nil bundle")
     }
 
-    // Empty text must never gain a marker.
+    // Empty text must never gain a footer.
     if VoiceMarker.apply("", bundleID: "com.anthropic.claudefordesktop") != "" {
-        failures.append("VoiceMarker.apply: empty text must never gain a marker")
+        failures.append("VoiceMarker.apply: empty text must never gain a footer")
     }
 
     return failures

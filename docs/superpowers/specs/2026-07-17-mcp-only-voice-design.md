@@ -231,3 +231,15 @@ of which touch what gets typed into the prompt:
 Net effect: the transcript typed into Claude Desktop's composer is unchanged
 from the original design (bare `🎙 text`, no word). All three mitigations live
 server/config-side — nothing the user sees in their own message.
+
+- **Final marker design (owner decision): trailing instruction footer.** The skill
+  channel was vetoed (unwilling to write into the shared `~/.claude/skills`
+  surface) and bare/worded glyph markers proved unreliable against Desktop's
+  lazy tool loading. The typed marker is now the dictated text, unaltered,
+  followed by a blank line and `🎙 dictated — reply aloud first via the speak
+  tool.` — the one surface guaranteed visible on a cold chat carries both the
+  discovery token ("speak") and the imperative. Deleting the footer silences a
+  turn; typing it force-speaks. Untested hypothesis worth revisiting: Desktop
+  may preload (not defer) tool definitions when the total enabled-connector
+  footprint is below a context threshold (~10%), which would make even
+  markerless cold chats work for light-connector users.
