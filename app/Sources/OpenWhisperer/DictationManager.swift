@@ -218,8 +218,11 @@ class DictationManager: ObservableObject {
     /// model warm on success so the watchdog can tighten.
     private func transcribeSTT(samples: [Float], language: String?) async throws -> String {
         let text = try await parakeet.transcribe(samples: samples, language: language)
+        let glossary = VocabularyCorrector.parseGlossary(
+            try? String(contentsOf: Paths.sttVocabulary, encoding: .utf8))
+        let corrected = VocabularyCorrector.apply(text, glossary: glossary)
         await MainActor.run { self.sttWarm = true }
-        return text
+        return corrected
     }
 
     /// Watchdog budget for one transcription: 35 s once the model is warm;
