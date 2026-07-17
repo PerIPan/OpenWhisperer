@@ -338,3 +338,28 @@ server/config-side — nothing the user sees in their own message.
   self-documenting name (e.g. `speak_when_message_starts_with_mic`) would act
   as a standing instruction, at the cost of renaming the tool for every
   platform. Deliberately not pursued now.
+
+- **Self-documenting tool name: tested and closed (2026-07-18).** The foo
+  probe's tool was renamed `speak_on_mic_marked_msg` (trigger condition in
+  the name; full speak-first instruction in the lazy-loaded description;
+  59-char composed name, under the 64 cap). Two fresh-chat tests: (1)
+  visibility PASSED — asked cold, the model listed all three bridged names
+  verbatim, including the probe's; (2) behavior FAILED — a bare 🎙 dictation
+  in a new chat did not make the model load or call the tool. So the name
+  channel is *visible but not potent*: deferred names sit in cold context,
+  but the model doesn't act on an unloaded tool's name without a textual
+  cue, and the fuzzy auto-loader is emoji-blind. The warm-up caveat stands;
+  a rename buys nothing. Revisit only if Desktop's tool-loading behavior
+  changes.
+
+- **Tunnel-to-direct-connector path: assessed, rejected as product path
+  (2026-07-18).** Desktop's model sketched exposing the local server via
+  Tailscale Funnel / ngrok / Cloudflare Tunnel and registering the public
+  URL as a direct (cloud) connector — which *would* restore server-level
+  instructions. Rejected for the product: every variant needs a third-party
+  account + daemon, an HTTP+bearer-token server change, a manual per-account
+  connector registration in Desktop's UI (not automatable by Auto-Apply),
+  the Mac awake or the connector goes dark, and a public endpoint into a
+  loopback-only-by-design app. That is more setup friction than the hook
+  path this tier exists to undercut. At most a power-user recipe someday;
+  not a supported path.
