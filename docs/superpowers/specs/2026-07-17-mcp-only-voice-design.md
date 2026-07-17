@@ -384,5 +384,7 @@ server/config-side — nothing the user sees in their own message.
   step (same shape as Codex's hook-trust). Design constraint if adopted:
   the skill must stay STATIC (users won't re-upload on every pref change) —
   trigger + speak-first only; all dynamic shaping (style, voice, persona,
-  response mode) keeps riding the per-request tool description. Product
-  decision (fold into PR #31 vs follow-up) pending owner.
+  response mode) keeps riding the per-request tool description. Owner
+  decision (2026-07-18): PARKED — PR #31 merges unchanged; the validated
+  skill stays recorded here as a ready-to-go follow-up (bundle zip +
+  one-time upload step in setup copy) whenever wanted.
