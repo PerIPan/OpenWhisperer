@@ -166,3 +166,19 @@ spike protocol above, mirroring the 13/13 methodology.
   is stdio-only (`command`/`args`), so the `--mcp-stdio` bridge is the route;
   the HTTP-connector question is moot for v1. Bundle ID confirmed:
   `com.anthropic.claudefordesktop`.
+
+## Live findings (Task 11, 2026-07-17)
+
+- **Claude Desktop loads MCP tools lazily** ("Loaded tools" status line): tool
+  descriptions reach the model only when the user's message relevance-matches
+  them, and `initialize.instructions` is not injected into the system prompt.
+  A cold dictated turn (bare 🎙 + unrelated text) is therefore silent; once any
+  turn loads the tools (e.g. a message mentioning "speak"), subsequent dictated
+  turns in that conversation speak reliably (confirmed live).
+- **Mitigation (shipped in setup copy):** one line in Claude's personal
+  preferences — "If my message begins with 🎙, call the OpenWhisperer speak
+  tool first with a short spoken summary." — restores per-turn delivery on
+  every chat. Optional paste, surfaced in Settings → Agents → How It Works and
+  the setup instruction window.
+- **Marker rendering:** bare U+1F399 renders acceptably in Desktop's composer
+  and transcript (screenshot-confirmed); the glyph constant stays as shipped.

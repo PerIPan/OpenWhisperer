@@ -281,6 +281,10 @@ enum ConfigManager {
             3. Dictate into Claude Desktop: the transcript gets a leading 🎙 that cues the
                spoken reply. Delete the 🎙 before sending to keep a turn silent; type 🎙
                yourself to force one.
+            4. Recommended: in Claude's Settings → Profile → personal preferences, add:
+               "If my message begins with 🎙, call the OpenWhisperer speak tool first
+               with a short spoken summary." Claude Desktop loads tools on demand — this
+               line makes even the first dictated message of a new chat speak.
 
             Keep the OpenWhisperer menubar app running — it does the actual speaking.
             """
