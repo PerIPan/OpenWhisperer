@@ -271,3 +271,12 @@ server/config-side — nothing the user sees in their own message.
   instruction keys on the leading glyph again, and treats the trigger line as
   invisible. The trigger is typed on every dictation until a chat-boundary
   signal makes the parked first-dictation-only refinement safe.
+
+- **Final wording (owner): the signature line `🎙 Sent with OpenWhisperer.`**
+  Trailing, on its own paragraph, replacing both the leading glyph and the
+  imperative trigger. The "Sent from my iPhone" idiom reads as a sign-off —
+  nothing instruction-shaped for Desktop's injection-wary model to refuse —
+  while the connector name remains the discovery anchor; the standing
+  instruction keys on the signature line and carries the protocol. Declarative
+  rather than imperative: pending one live cold-chat probe to confirm the
+  softer form still triggers the tool load.

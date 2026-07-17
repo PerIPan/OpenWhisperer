@@ -11,11 +11,11 @@ func mcpInstructionsFailures() -> [String] {
     if MCPInstructions.mode(from: "always\n") != .always { failures.append("mode: 'always\\n' should parse as .always") }
     if MCPInstructions.mode(from: "bogus") != .voice { failures.append("mode: unknown should fall back to .voice") }
 
-    // Voice mode: keys off the leading glyph, speak-first, marker treated as invisible.
+    // Voice mode: keys off the trailing signature line, speak-first, marker treated as invisible.
     let voice = MCPInstructions.standing(mode: .voice, style: nil, voice: nil)
     if !voice.contains(VoiceMarker.glyph) { failures.append("standing(voice): missing marker glyph") }
-    if !voice.contains("begins with \u{1F399}") { failures.append("standing(voice): missing 'begins with 🎙' condition") }
-    if !voice.contains("Use OpenWhisperer.") { failures.append("standing(voice): missing 'Use OpenWhisperer.' trigger reference") }
+    if !voice.contains("ends with the line") { failures.append("standing(voice): missing 'ends with the line' condition") }
+    if !voice.contains("Sent with OpenWhisperer.") { failures.append("standing(voice): missing 'Sent with OpenWhisperer.' signature reference") }
     if !voice.contains("`speak`") { failures.append("standing(voice): missing speak tool reference") }
     if !voice.contains("exactly once") { failures.append("standing(voice): missing 'exactly once'") }
     if !voice.contains("never mention") { failures.append("standing(voice): marker/tool must be unmentionable") }
@@ -24,7 +24,7 @@ func mcpInstructionsFailures() -> [String] {
     // Always mode: every turn, no marker condition.
     let always = MCPInstructions.standing(mode: .always, style: nil, voice: nil)
     if !always.contains("every user turn") { failures.append("standing(always): missing 'every user turn'") }
-    if always.contains("begins with") { failures.append("standing(always): must not carry the marker condition") }
+    if always.contains("ends with the line") { failures.append("standing(always): must not carry the marker condition") }
     if !always.contains("Never ask whether to speak") { failures.append("standing(always): missing 'Never ask whether to speak'") }
 
     // Style length phrases mirror resolve_length_phrase.

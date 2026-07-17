@@ -26,14 +26,14 @@ func voiceMarkerFailures() -> [String] {
         failures.append("VoiceMarker.shouldMark: Slack must not match")
     }
 
-    // The trigger is an exact-match trailing line naming the connector.
-    if VoiceMarker.trigger != "Use OpenWhisperer." {
-        failures.append("VoiceMarker.trigger: unexpected text, got '\(VoiceMarker.trigger)'")
+    // The signature is an exact-match trailing line naming the connector.
+    if VoiceMarker.signature != "\u{1F399} Sent with OpenWhisperer." {
+        failures.append("VoiceMarker.signature: unexpected text, got '\(VoiceMarker.signature)'")
     }
 
-    // apply prefixes the leading glyph and appends the trigger, on its own paragraph, for
-    // targets; passes through unchanged otherwise.
-    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "\u{1F399} hello\n\nUse OpenWhisperer." {
+    // apply appends the signature line, on its own paragraph, for targets; passes through
+    // unchanged otherwise.
+    if VoiceMarker.apply("hello", bundleID: "com.anthropic.claudefordesktop") != "hello\n\n\u{1F399} Sent with OpenWhisperer." {
         failures.append("VoiceMarker.apply: marker not applied for Claude Desktop")
     }
     if VoiceMarker.apply("hello", bundleID: "com.apple.Notes") != "hello" {

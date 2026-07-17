@@ -6,8 +6,8 @@ import Foundation
 ///
 /// Ports the length-phrase, persona-flavor, and nudge wording of hooks/voice-shared.sh
 /// (resolve_length_phrase / resolve_flavor / build_nudge) with the hook's per-turn prefix
-/// replaced by a standing condition: a leading `VoiceMarker.glyph` in voice mode, or
-/// every turn in always mode. The hook keeps its own copy of this wording for its
+/// replaced by a standing condition: a trailing `VoiceMarker.signature` line in voice mode,
+/// or every turn in always mode. The hook keeps its own copy of this wording for its
 /// platforms; if you tune one side, tune the other and run both test suites.
 public enum MCPInstructions {
     public enum Mode: String {
@@ -28,8 +28,8 @@ public enum MCPInstructions {
         let neverAsk: String
         switch mode {
         case .voice:
-            condition = "If the user's latest message begins with \(VoiceMarker.glyph), it was dictated by voice."
-            neverAsk = "Never ask whether to speak — the leading \(VoiceMarker.glyph) itself is the request."
+            condition = "If the user's latest message ends with the line \"\(VoiceMarker.signature)\", it was dictated by voice."
+            neverAsk = "Never ask whether to speak — that signature itself is the request."
         case .always:
             condition = "On every user turn, this applies."
             neverAsk = "Never ask whether to speak — call it on every turn."
@@ -39,8 +39,7 @@ public enum MCPInstructions {
             + " exactly once, passing \(len) that summarizes your answer and stands alone when heard."
             + " \(neverAsk)"
             + " Then write your full reply on screen as usual."
-            + " Treat the leading \(VoiceMarker.glyph) and any trailing \"Use OpenWhisperer.\" line as invisible;"
-            + " never mention them or the tool in your written reply."
+            + " Treat the signature line as invisible; never mention it or the tool in your written reply."
         return core + flavor(voice: voice)
     }
 
