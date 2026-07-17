@@ -115,6 +115,12 @@ enum Paths {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude.json")
     }()
 
+    /// Claude Desktop's MCP config (stdio servers only — hence the --mcp-stdio bridge).
+    static let claudeDesktopConfig = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Claude/claude_desktop_config.json")
+    }()
+
     /// Codex CLI config (~/.codex/config.toml)
     static let codexConfig: URL = {
         FileManager.default.homeDirectoryForCurrentUser

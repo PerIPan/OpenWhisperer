@@ -67,6 +67,8 @@ struct AgentsTab: View {
             return "Copies the OpenWhisperer extension into ~/.pi/agent/extensions/ (no MCP). Run /reload in Pi afterward."
         case .antigravity:
             return "Writes the speak MCP server into ~/.gemini/config/mcp_config.json and the PreInvocation hook into ~/.gemini/config/hooks.json. Start a new agy session afterward."
+        case .claudeDesktop:
+            return "Registers the speak tool in claude_desktop_config.json. Restart Claude Desktop after applying; dictated prompts get a leading 🎙 that cues spoken replies."
         }
     }
 }
@@ -130,6 +132,7 @@ struct HowItWorksSheet: View {
         case .codexCLI: return "How voice works with Codex CLI"
         case .pi: return "How voice works with Pi"
         case .antigravity: return "How voice works with Antigravity"
+        case .claudeDesktop: return "How voice works with Claude Desktop"
         }
     }
 
@@ -211,6 +214,21 @@ struct HowItWorksSheet: View {
                         { "type": "command",
                           "command": "\(Paths.agyPreInvocationHook.path)",
                           "timeout": 10 } ] } }
+                    """,
+                    mono: true),
+            ]
+        case .claudeDesktop:
+            result = [
+                SheetSection(
+                    heading: "What Auto-Apply does",
+                    body: "Claude Desktop has no hook system, so the whole integration is the MCP entry — nothing to trust. Auto-Apply registers the speak tool (as a stdio server) in claude_desktop_config.json. Dictating into Claude Desktop types a leading 🎙 into the prompt; the server's standing instruction tells Claude to call speak first whenever a turn starts with 🎙 (every turn, if you set replies to always). Playback runs in this menubar app. Delete the 🎙 before sending to keep that turn silent. Restart Claude Desktop afterward."),
+                SheetSection(
+                    heading: "Do it by hand",
+                    body: """
+                    # ~/Library/Application Support/Claude/claude_desktop_config.json:
+                    { "mcpServers": {
+                        "OpenWhisperer": { "command": "\(Bundle.main.executablePath ?? "/path/to/OpenWhisperer")",
+                                            "args": ["--mcp-stdio"] } } }
                     """,
                     mono: true),
             ]

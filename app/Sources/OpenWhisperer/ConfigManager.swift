@@ -9,6 +9,7 @@ enum Platform: String, CaseIterable {
     case codexCLI = "codexCLI"
     case pi = "pi"
     case antigravity = "antigravity"
+    case claudeDesktop = "claudeDesktop"
 
     var label: String {
         switch self {
@@ -16,6 +17,7 @@ enum Platform: String, CaseIterable {
         case .codexCLI: return "Codex CLI"
         case .pi: return "Pi"
         case .antigravity: return "Antigravity"
+        case .claudeDesktop: return "Claude Desktop"
         }
     }
 
@@ -266,6 +268,49 @@ enum ConfigManager {
         FileManager.default.fileExists(atPath: Paths.piExtensionDest.path)
     }
 
+    // MARK: - Claude Desktop: claude_desktop_config.json (MCP only, no hooks)
+
+    static func showClaudeDesktopInstructions() {
+        let window = InstructionWindow(
+            title: "Claude Desktop Setup",
+            instructions: """
+            OpenWhisperer adds its speak tool to Claude Desktop via MCP — no hooks needed.
+
+            1. Click Auto-Apply (writes the entry into claude_desktop_config.json).
+            2. Quit and reopen Claude Desktop so it launches the server.
+            3. Dictate into Claude Desktop: the transcript gets a leading 🎙 that cues the
+               spoken reply. Delete the 🎙 before sending to keep a turn silent; type 🎙
+               yourself to force one.
+
+            Keep the OpenWhisperer menubar app running — it does the actual speaking.
+            """
+        )
+        window.show()
+    }
+
+    /// Claude Desktop has no hook system; the whole integration is the MCP entry. The
+    /// standing instruction + 🎙 marker replace the UserPromptSubmit handshake (see
+    /// docs/superpowers/specs/2026-07-17-mcp-only-voice-design.md).
+    static func applyToClaudeDesktop() -> (success: Bool, message: String) {
+        guard let exe = Bundle.main.executablePath else {
+            return (false, "Cannot resolve the app binary path")
+        }
+        let fm = FileManager.default
+        try? fm.createDirectory(
+            at: Paths.claudeDesktopConfig.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        let existing = try? Data(contentsOf: Paths.claudeDesktopConfig)
+        guard let out = DesktopConfigMerge.merged(existingJSON: existing, executablePath: exe) else {
+            return (false, "Failed to serialize claude_desktop_config.json")
+        }
+        do {
+            try out.write(to: Paths.claudeDesktopConfig)
+            return (true, "speak tool registered — restart Claude Desktop to load it")
+        } catch {
+            return (false, "Write failed: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Antigravity CLI (agy): mcp_config.json + hooks.json
 
     static func showAntigravityInstructions() {
@@ -373,6 +418,7 @@ enum ConfigManager {
         case .codexCLI: return applyHookToCodexConfig()
         case .pi: return applyToPi()
         case .antigravity: return applyToAntigravity()
+        case .claudeDesktop: return applyToClaudeDesktop()
         }
     }
 
@@ -382,6 +428,9 @@ enum ConfigManager {
         case .codexCLI: return checkCodexHookConfigured()
         case .pi: return checkPiConfigured()
         case .antigravity: return checkAntigravityConfigured()
+        case .claudeDesktop:
+            return DesktopConfigMerge.isConfigured(
+                configJSON: try? Data(contentsOf: Paths.claudeDesktopConfig))
         }
     }
 
@@ -391,6 +440,7 @@ enum ConfigManager {
         case .codexCLI: showCodexConfigInstructions()
         case .pi: showPiInstructions()
         case .antigravity: showAntigravityInstructions()
+        case .claudeDesktop: showClaudeDesktopInstructions()
         }
     }
 
