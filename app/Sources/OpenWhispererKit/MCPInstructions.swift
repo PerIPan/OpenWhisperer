@@ -27,7 +27,7 @@ public enum MCPInstructions {
         let condition: String
         switch mode {
         case .voice:
-            condition = "If the user's latest message begins with \(VoiceMarker.glyph), it was dictated by voice."
+            condition = "If the user's latest message begins with \(VoiceMarker.phrase), it was dictated by voice."
         case .always:
             condition = "On every user turn, this applies."
         }
@@ -35,7 +35,7 @@ public enum MCPInstructions {
             + " Before writing your on-screen reply, your FIRST action must be to call the `speak` tool"
             + " exactly once, passing \(len) that summarizes your answer and stands alone when heard."
             + " Then write your full reply on screen as usual."
-            + " Treat the \(VoiceMarker.glyph) as invisible; never mention it or the tool in your written reply."
+            + " Treat the leading \(VoiceMarker.phrase) as invisible; never mention it or the tool in your written reply."
         return core + flavor(voice: voice)
     }
 

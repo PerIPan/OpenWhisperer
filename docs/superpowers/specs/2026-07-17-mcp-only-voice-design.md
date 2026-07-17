@@ -182,3 +182,8 @@ spike protocol above, mirroring the 13/13 methodology.
   the setup instruction window.
 - **Marker rendering:** bare U+1F399 renders acceptably in Desktop's composer
   and transcript (screenshot-confirmed); the glyph constant stays as shipped.
+- **Probe outcome & marker revision:** typed probes confirmed the matcher keys on
+  words, not glyphs — `🎙 speak …` cold-loads the tools ("Found tools → Speak")
+  while bare `🎙 …` never does. The typed marker is therefore `🎙 speak ` (leading),
+  `VoiceMarker.phrase`. The personal-preferences line is superseded and no longer
+  recommended in setup copy; it remains here only as a record.

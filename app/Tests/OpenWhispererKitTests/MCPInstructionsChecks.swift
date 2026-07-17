@@ -14,6 +14,7 @@ func mcpInstructionsFailures() -> [String] {
     // Voice mode: keys off the marker glyph, speak-first, marker treated as invisible.
     let voice = MCPInstructions.standing(mode: .voice, style: nil, voice: nil)
     if !voice.contains(VoiceMarker.glyph) { failures.append("standing(voice): missing marker glyph") }
+    if !voice.contains("\u{1F399} speak") { failures.append("standing(voice): missing '🎙 speak' phrase") }
     if !voice.contains("begins with") { failures.append("standing(voice): missing 'begins with' condition") }
     if !voice.contains("`speak`") { failures.append("standing(voice): missing speak tool reference") }
     if !voice.contains("exactly once") { failures.append("standing(voice): missing 'exactly once'") }

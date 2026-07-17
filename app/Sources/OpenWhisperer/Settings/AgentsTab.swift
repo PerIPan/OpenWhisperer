@@ -221,7 +221,7 @@ struct HowItWorksSheet: View {
             result = [
                 SheetSection(
                     heading: "What Auto-Apply does",
-                    body: "Claude Desktop has no hook system, so the whole integration is the MCP entry — nothing to trust. Auto-Apply registers the speak tool (as a stdio server) in claude_desktop_config.json. Dictating into Claude Desktop types a leading 🎙 into the prompt; the server's standing instruction tells Claude to call speak first whenever a turn starts with 🎙 (every turn, if you set replies to always). Playback runs in this menubar app. Delete the 🎙 before sending to keep that turn silent. Restart Claude Desktop afterward. Desktop loads tools on demand, so the first dictated turn of a new chat may stay silent until they load; adding \u{201C}If my message begins with 🎙, call the OpenWhisperer speak tool first with a short spoken summary.\u{201D} to Claude's personal preferences makes every turn speak."),
+                    body: "Claude Desktop has no hook system, so the whole integration is the MCP entry — nothing to trust. Auto-Apply registers the speak tool (as a stdio server) in claude_desktop_config.json. Dictating into Claude Desktop types a leading 🎙 speak into the prompt; the server's standing instruction tells Claude to call speak first whenever a turn starts with 🎙 speak (every turn, if you set replies to always). Playback runs in this menubar app. Delete the 🎙 speak before sending to keep that turn silent. Restart Claude Desktop afterward. The marker's word doubles as the trigger for Desktop's on-demand tool loading, so even a chat's first dictated turn speaks."),
                 SheetSection(
                     heading: "Do it by hand",
                     body: """
