@@ -59,7 +59,11 @@ public enum DisfluencyFilter {
     /// match conservative.
     private static func fillerTrailing(_ chunk: String) -> String? {
         let letters = chunk.prefix(while: \.isLetter)
-        guard fillers.contains(letters.lowercased()) else { return nil }
+        // Uppercase past the first letter means an acronym ("UM"), not a
+        // filler — Parakeet writes fillers lowercase or sentence-capitalized.
+        guard fillers.contains(letters.lowercased()),
+              letters.dropFirst().allSatisfy({ !$0.isUppercase })
+        else { return nil }
         let trailing = chunk[letters.endIndex...]
         guard trailing.isEmpty
             || trailing == ","

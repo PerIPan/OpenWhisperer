@@ -33,8 +33,15 @@ func disfluencyFilterFailures() -> [String] {
     check("I think, um.", "I think.", "terminalPunctuation")
     // Mid-text sentence start still transfers the capital.
     check("It fails. Um, then it works.", "It fails. Then it works.", "midTextSentenceStart")
-    // An uppercase filler mid-sentence must NOT capitalize the next word.
-    check("so UM yeah", "so yeah", "midSentenceCapsNoTransfer")
+    // A capitalized filler mid-sentence must NOT capitalize the next word.
+    check("so Um yeah", "so yeah", "midSentenceCapNoTransfer")
+    // All-caps tokens are acronyms, not fillers: Parakeet writes fillers
+    // lowercase (or capitalized at sentence start), never as "UM".
+    check("the UM build passed", "the UM build passed", "allCapsAcronymKept")
+    // Deliberate asymmetry: only a comma-flanked filler owns both pause-commas.
+    // A bare filler after a comma keeps it — stripping it would eat real list
+    // commas ("We tried X, um Y" must keep X's comma).
+    check("and then, um it fails", "and then, it fails", "bareFillerKeepsPrecedingComma")
     // Whole-token matching: words merely containing a filler survive.
     check("the umbrella is uh here", "the umbrella is here", "wordBoundary")
     // "uh-huh" is an answer, not a filler.
