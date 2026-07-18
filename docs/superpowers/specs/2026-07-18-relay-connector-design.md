@@ -169,6 +169,20 @@ and the model's server inventory lists OpenWhisperer with its instructions.
 Multi-tenant provisioning and signup, ChatGPT registration, browser-tab
 detection for web auto-speak, offline grace, connector-side push (SSE).
 
+**Parked, on the record (2026-07-18):** a generic relay for *any* local MCP
+server. The pass-through Worker is already MCP-agnostic; generalizing is a
+device-side CLI client plus a prior-art sweep (Cloudflare's own remote-MCP
+hosting and adjacent tools exist). Pursuing it is a deliberate pivot to
+record then, not scope now.
+
+**Additional devices need zero relay-side work.** TOFU means any app
+instance claims its own DO and mints its own connector URL — a second
+user's Mac joins by flipping the toggle and pasting their URL into their
+own Claude account. Their spoken-summary JSON transits the operator's
+Worker (disclose it); they share the free-tier request pool; and TOFU
+accepts anyone with the app, which is the feature at friend-scale and the
+forcing function for the accounts work if builds ever circulate widely.
+
 ## Repositories
 
 `ow-relay` is a new repository. The Swift side (`RelayClient`, Settings,
