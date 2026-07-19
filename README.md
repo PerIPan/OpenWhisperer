@@ -16,7 +16,7 @@ The command to bypass Gatekeeper for the DMG:
 xattr -cr /Applications/OpenWhisperer.app
 
 If you want to do it on the DMG itself before opening:
-xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.6.0.dmg
+xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.10.0.dmg
 
 
 ## What It Does
@@ -27,17 +27,25 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## What's New
 
+### 1.10.0
+
+- **New speech engine — Parakeet TDT v3** — dictation moved from WhisperKit to NVIDIA's **Parakeet TDT v3** (CoreML / Apple Neural Engine). On-device it decodes several times faster with comparable quiet-room accuracy, and the engine pre-warms so your first dictation isn't slow. WhisperKit has been removed.
+- **Native Settings window** — the old menubar popover is replaced by a proper tabbed macOS Settings window: **General** (login item, permissions), **Input** (dictation, language, app focus), **Voice** (voice, speed, volume, response), **Agents** (platform picker + one-click apply), and **Advanced** (models, server, diagnostics). The menubar is now a clean dropdown.
+- **Reworked overlay** — the floating overlay is resizable, pauses when idle, and offers selectable analyzer styles (LED bars, graph, curtain, spectrum) picked in Settings. Real mic levels drive the spectrum and real playback levels drive the speaking wave, on a frosted faceplate with a breathing status lamp.
+- **Transcription history** — recent dictations now appear right in the menubar dropdown, backed by a session store.
+- **Custom vocabulary** — add a glossary of your own terms in Settings; a fuzzy corrector post-fixes transcripts against it (handy for names, jargon, and product names Parakeet mishears).
+
+<details>
+<summary><strong>Earlier releases — 1.6.x, 1.5.x</strong> (Antigravity & Pi, voice personas, native rewrite, streaming TTS)</summary>
+
 ### 1.6.0
 
-- **Two more agents — Antigravity & Pi** — spoken replies now work beyond Claude Code and Codex in the **Antigravity** CLI (`agy`) and **Pi**. Pick your agent in the **Setup** card and **Auto-Apply** wires it up: Claude Code, Codex, and Antigravity get a hook plus a `speak` tool; Pi gets a drop-in extension.
+- **Two more agents — Antigravity & Pi** — spoken replies now work beyond Claude Code and Codex in the **Antigravity** CLI (`agy`) and **Pi**. Pick your agent in the **Agents** settings and **Auto-Apply** wires it up: Claude Code, Codex, and Antigravity get a hook plus a `speak` tool; Pi gets a drop-in extension.
 - **Voice personas** — pick a voice with a national accent and the reply is written to match its character: the British voice turns dry and deadpan, the Italian voice warm and expressive, the Japanese voice courteous and understated, and so on across nine accents. It colors tone only — it never changes the facts.
 - **Mid-turn speaking** — replies are spoken through an in-app `speak` tool the agent calls, so speech can start mid-turn instead of only after the whole reply lands. (Pi uses an equivalent extension.)
 - **Adjustable speaking speed** — a **Speed** slider in Voice Settings sets how fast replies are spoken (0.7×–1.5×, default 1.1×). Per-project override via `OW_TTS_SPEED`.
 - **Simpler Response modes** — the little-used "when Text" option is gone; **Response** is now **when Voice** (dictated turns only, the default) or **Always**.
 - **Steadier voice handling** — an invalid voice name from the model is ignored (it falls back to your selected voice) instead of erroring, and the transcription overlay now takes the first click even when the app is in the background — click any line to copy it.
-
-<details>
-<summary><strong>Earlier releases — 1.5.x</strong> (native rewrite, streaming TTS, app-focus automation, first-run UX)</summary>
 
 ### 1.5.2
 
@@ -72,10 +80,10 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## Install
 
-[**Download OpenWhisperer-1.6.0.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.6.0/OpenWhisperer-1.6.0.dmg) — drag to Applications and launch.
+[**Download OpenWhisperer-1.10.0.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.10.0/OpenWhisperer-1.10.0.dmg) — drag to Applications and launch.
 
 On first launch, the app:
-- Downloads the Whisper (speech-to-text) and Kokoro (text-to-speech) CoreML models
+- Downloads the Parakeet (speech-to-text) and Kokoro (text-to-speech) CoreML models
 - Loads both models on the Apple Neural Engine
 - Starts the in-app TTS server automatically (loopback only, port 8000)
 
@@ -85,29 +93,30 @@ While that one-time download and Neural-Engine compile runs, the menu shows live
   <img src="screenshot-loading-menu.png" width="460" alt="Open Whisperer menu preparing the models on first launch">
 </p>
 
-The menubar icon gives you:
-- Start/Stop/Restart server with configurable port
+The menubar dropdown holds the essentials — recording status, recent transcriptions, the overlay toggle, and a link to the full **Settings** window. Everything else lives in Settings, organized into tabs:
+
 - **Push-to-Talk** — configurable hotkey (Ctrl, fn, Option, Cmd) to record
 - **Language selector** — set STT language to avoid hallucinations (auto-detect plus 17 languages)
-- **Voice picker** — choose from six Kokoro voices across English (Heart, Bella, Michael), French (Siwis), and Italian (Sara, Nicola) (no server restart needed)
-- **Style** — how verbose the spoken summary is: Terse, Normal (default), Rich, or Full (speaks the entire reply)
+- **Voice picker** — the full Kokoro-82M roster (~54 voices, grouped by language); non-default voices download on demand (no server restart needed)
+- **Style** — how verbose the spoken summary is: Terse, Normal (default), or Rich
 - **Response** — when replies are spoken: when Voice (dictated turns only, the default) or Always
-- **Volume** — Low, Medium (default), or High output volume (in the **Setup TTS for** card)
+- **Speed** — how fast replies are spoken (0.7×–1.5×, default 1.1×)
+- **Volume** — Low, Medium (default), or High output volume
+- **Custom vocabulary** — a glossary of your own terms; a fuzzy corrector post-fixes transcripts against it
 - **Start on startup** — optional login item to launch automatically when you log in
 - **App Focus Automation** — Auto-Focus and Auto-Submit (requires Accessibility permission)
-- **Platform selector** — switch between Claude Code and Codex CLI (auto-configures hooks)
-- **Auto-Apply** — one-click setup for the hooks (adapts to selected platform)
+- **Platform selector** — Claude Code, Codex CLI, Antigravity, or Pi (auto-configures the integration)
+- **Auto-Apply** — one-click setup for the selected platform
 - **Accessibility prompt** — asks for permission on first launch with live granted/not-granted status
 - **Diagnostic checklist** — shows hook and TTS status at a glance
-- **Transcription overlay** — floating window showing live waveform and recent transcriptions
-- **Events log** — diagnostic log for troubleshooting paste and transcription issues
-- TTS server log (the in-app native TTS server)
+- **Transcription overlay** — resizable floating window with selectable analyzer styles and recent transcriptions
+- **Events log** and **TTS server log** — diagnostics for troubleshooting paste and transcription issues
 
-After setup, use the menubar buttons for configuration instructions.
+After setup, use the in-app help (hover **ⓘ** on any section) for configuration instructions.
 
 ## Voice Input Modes
 
-Three modes for speech-to-text, all using your local Whisper model. Transcribed text is typed directly into whatever app you have focused.
+Three modes for speech-to-text, all using your local Parakeet model. Transcribed text is typed directly into whatever app you have focused.
 
 ### Hold-to-Talk (default)
 
@@ -119,7 +128,7 @@ Three modes for speech-to-text, all using your local Whisper model. Transcribed 
 
 1. Press **Ctrl** — recording starts (red indicator)
 2. Speak your message
-3. Press **Ctrl** again — audio is sent to Whisper for transcription
+3. Press **Ctrl** again — audio is sent to Parakeet for transcription
 4. Text is inserted via Accessibility (native apps) or CGEvent Unicode typing (all others) — clipboard is never touched
 
 ### Hands-Free
@@ -164,8 +173,8 @@ If you prefer not to grant Accessibility permission, press **fn fn** to use buil
 There's no special tag to add — voice mode works automatically. The app and its hooks coordinate so that only **voice-dictated** turns are spoken; turns you type stay silent:
 
 1. When you dictate, the app records a fingerprint of the text it inserted.
-2. The **UserPromptSubmit** hook recognizes that turn as a voice turn and quietly nudges the model to open its reply with a short summary that stands alone.
-3. The **Stop** hook takes the first paragraph of the reply, strips markdown (capped at ~600 characters), and speaks it through the local Kokoro TTS model.
+2. The **UserPromptSubmit** hook recognizes that turn as a voice turn and quietly nudges the model to open its reply by calling an in-app `speak` tool with a short summary that stands alone.
+3. The model calls `speak` and the app synthesizes it sentence-by-sentence through the local Kokoro TTS model — so speech starts mid-turn, not after the whole reply lands. (There is no Stop hook; Pi uses an equivalent extension instead of a hook + tool.)
 
 - **Screen**: you see the full detailed response
 - **Speakers**: you hear the spoken opening summary
@@ -174,14 +183,13 @@ This "dictated turns only" behavior is the default. The **Response** control in 
 
 ### Voice Style Levels
 
-Choose how verbose that opening summary should be (set in the menubar under **Style**, the left dropdown of the Voice Settings **Response** row):
+Choose how verbose that opening summary should be (set in **Settings → Voice → Style**):
 
 | Level | Spoken summary |
 |-------|----------------|
 | **Terse** | One short sentence — just the key outcome |
 | **Normal** | One plain sentence (default) |
-| **Rich** | A sentence or two of summary |
-| **Full** | The entire reply, read as natural spoken prose (code/paths/tables described, not read literally) |
+| **Rich** | A sentence or two of summary (code/paths/tables described, not read literally) |
 
 ## Configuration
 
@@ -197,7 +205,7 @@ Most settings are configured from the menubar (voice, volume, language, hotkey, 
 | `OW_TTS_VOICE` | menubar voice | hooks | Per-project Kokoro voice; overrides the global `tts_voice` |
 | `OW_TTS_RESPONSE` | menubar **Response** | hooks | Per-project response mode (`voice`/`always`); overrides the global `tts_response_mode` |
 
-> **Tip:** Setting a specific language (e.g. English) instead of auto-detect prevents Whisper from hallucinating text in other languages during silence or background noise.
+> **Tip:** Setting a specific language (e.g. English) instead of auto-detect prevents the model from hallucinating text in other languages during silence or background noise.
 
 ## Troubleshooting
 
@@ -232,7 +240,7 @@ Most settings are configured from the menubar (voice, volume, language, hotkey, 
   brew install jq
   ```
 
-There is **no Python, virtualenv, or `pip`/`uv` step** — speech-to-text and text-to-speech are native Swift (WhisperKit + FluidAudio) and run in-process on the Apple Neural Engine.
+There is **no Python, virtualenv, or `pip`/`uv` step** — speech-to-text and text-to-speech are native Swift (FluidAudio: Parakeet STT + Kokoro TTS) and run in-process on the Apple Neural Engine.
 
 ### Step 1: Build the app
 
@@ -243,18 +251,15 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-This produces `OpenWhisperer.app` and `OpenWhisperer-1.6.0.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
+This produces `OpenWhisperer.app` and `OpenWhisperer-1.10.0.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Parakeet and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
 
 ### Step 2: Wire up the hooks
 
-The easiest path is the menubar's **Auto-Apply** button, which writes the right hooks for the selected platform (Claude Code or Codex CLI). To do it by hand for Claude Code, add this to `~/.claude/settings.json` (or a project's `.claude/settings.json`):
+The easiest path is the **Agents** settings' **Auto-Apply** button, which wires up the right integration for the selected platform (Claude Code, Codex CLI, Antigravity, or Pi). For Claude Code and Codex that means one `UserPromptSubmit` hook plus a `speak` MCP server; for Pi it drops in an extension. To do it by hand for Claude Code, add this `UserPromptSubmit` hook to `~/.claude/settings.json` (or a project's `.claude/settings.json`):
 
 ```json
 {
   "hooks": {
-    "Stop": [
-      { "hooks": [ { "type": "command", "command": "/absolute/path/to/OpenWhisperer/hooks/tts-hook.sh", "timeout": 60 } ] }
-    ],
     "UserPromptSubmit": [
       { "hooks": [ { "type": "command", "command": "/absolute/path/to/OpenWhisperer/hooks/voice-context.sh", "timeout": 60 } ] }
     ]
@@ -262,7 +267,7 @@ The easiest path is the menubar's **Auto-Apply** button, which writes the right 
 }
 ```
 
-Replace `/absolute/path/to/OpenWhisperer` with where you cloned the repo. The `UserPromptSubmit` hook detects voice turns; the `Stop` hook speaks the reply. That's all — no `CLAUDE.md` or `[VOICE:]` tag is required.
+...and register the `speak` MCP server (in `~/.claude.json`) pointing at `http://localhost:8000/mcp`. Replace `/absolute/path/to/OpenWhisperer` with where you cloned the repo. The hook detects voice turns and nudges the model to call `speak`, which the app plays. That's all — no Stop hook, `CLAUDE.md`, or `[VOICE:]` tag is required. (Auto-Apply does both steps for you.)
 
 ### Running the TTS server headlessly
 
@@ -279,16 +284,17 @@ swift run OpenWhisperer --serve-tts   # serves http://localhost:8000 (set TTS_PO
 OpenWhisperer/
 ├── CLAUDE.md                 # Guidance for AI assistants working on this repo
 ├── hooks/
-│   ├── tts-hook.sh           # Claude Code Stop hook — speaks the reply's first paragraph
-│   ├── voice-context.sh      # Claude Code UserPromptSubmit hook — voice-turn detection
-│   ├── codex-tts-hook.sh     # Codex CLI notify hook
-│   └── speakable-text.sh     # Shared spoken-text extractor
+│   ├── voice-context.sh      # Claude Code / Codex UserPromptSubmit hook — voice-turn detection
+│   ├── voice-shared.sh       # Shared voice-turn classification logic
+│   └── agy-previnvocation.sh # Antigravity PreInvocation hook
+├── pi/
+│   └── openwhisperer.ts      # Pi extension (speak tool + voice-turn nudge)
 ├── scripts/
 │   └── speak.sh              # Standalone TTS utility (pipe text to hear it)
 └── app/                      # macOS menubar app (Swift Package)
     ├── Package.swift
     ├── Sources/
-    │   ├── OpenWhisperer/     # App + native STT (WhisperKit) + native TTS (FluidAudio)
+    │   ├── OpenWhisperer/     # App + native STT (Parakeet) + native TTS (Kokoro), both via FluidAudio
     │   └── OpenWhispererKit/  # Pure, unit-tested logic
     ├── Tests/
     ├── Resources/
@@ -301,12 +307,12 @@ Contributions are welcome! Feel free to open issues or submit pull requests. Whe
 
 ## Acknowledgments
 
-The native rewrite at the heart of this app — replacing the out-of-process Python server with fully in-process Swift speech-to-text (WhisperKit) and text-to-speech (FluidAudio Kokoro), in-process streaming playback and barge-in, and the tagless voice-turn handshake — was contributed by [**Hakan Ensari**](https://github.com/hakanensari) ([fork](https://github.com/hakanensari/OpenWhisperer)). It removed the Python/venv stack entirely and made the app notarizable. Thank you!
+The native rewrite at the heart of this app — replacing the out-of-process Python server with fully in-process Swift speech-to-text and text-to-speech (FluidAudio Kokoro), in-process streaming playback and barge-in, and the tagless voice-turn handshake — was contributed by [**Hakan Ensari**](https://github.com/hakanensari) ([fork](https://github.com/hakanensari/OpenWhisperer)). It removed the Python/venv stack entirely and made the app notarizable. Thank you! (The rewrite originally used WhisperKit for STT; 1.10.0 replaced it with Parakeet.)
 
 ## Credits
 
-- [WhisperKit](https://github.com/argmaxinc/WhisperKit) — on-device speech-to-text (CoreML / Apple Neural Engine)
-- [FluidAudio](https://github.com/FluidInference/FluidAudio) — on-device Kokoro text-to-speech (CoreML / Apple Neural Engine)
+- [FluidAudio](https://github.com/FluidInference/FluidAudio) — on-device Parakeet speech-to-text and Kokoro text-to-speech (CoreML / Apple Neural Engine)
+- [Parakeet TDT](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) — NVIDIA's speech-to-text model
 - [Kokoro](https://huggingface.co/prince-canuma/Kokoro-82M) — TTS model
 - [jq](https://jqlang.github.io/jq/) — JSON processor (used by the hooks)
 - [Claude Code](https://claude.ai/claude-code) — Anthropic's CLI
