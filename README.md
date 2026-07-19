@@ -16,7 +16,7 @@ The command to bypass Gatekeeper for the DMG:
 xattr -cr /Applications/OpenWhisperer.app
 
 If you want to do it on the DMG itself before opening:
-xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.10.0.dmg
+xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.10.1.dmg
 
 
 ## What It Does
@@ -26,6 +26,14 @@ You use your coding agent — **Claude Code, Codex, Antigravity, or Pi** — nor
 Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## What's New
+
+### 1.10.1
+
+- **Branded popover is back** — the native tabbed Settings window from 1.10.0 is replaced by the warm cream/gold menubar popover (the app's original identity). Everything else from 1.10.0 stays: Parakeet STT, the overlay + analyzer styles, custom vocabulary.
+- **One overlay control** — the overlay toggle and analyzer-style picker are merged into a single **Transcription Overlay** dropdown: OFF · LED Bars · Graph · Curtain.
+- **Idle STANDBY readout** — the overlay shows a `STANDBY` marquee when idle instead of a blank panel.
+- **Permissions moved** — Accessibility / Microphone now live inside the **Server & Logs** card, which auto-expands when a grant is missing.
+- **Fix** — the STT status row correctly reads **Parakeet STT** (it was mislabeled "Whisper STT").
 
 ### 1.10.0
 
@@ -80,7 +88,7 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## Install
 
-[**Download OpenWhisperer-1.10.0.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.10.0/OpenWhisperer-1.10.0.dmg) — drag to Applications and launch.
+[**Download OpenWhisperer-1.10.1.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.10.1/OpenWhisperer-1.10.1.dmg) — drag to Applications and launch.
 
 On first launch, the app:
 - Downloads the Parakeet (speech-to-text) and Kokoro (text-to-speech) CoreML models
@@ -251,7 +259,7 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-This produces `OpenWhisperer.app` and `OpenWhisperer-1.10.0.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Parakeet and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
+This produces `OpenWhisperer.app` and `OpenWhisperer-1.10.1.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Parakeet and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
 
 ### Step 2: Wire up the hooks
 
