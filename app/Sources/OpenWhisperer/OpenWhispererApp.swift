@@ -56,83 +56,19 @@ struct OpenWhispererApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            SettingsMenuItems(history: appDelegate.transcriptionHistory)
-        } label: {
-            // Always-visible first-run signal: hourglass while the models load, waveform once ready.
-            MenuBarStatusIcon(dictation: appDelegate.dictationManager, server: appDelegate.serverManager)
-        }
-
-        Settings {
-            SettingsView()
+            MenuBarView()
                 .environmentObject(appDelegate.serverManager)
                 .environmentObject(appDelegate.setupManager)
                 .environmentObject(appDelegate.dictationManager)
                 .environmentObject(appDelegate.accessibilityManager)
-        }
-        .windowResizability(.contentSize)
-    }
-}
-
-/// Menubar menu content.
-private struct SettingsMenuItems: View {
-    @Environment(\.openSettings) private var openSettings
-    @ObservedObject var history: TranscriptionHistory
-    @ObservedObject private var overlay = TranscriptionOverlay.shared
-
-    /// Rows the dropdown shows; the buffer keeps `TranscriptHistoryBuffer.maxEntries`.
-    private static let visibleRows = 10
-
-    var body: some View {
-        if history.items.isEmpty {
-            // A plain Text renders as a disabled menu item.
-            Text("No transcriptions yet")
-        } else {
-            // Newest first. The label is truncated; clicking copies the full text.
-            ForEach(Array(history.items.prefix(Self.visibleRows).enumerated()), id: \.offset) { _, text in
-                Button(TranscriptHistoryBuffer.menuLabel(text)) {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
+                .onAppear {
+                    appDelegate.setupDictation()
                 }
-            }
+        } label: {
+            // Always-visible first-run signal: hourglass while the models load, waveform once ready.
+            MenuBarStatusIcon(dictation: appDelegate.dictationManager, server: appDelegate.serverManager)
         }
-
-        Divider()
-
-        Button("Clear History") { history.clear() }
-            .disabled(history.items.isEmpty)
-
-        Divider()
-
-        // Model/setup status — the overlay shows only a red dot; the words live here.
-        if let status = overlay.statusText {
-            if overlay.statusIsError, let dm = overlay.dictationManager, dm.sttFailed {
-                Button("\(status) — Retry") { dm.retrySTT() }
-            } else {
-                Text(status)
-            }
-            Divider()
-        }
-
-        Toggle("Show Overlay", isOn: Binding(
-            get: { overlay.isVisible },
-            set: { $0 ? overlay.show() : overlay.hide() }
-        ))
-
-        Divider()
-
-        Button("Settings...") {
-            // Activate the app to bring the Settings window to the front
-            NSApp.activate(ignoringOtherApps: true)
-            openSettings()
-        }
-        .keyboardShortcut(",", modifiers: .command)
-
-        Divider()
-
-        Button("Quit OpenWhisperer") {
-            NSApplication.shared.terminate(nil)
-        }
-        .keyboardShortcut("q", modifiers: .command)
+        .menuBarExtraStyle(.window)
     }
 }
 
