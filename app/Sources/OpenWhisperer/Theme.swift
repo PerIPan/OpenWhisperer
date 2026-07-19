@@ -37,21 +37,32 @@ extension Color {
 // MARK: - Design tokens
 
 // Warm "Open Whisperer" palette (openwhisperer.com). Tokens are light/dark dynamic —
-// via the `Color.ow(light, dark)` helper above. Used by the transcription overlay;
-// the Settings window is deliberately native (system colors) and takes nothing from here.
+// via the `Color.ow(light, dark)` helper above. Used by the branded menubar popover
+// (MenuBarView) and the transcription overlay.
 enum OWColor {
     // Surfaces
-    static let page = Color.ow(0xFAF7F1, 0x1E1B16)            // overlay background (cream / warm-dark)
+    static let page = Color.ow(0xFAF7F1, 0x1E1B16)            // popover / overlay background (cream / warm-dark)
+    static let surface = Color.ow(0xFFFFFF, 0x2A2520)          // card surface
+    static let cardBackground = surface                        // legacy alias (OWCard)
     // Lines
-    static let line = Color.ow(0xDCCFB8, 0x3A332B)             // borders + dividers
+    static let line = Color.ow(0xDCCFB8, 0x3A332B)             // borders + dividers (deepened for visible cards)
+    static let divider = line                                  // legacy alias
     // Text ramp (warm ink → cream)
     static let ink = Color.ow(0x2A2520, 0xF3ECDF)
     static let inkSoft = Color.ow(0x6A6157, 0xB6AC9C)
     static let inkFaint = Color.ow(0x978C7E, 0x877D6F)
+    static let muted = inkSoft                                 // legacy alias
     // Accent (gold)
     static let accent = Color.ow(0xC0A06A, 0xCBA86A)
+    static let accentDeep = Color.ow(0x98763F, 0xD8B677)
+    static let onAccent = Color.ow(0x2A2520, 0x211B12)         // text/icon on a gold fill (WCAG-safe ink)
+    static let success = accentDeep                            // "applied" state → deep gold (WCAG-safe as text)
     // Fills
     static let pillFill = Color.ow(0xEADFC8, 0x342D24)
+    static let pickerBg = Color.ow(0xF3EBDD, 0x332C23)
+    static let pickerBorder = Color.ow(0xE0D4BD, 0x423A30)
+    static let checkboxBorder = Color.ow(0xCBBFA9, 0x4A4136)
+    static let pillBackground = pillFill                       // legacy alias
     // Status semantics — warm equivalents of system red/amber/green so dots + badges don't
     // clash with the cream/gold palette (the system colors are especially jarring in dark mode).
     static let recording = Color.ow(0xCC3D33, 0xE2675A)        // recording / error
@@ -84,3 +95,22 @@ func registerBundledFonts() {
     }
 }
 
+
+/// Tints the popover's window chrome to the warm cream/dark background so the branded
+/// MenuBarExtra(.window) has no default material edge. Restored 2026-07-19 with the popover UI.
+struct OWWindowBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { Self.apply(to: view.window) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { Self.apply(to: nsView.window) }
+    }
+
+    private static func apply(to window: NSWindow?) {
+        guard let window else { return }
+        window.backgroundColor = .ow(0xFAF7F1, 0x1E1B16)
+    }
+}

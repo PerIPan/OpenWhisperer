@@ -26,6 +26,12 @@ enum Paths {
     static let serverLog = appSupport.appendingPathComponent("server.log")
     static let setupLog = appSupport.appendingPathComponent("setup.log")
 
+    /// Card expanded states (persisted so the branded popover's collapse/expand survives
+    /// restarts). Restored 2026-07-19 with the branded popover UI.
+    static let setupCardExpanded = appSupport.appendingPathComponent("setup_expanded")
+    static let voiceSettingsCardExpanded = appSupport.appendingPathComponent("voice_settings_expanded")
+    static let serverCardExpanded = appSupport.appendingPathComponent("server_expanded")
+
     /// Legacy model space from the removed WhisperKit engine (2026-07-13). Nothing
     /// downloads here anymore; ModelStorage lists it so "Delete models" reclaims an
     /// orphaned Whisper cache. (FluidAudio's models live in Application Support/
