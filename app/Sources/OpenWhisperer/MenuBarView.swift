@@ -541,6 +541,7 @@ struct MenuBarView: View {
                             ),
                             options: [
                                 (id: "off", label: "OFF"),
+                                (id: OverlayStyle.wave.rawValue, label: "Wave"),
                                 (id: OverlayStyle.ledBars.rawValue, label: "LED Bars"),
                                 (id: OverlayStyle.graph.rawValue, label: "Graph"),
                                 (id: OverlayStyle.curtain.rawValue, label: "Curtain")

@@ -287,7 +287,7 @@ struct OverlayView: View {
         ZStack(alignment: .bottom) {
             // Edge-to-edge: the analyzer runs to the faceplate's edges (the window
             // mask clips the rounded corners).
-            WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError, statusText: overlay.statusText, style: overlay.analyzerStyle)
+            WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError, statusText: overlay.statusText, style: overlay.analyzerStyle, pttKeyLabel: overlay.pttKeyLabel, interactionMode: overlay.interactionMode)
 
             // Silence countdown — hands-free only, along the pill's bottom edge.
             if overlay.interactionMode == .handsFree {
@@ -314,6 +314,8 @@ struct WaveformBar: View {
     var statusText: String? = nil
     /// Active analyzer style — which renderer fills the display area.
     var style: OverlayStyle = .defaultStyle
+    var pttKeyLabel: String = "Ctrl"
+    var interactionMode: InteractionMode = .pressToTalk
 
     var body: some View {
         // Analyzer display — one of the selectable styles (SpectrumStyles.swift).
@@ -321,7 +323,13 @@ struct WaveformBar: View {
         // (The REC lamp retired 2026-07-17: the live mic spectrum itself is the
         // recording indication.)
         Group {
-            if statusText != nil {
+            if style == .wave {
+                // The 1.6.0 look (default): mirrored-line waveform + status dot. It owns
+                // its own status/idle presentation, so it bypasses the LED marquee path.
+                WaveStyleView(recorder: recorder, isTTSPlaying: isTTSPlaying,
+                              statusText: statusText, statusIsError: statusIsError,
+                              pttKeyLabel: pttKeyLabel, interactionMode: interactionMode)
+            } else if statusText != nil {
                 marquee(word: statusIsError ? "ERROR" : "LOADING", color: statusIsError ? OWColor.danger : OWColor.accent)
             } else {
                 let live = (isTTSPlaying && recorder.state == .idle)
@@ -332,6 +340,7 @@ struct WaveformBar: View {
                     marquee(word: "STANDBY", color: OWColor.inkFaint)
                 } else {
                     switch style {
+                    case .wave: EmptyView()   // handled above
                     case .ledBars: LEDBarsStyleView(bands: live)
                     case .graph: GraphStyleView(bands: live)
                     case .curtain: CurtainStyleView(bands: live)
@@ -392,6 +401,131 @@ struct WaveformBar: View {
         .clipped()
     }
 
+}
+
+// MARK: - Wave Style (the 1.6.0 default)
+
+/// The pre-1.10 overlay renderer: a status dot + label over a mirrored-line waveform
+/// driven by `recorder.levelHistory` (recording) or a synthesized sine (TTS playback).
+/// Ported verbatim from the 1.6.0 `WaveformBar` so the beloved original look is a
+/// selectable style again — and the default.
+struct WaveStyleView: View {
+    @ObservedObject var recorder: AudioRecorder
+    var isTTSPlaying: Bool = false
+    /// Model-loading/error status from the overlay; takes over the label when present.
+    var statusText: String? = nil
+    var statusIsError: Bool = false
+    var pttKeyLabel: String = "Ctrl"
+    var interactionMode: InteractionMode = .pressToTalk
+
+    private static let waveGradient = LinearGradient(
+        colors: [Color.ow(0xE7CF9E, 0xE7CF9E), OWColor.accent, OWColor.accentDeep],
+        startPoint: .leading, endPoint: .trailing)
+    private static let idleGradient = LinearGradient(
+        colors: [OWColor.inkFaint, OWColor.inkSoft, OWColor.inkFaint],
+        startPoint: .leading, endPoint: .trailing)
+    private static let listeningGradient = LinearGradient(
+        colors: [OWColor.accent, OWColor.accentDeep, OWColor.accent],
+        startPoint: .leading, endPoint: .trailing)
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 8, height: 8)
+                Text(label)
+                    .font(.custom("Outfit", size: 10))
+                    .foregroundColor(dotColor)
+                Spacer()
+                if statusText == nil, recorder.state == .recording {
+                    Text(recordingHint)
+                        .font(.custom("Outfit", size: 9))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            GeometryReader { geo in
+                if isTTSPlaying && recorder.state == .idle {
+                    TimelineView(.animation(minimumInterval: 0.03)) { timeline in
+                        let time = timeline.date.timeIntervalSinceReferenceDate
+                        let levels = Self.ttsLevels(count: 50, time: time)
+                        Self.mirroredLines(levels: levels, size: geo.size)
+                            .fill(Self.waveGradient)
+                    }
+                } else {
+                    let gradient = recorder.state == .listening ? Self.listeningGradient : Self.idleGradient
+                    Self.mirroredLines(levels: recorder.levelHistory.map { CGFloat($0) }, size: geo.size)
+                        .fill(recorder.state == .recording ? Self.waveGradient : gradient)
+                        .opacity(recorder.state == .uploading ? 0.5 : recorder.state == .idle ? 0.4 : 1.0)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private var recordingHint: String {
+        switch interactionMode {
+        case .holdToTalk: return "Release \(pttKeyLabel) to stop"
+        case .handsFree: return "silence submits"
+        case .pressToTalk: return "Press \(pttKeyLabel) to stop"
+        }
+    }
+
+    private var dotColor: Color {
+        if statusText != nil { return statusIsError ? OWColor.danger : OWColor.warn }
+        if isTTSPlaying && recorder.state == .idle { return OWColor.accent }
+        switch recorder.state {
+        case .recording: return OWColor.recording
+        case .uploading: return OWColor.warn
+        case .listening: return OWColor.accentDeep
+        case .idle: return OWColor.live
+        }
+    }
+
+    private var label: String {
+        if let statusText { return statusText }
+        if isTTSPlaying && recorder.state == .idle { return "Speaking..." }
+        switch recorder.state {
+        case .recording: return "Recording..."
+        case .uploading: return "Transcribing..."
+        case .listening: return "Listening..."
+        case .idle: return "Standby"
+        }
+    }
+
+    /// Vertical bars mirrored around the center line, tapered at the edges.
+    private static func mirroredLines(levels: [CGFloat], size: CGSize) -> Path {
+        guard !levels.isEmpty else { return Path() }
+        let n = levels.count
+        let barWidth: CGFloat = 2
+        let gap: CGFloat = max(1, (size.width - barWidth * CGFloat(n)) / CGFloat(max(n - 1, 1)))
+        let step = barWidth + gap
+        let midY = size.height / 2
+        let maxHalf = midY - 1
+        var path = Path()
+        for (i, level) in levels.enumerated() {
+            let t = CGFloat(i) / CGFloat(max(n - 1, 1))
+            let taper = min(t * 5, (1 - t) * 5, 1.0)
+            let h = max(1, level * taper * maxHalf)
+            let x = CGFloat(i) * step
+            path.addRoundedRect(in: CGRect(x: x, y: midY - h, width: barWidth, height: h * 2),
+                                cornerSize: CGSize(width: 1, height: 1))
+        }
+        return path
+    }
+
+    /// Sine-blended levels for the TTS "speaking" animation.
+    private static func ttsLevels(count: Int, time: Double) -> [CGFloat] {
+        (0..<count).map { i in
+            let t = Double(i) / Double(max(count - 1, 1))
+            let w1 = sin(time * 3.0 + t * .pi * 4) * 0.35
+            let w2 = sin(time * 1.8 + t * .pi * 2.5) * 0.25
+            let w3 = sin(time * 5.0 + t * .pi * 7) * 0.1
+            return CGFloat(max(0.05, (w1 + w2 + w3 + 0.5) * 0.8))
+        }
+    }
 }
 
 // MARK: - Silence Progress Bar

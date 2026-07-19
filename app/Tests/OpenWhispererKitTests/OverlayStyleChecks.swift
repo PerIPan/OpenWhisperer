@@ -8,13 +8,14 @@ func overlayStyleFailures() -> [String] {
         if !condition { failures.append("OverlayStyle.\(name): \(detail)") }
     }
 
+    expect(OverlayStyle.parse("wave") == .wave, "parseWave", "got \(OverlayStyle.parse("wave"))")
     expect(OverlayStyle.parse("led_bars") == .ledBars, "parseLed", "got \(OverlayStyle.parse("led_bars"))")
     expect(OverlayStyle.parse("graph") == .graph, "parseGraph", "got \(OverlayStyle.parse("graph"))")
     expect(OverlayStyle.parse("curtain") == .curtain, "parseCurtain", "got \(OverlayStyle.parse("curtain"))")
     expect(OverlayStyle.parse(" curtain\n") == .curtain, "trims", "got \(OverlayStyle.parse(" curtain\n"))")
-    expect(OverlayStyle.parse(nil) == .ledBars, "nilDefault", "got \(OverlayStyle.parse(nil))")
-    expect(OverlayStyle.parse("vintage") == .ledBars, "garbageDefault", "got \(OverlayStyle.parse("vintage"))")
-    expect(OverlayStyle.parse("") == .ledBars, "emptyDefault", "got \(OverlayStyle.parse(""))")
-    expect(OverlayStyle.defaultStyle == .ledBars, "default", "got \(OverlayStyle.defaultStyle)")
+    expect(OverlayStyle.parse(nil) == .wave, "nilDefault", "got \(OverlayStyle.parse(nil))")
+    expect(OverlayStyle.parse("vintage") == .wave, "garbageDefault", "got \(OverlayStyle.parse("vintage"))")
+    expect(OverlayStyle.parse("") == .wave, "emptyDefault", "got \(OverlayStyle.parse(""))")
+    expect(OverlayStyle.defaultStyle == .wave, "default", "got \(OverlayStyle.defaultStyle)")
     return failures
 }

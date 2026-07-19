@@ -30,7 +30,8 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 ### 1.10.1
 
 - **Branded popover is back** — the native tabbed Settings window from 1.10.0 is replaced by the warm cream/gold menubar popover (the app's original identity). Everything else from 1.10.0 stays: Parakeet STT, the overlay + analyzer styles, custom vocabulary.
-- **One overlay control** — the overlay toggle and analyzer-style picker are merged into a single **Transcription Overlay** dropdown: OFF · LED Bars · Graph · Curtain.
+- **Wave overlay is back (default)** — the beloved 1.6.0 look (a frosted waveform + status dot) returns as the **Wave** style and is the default again. The 1.10 analyzers stay as options.
+- **One overlay control** — the overlay toggle and analyzer-style picker are merged into a single **Transcription Overlay** dropdown: OFF · Wave · LED Bars · Graph · Curtain.
 - **Idle STANDBY readout** — the overlay shows a `STANDBY` marquee when idle instead of a blank panel.
 - **Permissions moved** — Accessibility / Microphone now live inside the **Server & Logs** card, which auto-expands when a grant is missing.
 - **Fix** — the STT status row correctly reads **Parakeet STT** (it was mislabeled "Whisper STT").
