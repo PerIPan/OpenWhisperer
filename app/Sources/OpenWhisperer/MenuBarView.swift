@@ -257,6 +257,9 @@ struct MenuBarView: View {
             }
             vocabulary = (try? String(contentsOf: Paths.sttVocabulary, encoding: .utf8)) ?? ""
             overlayStyle = OverlayStyle.parse(try? String(contentsOf: Paths.overlayStyle, encoding: .utf8))
+            // Permissions live inside the (collapsed) Server & Logs card — auto-expand it when a
+            // required grant is missing so a first-run user still sees "Permissions Required".
+            if !allPermissionsGranted { serverExpanded = true }
             refreshDiagnostics()
         }
     }
