@@ -514,7 +514,8 @@ struct MenuBarView: View {
                         }
                     }
 
-                    // Overlay toggle — aligned icon column
+                    // Transcription overlay — one control: OFF, or pick an analyzer style
+                    // (which also shows the overlay). The chosen style persists across OFF/ON.
                     HStack(spacing: 8) {
                         Image(systemName: "waveform")
                             .font(.system(size: 11))
@@ -525,38 +526,27 @@ struct MenuBarView: View {
                         Spacer()
                         OWMenuPicker(
                             selection: Binding(
-                                get: { overlay.isVisible ? "on" : "off" },
+                                get: { overlay.isVisible ? overlayStyle.rawValue : "off" },
                                 set: { newValue in
-                                    if newValue == "on" { overlay.show() } else { overlay.hide() }
+                                    if newValue == "off" {
+                                        overlay.hide()
+                                    } else {
+                                        let style = OverlayStyle.parse(newValue)
+                                        overlayStyle = style
+                                        try? style.rawValue.write(to: Paths.overlayStyle, atomically: true, encoding: .utf8)
+                                        TranscriptionOverlay.shared.analyzerStyle = style
+                                        overlay.show()
+                                    }
                                 }
                             ),
-                            options: [(id: "on", label: "ON"), (id: "off", label: "OFF")]
-                        )
-                        .frame(width: 76)
-                    }
-
-                    // Overlay analyzer style — aligned icon column
-                    HStack(spacing: 8) {
-                        Image(systemName: "waveform.path.ecg")
-                            .font(.system(size: 11))
-                            .foregroundColor(OWColor.inkFaint)
-                            .frame(width: 16)
-                        Text("Analyzer Style")
-                            .font(OWFont.body(11))
-                        Spacer()
-                        OWMenuPicker(
-                            selection: $overlayStyle,
                             options: [
-                                (id: OverlayStyle.ledBars, label: "LED Bars"),
-                                (id: OverlayStyle.graph, label: "Graph"),
-                                (id: OverlayStyle.curtain, label: "Curtain")
+                                (id: "off", label: "OFF"),
+                                (id: OverlayStyle.ledBars.rawValue, label: "LED Bars"),
+                                (id: OverlayStyle.graph.rawValue, label: "Graph"),
+                                (id: OverlayStyle.curtain.rawValue, label: "Curtain")
                             ]
                         )
-                        .frame(width: 110)
-                    }
-                    .onChange(of: overlayStyle) { _, newValue in
-                        try? newValue.rawValue.write(to: Paths.overlayStyle, atomically: true, encoding: .utf8)
-                        TranscriptionOverlay.shared.analyzerStyle = newValue
+                        .frame(width: 120)
                     }
 
                     // Hotkey-change notice
