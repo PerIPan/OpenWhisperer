@@ -326,12 +326,16 @@ struct WaveformBar: View {
             } else {
                 let live = (isTTSPlaying && recorder.state == .idle)
                     ? playbackMeter.spectrumBands : recorder.spectrumBands
-                let bands = live.isEmpty
-                    ? [Float](repeating: 0, count: SpectrumBands.bandCount) : live
-                switch style {
-                case .ledBars: LEDBarsStyleView(bands: bands)
-                case .graph: GraphStyleView(bands: bands)
-                case .curtain: CurtainStyleView(bands: bands)
+                if live.isEmpty {
+                    // Idle — show a resting STANDBY marquee instead of a blank panel
+                    // (restores the pre-1.10 "always something there" behavior).
+                    marquee(word: "STANDBY", color: OWColor.inkFaint)
+                } else {
+                    switch style {
+                    case .ledBars: LEDBarsStyleView(bands: live)
+                    case .graph: GraphStyleView(bands: live)
+                    case .curtain: CurtainStyleView(bands: live)
+                    }
                 }
             }
         }
