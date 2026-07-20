@@ -590,28 +590,21 @@ struct MenuBarView: View {
 
                 OWInternalDivider()
 
-                // Custom vocabulary — fuzzy post-correction glossary (VocabularyCorrector).
-                VStack(alignment: .leading, spacing: 4) {
+                // Custom vocabulary — edited in a pop-up window (keeps this card compact).
+                // `vocabulary` is loaded on appear only to show the term count here.
+                HStack(spacing: 8) {
                     Text("Custom vocabulary")
                         .font(OWFont.body(11))
-                        .foregroundColor(OWColor.inkSoft)
-                    TextEditor(text: $vocabulary)
-                        .font(OWFont.body(11))
-                        .frame(height: 54)
-                        .padding(4)
-                        .scrollContentBackground(.hidden)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(OWColor.pickerBg))
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(OWColor.pickerBorder, lineWidth: 1))
-                    Text("One term per line — fuzzy-corrects transcripts (names, jargon).")
-                        .font(OWFont.caption(9))
-                        .foregroundColor(OWColor.inkFaint)
-                }
-                .onChange(of: vocabulary) { _, newValue in
-                    if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        try? FileManager.default.removeItem(at: Paths.sttVocabulary)
-                    } else {
-                        try? newValue.write(to: Paths.sttVocabulary, atomically: true, encoding: .utf8)
+                    Spacer()
+                    let count = vocabulary.split(whereSeparator: \.isNewline)
+                        .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
+                    if count > 0 {
+                        Text("\(count) term\(count == 1 ? "" : "s")")
+                            .font(OWFont.body(11))
+                            .foregroundColor(OWColor.inkSoft)
                     }
+                    Button("Edit…") { VocabularyWindow.show() }
+                        .buttonStyle(OWRowButtonStyle())
                 }
 
                 OWInternalDivider()
