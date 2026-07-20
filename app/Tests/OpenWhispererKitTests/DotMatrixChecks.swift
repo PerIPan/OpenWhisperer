@@ -26,6 +26,18 @@ func dotMatrixFailures() -> [String] {
     // Empty string → no columns.
     expect(DotMatrix.columns(for: "").isEmpty, "empty", "got non-empty")
 
+    // Every status word the overlay marquee scrolls must have full glyph
+    // coverage — a missing glyph renders blank and silently truncates the
+    // word on screen (the "STANDBY shows as AND" bug). Update this list when
+    // TranscriptionOverlay's marquee words change.
+    for word in ["STANDBY", "ERROR", "LOADING"] {
+        for character in word {
+            let glyph = DotMatrix.columns(for: String(character))
+            expect(!glyph.allSatisfy { $0.allSatisfy { !$0 } }, "coverage\(character)",
+                   "'\(character)' in \"\(word)\" renders blank")
+        }
+    }
+
     // Every column is exactly 7 rows.
     expect(DotMatrix.columns(for: "LOADING ERROR").allSatisfy { $0.count == 7 }, "rowCount", "a column isn't 7 rows")
 
