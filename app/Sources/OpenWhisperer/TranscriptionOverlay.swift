@@ -25,9 +25,14 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     /// The current PTT key label shown in the overlay (e.g. "Ctrl", "fn").
     @Published var pttKeyLabel: String = "Ctrl"
 
-    /// Active analyzer style (LED bars / graph / curtain). Read from the pref
+    /// Active analyzer style (wave / LED bars / graph / curtain). Read from the pref
     /// file on show(); Settings writes the file and updates this directly.
-    @Published var analyzerStyle: OverlayStyle = .defaultStyle
+    @Published var analyzerStyle: OverlayStyle = .defaultStyle {
+        didSet {
+            guard oldValue != analyzerStyle, window != nil else { return }
+            if analyzerStyle == .wave { applyWaveHeight() } else { restoreSavedHeight() }
+        }
+    }
 
     /// Current interaction mode — determines hint text during recording.
     @Published var interactionMode: InteractionMode = .pressToTalk
@@ -72,6 +77,65 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     /// Previously, show() could capture a throwaway AudioRecorder() when
     /// dictationManager was nil, and that dead instance would be observed forever.
     @Published var currentRecorder: AudioRecorder = AudioRecorder(skipPermissionCheck: true)
+
+    // MARK: - Transcript lines (Wave style only — the 1.6.0 resize-grip feature)
+
+    struct Line: Identifiable {
+        let id: Int
+        let text: String
+    }
+    /// Recent transcriptions, oldest→newest (memory-bounded). Fed by `wireStatus()`.
+    @Published var lines: [Line] = []
+    private var nextLineId = 0
+
+    /// The top of the range — the overlay never shows more than this many lines.
+    static let maxTranscriptLines = 3
+    static func clampLines(_ n: Int) -> Int { Swift.max(0, Swift.min(maxTranscriptLines, n)) }
+
+    /// How many recent transcript lines the Wave overlay shows (0…max). Driven by the
+    /// resize grip; persisted. Changing it resizes the Wave window to fit.
+    @Published var transcriptLines: Int = TranscriptionOverlay.loadTranscriptLines() {
+        didSet { if analyzerStyle == .wave { applyWaveHeight() } }
+    }
+    private static func loadTranscriptLines() -> Int {
+        let raw = (try? String(contentsOf: Paths.overlayLines, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return clampLines(Int(raw ?? "") ?? maxTranscriptLines)
+    }
+    func persistTranscriptLines() {
+        try? String(transcriptLines).write(to: Paths.overlayLines, atomically: true, encoding: .utf8)
+    }
+
+    /// Suppress window-drag-to-move while the grip is being dragged (so the drag
+    /// resizes instead of moving the window).
+    func setWindowMovable(_ movable: Bool) {
+        window?.isMovableByWindowBackground = movable
+    }
+
+    /// Resize the Wave window's height to fit the wave + N transcript lines, keeping
+    /// the bottom-right anchor (origin.y fixed → grows upward). No-op for other styles.
+    /// True while the resize grip is being dragged — suppresses per-step animation so
+    /// the window tracks the cursor 1:1 instead of lagging behind overlapping animations.
+    var isGripDragging = false
+
+    func applyWaveHeight() {
+        guard let w = window, analyzerStyle == .wave else { return }
+        let base: CGFloat = 84                       // wave + status dot row
+        let rowH: CGFloat = 26
+        let extra: CGFloat = transcriptLines > 0 ? (8 + CGFloat(transcriptLines) * rowH) : 0
+        var f = w.frame
+        f.size.height = base + extra                 // origin.y unchanged → bottom stays put
+        w.setFrame(f, display: true, animate: !isGripDragging)
+    }
+
+    /// Restore the user's saved free-resize height (used when leaving the Wave style).
+    private func restoreSavedHeight() {
+        guard let w = window else { return }
+        let size = OverlaySize.parse(try? String(contentsOf: Paths.overlaySize, encoding: .utf8))
+        var f = w.frame
+        f.size.height = CGFloat(size.height)
+        w.setFrame(f, display: true, animate: true)
+    }
 
     func show() {
         try? FileManager.default.removeItem(at: Paths.overlayHidden)
@@ -166,6 +230,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         w.orderFront(nil)
         self.window = w
         isVisible = true
+        if analyzerStyle == .wave { applyWaveHeight() }
         startTTSPolling()
     }
 
@@ -183,9 +248,16 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         isVisible = false
     }
 
+    /// Block the native edge-drag resize while on the Wave style — its height is
+    /// owned by the transcript-line grip, not free resize. Other styles resize freely.
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        analyzerStyle == .wave ? sender.frame.size : frameSize
+    }
+
     /// Persist the user's drag-resize (borderless window: frame == content size).
+    /// Skipped on Wave so a grip-driven height never pollutes the free-resize pref.
     func windowDidEndLiveResize(_ notification: Notification) {
-        guard let w = notification.object as? NSWindow else { return }
+        guard analyzerStyle != .wave, let w = notification.object as? NSWindow else { return }
         let size = OverlaySize(width: w.frame.width, height: w.frame.height)
         try? size.fileValue.write(to: Paths.overlaySize, atomically: true, encoding: .utf8)
     }
@@ -239,6 +311,17 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
             dm.$sttModelReady.sink { _ in recompute() }.store(in: &statusCancellables)
             dm.$sttFailed.sink { _ in recompute() }.store(in: &statusCancellables)
             dm.$sttStatus.sink { _ in recompute() }.store(in: &statusCancellables)
+            // Feed the Wave-style transcript rows (the 1.6.0 pane). Memory-bounded.
+            dm.$lastTranscription
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] text in
+                    guard let self, !text.isEmpty else { return }
+                    self.nextLineId += 1
+                    self.lines.append(Line(id: self.nextLineId, text: text))
+                    if self.lines.count > 50 { self.lines = Array(self.lines.suffix(50)) }
+                }
+                .store(in: &statusCancellables)
         }
         if let sm = setupManager {
             sm.$state.sink { _ in recompute() }.store(in: &statusCancellables)
@@ -278,18 +361,31 @@ struct OverlayView: View {
     /// We do NOT take recorder as a direct init parameter anymore — doing so
     /// would freeze the reference at the moment NSHostingView was constructed.
     @ObservedObject var overlay: TranscriptionOverlay
+    @State private var copiedLineId: Int? = nil
+    @State private var overlayHovered = false
+    @State private var dragStartLines: Int? = nil
+
+    /// Vertical drag distance (pts) that steps the overlay by one transcript line.
+    private static let lineStep: CGFloat = 27
 
     var body: some View {
-        // Derive the live recorder from overlay.currentRecorder each time body evaluates,
-        // so WaveformBar always observes the instance that is actually recording.
         let recorder = overlay.currentRecorder
+        Group {
+            if overlay.analyzerStyle == .wave {
+                waveLayout(recorder: recorder)
+            } else {
+                analyzerLayout(recorder: recorder)
+            }
+        }
+        // Wave (the 1.6.0 default) sits on a solid cream panel like the original;
+        // LED Bars / Graph / Curtain stay transparent so the dark HUD blur shows through.
+        .background(overlay.analyzerStyle == .wave ? OWColor.page.opacity(0.98) : Color.clear)
+    }
 
+    // LED Bars / Graph / Curtain — edge-to-edge, marquee/bands driven.
+    private func analyzerLayout(recorder: AudioRecorder) -> some View {
         ZStack(alignment: .bottom) {
-            // Edge-to-edge: the analyzer runs to the faceplate's edges (the window
-            // mask clips the rounded corners).
             WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError, statusText: overlay.statusText, style: overlay.analyzerStyle, pttKeyLabel: overlay.pttKeyLabel, interactionMode: overlay.interactionMode)
-
-            // Silence countdown — hands-free only, along the pill's bottom edge.
             if overlay.interactionMode == .handsFree {
                 SilenceProgressBar(recorder: recorder)
                     .frame(height: 1.5)
@@ -297,11 +393,133 @@ struct OverlayView: View {
                     .padding(.bottom, 3)
             }
         }
-        // Wave (the 1.6.0 default) sits on a solid cream panel like the original;
-        // LED Bars / Graph / Curtain stay transparent so the dark HUD blur shows through.
-        .background(overlay.analyzerStyle == .wave ? OWColor.page.opacity(0.98) : Color.clear)
-        // No fixed frame: the hosting view fills the (resizable) window; the
-        // renderers, marquee, and silence bar are all geometry-relative.
+    }
+
+    // The 1.6.0 Wave layout: wave + status dot, optional transcript lines, resize grip.
+    private func waveLayout(recorder: AudioRecorder) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            WaveformBar(recorder: recorder, isTTSPlaying: overlay.isTTSPlaying, statusIsError: overlay.statusIsError, statusText: overlay.statusText, style: .wave, pttKeyLabel: overlay.pttKeyLabel, interactionMode: overlay.interactionMode)
+                .frame(height: 44)
+
+            if overlay.interactionMode == .handsFree {
+                SilenceProgressBar(recorder: recorder).frame(height: 1.5).padding(.horizontal, 4)
+            }
+
+            if overlay.transcriptLines > 0, !overlay.lines.isEmpty {
+                dottedDivider
+                VStack(alignment: .leading, spacing: 3) {
+                    let visible = Array(overlay.lines.reversed().prefix(overlay.transcriptLines))
+                    ForEach(visible) { line in
+                        OverlayLineRow(line: line, isCopied: copiedLineId == line.id) {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(line.text, forType: .string)
+                            withAnimation(.easeIn(duration: 0.1)) { copiedLineId = line.id }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    if copiedLineId == line.id { copiedLineId = nil }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Hover-revealed resize grip — drag to step 0…3 transcript lines.
+            if overlayHovered || dragStartLines != nil {
+                HStack {
+                    Spacer()
+                    Capsule().fill(OWColor.inkFaint).frame(width: 26, height: 4)
+                    Spacer()
+                }
+                .frame(height: 9)
+                .contentShape(Rectangle())
+                .gesture(gripDrag)
+                .onHover { inside in
+                    // NSCursor.set() is idempotent (no push/pop stack to leak if the
+                    // grip fades out mid-hover without a final onHover(false)).
+                    if inside { overlay.setWindowMovable(false); NSCursor.resizeUpDown.set() }
+                    else { if dragStartLines == nil { overlay.setWindowMovable(true); NSCursor.arrow.set() } }
+                }
+                .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onHover { hovering in withAnimation(.easeInOut(duration: 0.12)) { overlayHovered = hovering } }
+    }
+
+    private var dottedDivider: some View {
+        GeometryReader { geo in
+            Path { p in
+                p.move(to: CGPoint(x: 0, y: 0.5))
+                p.addLine(to: CGPoint(x: geo.size.width, y: 0.5))
+            }
+            .stroke(style: StrokeStyle(lineWidth: 1, dash: [1.5, 3]))
+            .foregroundColor(OWColor.line)
+        }
+        .frame(height: 1)
+        .padding(.vertical, 2)
+    }
+
+    private var gripDrag: some Gesture {
+        DragGesture(minimumDistance: 2)
+            .onChanged { value in
+                let start = dragStartLines ?? overlay.transcriptLines
+                if dragStartLines == nil { dragStartLines = start; overlay.isGripDragging = true }
+                let delta = Int((value.translation.height / Self.lineStep).rounded())
+                let next = TranscriptionOverlay.clampLines(start + delta)
+                if next != overlay.transcriptLines { overlay.transcriptLines = next }
+            }
+            .onEnded { _ in
+                dragStartLines = nil
+                overlay.isGripDragging = false
+                overlay.persistTranscriptLines()
+                overlay.setWindowMovable(true)
+            }
+    }
+}
+
+// MARK: - Overlay Line Row (Wave transcript pane)
+
+struct OverlayLineRow: View {
+    let line: TranscriptionOverlay.Line
+    let isCopied: Bool
+    let onTap: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(alignment: .center, spacing: 4) {
+                Text(line.text)
+                    .font(.custom("Outfit", size: 11))
+                    .foregroundColor(isCopied ? OWColor.accent : OWColor.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if isCopied {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(OWColor.accent)
+                } else if isHovered {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: 8))
+                        .foregroundColor(OWColor.inkSoft)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(isHovered ? OWColor.pillFill.opacity(0.5) : Color.clear)
+            .cornerRadius(6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) { isHovered = hovering }
+            // Idempotent set() (not push/pop) — rows are evicted from the visible
+            // window as new transcriptions arrive, which can drop the hover-exit.
+            if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
     }
 }
 

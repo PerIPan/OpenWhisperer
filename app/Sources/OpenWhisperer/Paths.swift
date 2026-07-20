@@ -106,6 +106,8 @@ enum Paths {
 
     /// Overlay window size ("WxH", e.g. "220x84"; see OverlaySize.parse).
     static let overlaySize = appSupport.appendingPathComponent("overlay_size")
+    /// Wave-overlay transcript-line count (0…3), the 1.6.0 resize-grip pref.
+    static let overlayLines = appSupport.appendingPathComponent("overlay_lines")
 
     /// Selected AI platform (claudeCode, codexCLI)
     static let selectedPlatform = appSupport.appendingPathComponent("selected_platform")
