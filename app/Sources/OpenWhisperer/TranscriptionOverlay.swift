@@ -297,6 +297,9 @@ struct OverlayView: View {
                     .padding(.bottom, 3)
             }
         }
+        // Wave (the 1.6.0 default) sits on a solid cream panel like the original;
+        // LED Bars / Graph / Curtain stay transparent so the dark HUD blur shows through.
+        .background(overlay.analyzerStyle == .wave ? OWColor.page.opacity(0.98) : Color.clear)
         // No fixed frame: the hosting view fills the (resizable) window; the
         // renderers, marquee, and silence bar are all geometry-relative.
     }
