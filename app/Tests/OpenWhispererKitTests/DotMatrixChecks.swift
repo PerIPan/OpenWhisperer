@@ -28,9 +28,10 @@ func dotMatrixFailures() -> [String] {
 
     // Every status word the overlay marquee scrolls must have full glyph
     // coverage — a missing glyph renders blank and silently truncates the
-    // word on screen (the "STANDBY shows as AND" bug). Update this list when
+    // word on screen (the "STANDBY shows as AND" bug; the word itself was
+    // retired 2026-07-20, its glyphs kept). Update this list when
     // TranscriptionOverlay's marquee words change.
-    for word in ["STANDBY", "ERROR", "LOADING"] {
+    for word in ["ERROR", "LOADING"] {
         for character in word {
             let glyph = DotMatrix.columns(for: String(character))
             expect(!glyph.allSatisfy { $0.allSatisfy { !$0 } }, "coverage\(character)",
