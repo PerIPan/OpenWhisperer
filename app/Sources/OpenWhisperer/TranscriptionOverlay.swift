@@ -248,16 +248,11 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         isVisible = false
     }
 
-    /// Block the native edge-drag resize while on the Wave style — its height is
-    /// owned by the transcript-line grip, not free resize. Other styles resize freely.
-    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        analyzerStyle == .wave ? sender.frame.size : frameSize
-    }
-
     /// Persist the user's drag-resize (borderless window: frame == content size).
-    /// Skipped on Wave so a grip-driven height never pollutes the free-resize pref.
+    /// Free corner/edge resize is allowed on every style, including Wave — the grip
+    /// only controls how many transcript lines show; the corners size the window.
     func windowDidEndLiveResize(_ notification: Notification) {
-        guard analyzerStyle != .wave, let w = notification.object as? NSWindow else { return }
+        guard let w = notification.object as? NSWindow else { return }
         let size = OverlaySize(width: w.frame.width, height: w.frame.height)
         try? size.fileValue.write(to: Paths.overlaySize, atomically: true, encoding: .utf8)
     }

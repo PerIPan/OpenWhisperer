@@ -521,7 +521,7 @@ struct MenuBarView: View {
                             .font(.system(size: 11))
                             .foregroundColor(overlay.isVisible ? OWColor.live : OWColor.inkFaint)
                             .frame(width: 16)
-                        Text("Transcription Overlay")
+                        Text("Overlay")
                             .font(OWFont.body(11))
                         Spacer()
                         OWMenuPicker(
@@ -547,7 +547,7 @@ struct MenuBarView: View {
                                 (id: OverlayStyle.curtain.rawValue, label: "Curtain")
                             ]
                         )
-                        .frame(width: 120)
+                        .frame(width: 96)
                     }
 
                     // Hotkey-change notice
