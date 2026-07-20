@@ -49,6 +49,8 @@ questions again:
    *original* rejection of Parakeet (2026-06-20) was driven by a **Turkish** requirement + a
    macOS-14 floor concern. If non-European languages matter, that's the strongest case for
    Whisper. (Note: Dutch, German, etc. are fine on Parakeet — they're European.)
+   *(2026-07-20 addendum: this trigger now has an in-family answer — Nemotron 3.5, incl.
+   Turkish — see below.)*
 2. **Noise robustness.** The one axis Whisper clearly won. If dictation-in-noise quality is a
    recurring complaint, that's the trigger.
 
@@ -71,7 +73,8 @@ questions again:
 ## Open questions (for the user, later)
 
 1. Do we need any **non-European language** (Turkish, Arabic, CJK, …)? If yes → strong pull
-   back to Whisper (or a dual-engine seam).
+   back to Whisper (or a dual-engine seam). *(2026-07-20: or Nemotron 3.5 in-family — spike
+   that first; see addendum.)*
 2. Is **dictation-in-noise** a real, recurring problem in daily use, or a lab artifact?
 3. Is the **literal transcript** (fillers/repairs kept, comma spray) a feature (fidelity) or a
    nuisance (want auto-polish) for how you actually dictate?
@@ -85,3 +88,72 @@ questions again:
 felt daily; the losses (noise, polish) are situational. If noise becomes the pain point,
 **spike SpeechAnalyzer before** re-adding WhisperKit — it targets exactly that axis without
 the ANE contention or the fork-pin maintenance WhisperKit carried.
+
+*2026-07-20 revision:* even if Q1 fires, **spike Nemotron 3.5 before** re-adding WhisperKit —
+it covers the missing languages (incl. Turkish) while keeping FluidAudio as the single speech
+library. WhisperKit drops to third choice on every trigger; see the addendum for why
+"switching back" would no longer even be a revert.
+
+## 2026-07-20 addendum — findings from a mobile Claude session
+
+Source: a same-day conversation walking the Argmax/FluidAudio ecosystem and engine
+trade-offs (<https://claude.ai/share/e6e923ca-5894-4572-a685-e0c507ab23d7>). New evidence
+only; the on-device measurements above are unchanged.
+
+### Nemotron 3.5 breaks the binary (revises Q1)
+
+FluidAudio ships NVIDIA **Nemotron 3.5 ASR** on-device
+(`Nemotron-3.5-ASR-Streaming-Multilingual-0.6b-CoreML`, encoder int8 on the ANE): ~40
+locales in one 600M checkpoint via language-ID prompt conditioning — **including Turkish**,
+the language whose absence drove the original 2026-06-20 Parakeet rejection. Trade-offs:
+streaming-first (slightly worse English WER than batch Parakeet — ~2.31 vs ~1.93 in one
+comparison, acceptable for dictation); one declared language per stream (auto-detect
+optional); and the CoreML conversion is pruned/quantized post-training, with WER parity vs
+NVIDIA's own numbers still a tracked follow-up upstream. Net: the language-breadth trigger
+no longer implies WhisperKit — the in-family spike comes first.
+
+### Code-switching: nobody wins
+
+Mid-utterance switching (Dutch↔English in one breath) is weak across the board. Whisper
+decodes with exactly **one language token**, so its ~99 languages don't buy switching —
+rapid alternation degrades it despite the breadth. Parakeet's auto-detect likewise locks
+onto one language per segment. Nemotron's prompt conditioning is architecturally better
+suited but has no published code-switch benchmark. The TL;DR table's Languages row
+overstates Whisper's practical advantage for a bilingual speaker; loanwords survive fine
+on any engine, clause-level switching is rough on all of them.
+
+### Agent dictation is turn-based — reinforces the recommendation
+
+Dictating to a coding agent is push-to-talk over a finished utterance: the agent's own
+thinking time dwarfs any STT latency gap, so what matters is **final-transcript accuracy on
+the exact string the agent will act on**. Whisper's known habit of inventing text during
+mid-sentence pauses is a real liability here (a hallucinated word becomes a wrong command);
+Parakeet barely hallucinates on silence. Streaming engines buy nothing in this loop —
+another reason batch Parakeet fits the product's primary use case.
+
+### External corroboration of the on-device numbers
+
+Open ASR Leaderboard: Parakeet TDT v3 ~6.32 % avg English WER vs Whisper large-v3 ~7.44 %
+(~15 % relative reduction from a model under half the size); throughput ~3,300× real-time
+vs ~69×. FLEURS across the shared 25 languages: Whisper slightly ahead on most individual
+languages. English-only Parakeet v2 (~6.05 %) is a hair better than v3 — the usual
+multilingual tax. Consistent with our matched A/B: speed decisively Parakeet, quiet
+accuracy roughly a draw, non-English leaning Whisper.
+
+### "Switching back" no longer means the same library
+
+As of v1.0.0 (May 2026) WhisperKit is folded into the **Argmax OSS SDK**
+(`argmax-oss-swift`; breaking API changes, Swift 6). The capabilities we'd actually want
+are **Pro-gated** behind per-device licensing (`ax_` key): real-time streaming, the
+~9×-faster model variants, and audio-based custom vocabulary — the OSS tier keeps only
+classic ~100-token `promptTokens` biasing, the mechanism whose prefill-EOT bug forced our
+fork pin. FluidAudio ships custom vocabulary in the open library. Re-adoption would be a
+fresh integration against a commercially gated SDK, not a revert of PR #21.
+
+### Footnotes
+
+- **Licensing:** Parakeet is CC-BY-4.0 — NVIDIA attribution is owed in the About
+  screen/docs today, engine debates aside. Whisper is MIT.
+- **Distribution (orthogonal):** the session independently reconfirmed the MAS blocker —
+  since Feb 2026 App Review rejects Accessibility-based text injection (guideline 2.4.5,
+  no-exceptions precedent) — consistent with the existing distribution notes.
