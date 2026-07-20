@@ -49,8 +49,8 @@ questions again:
    *original* rejection of Parakeet (2026-06-20) was driven by a **Turkish** requirement + a
    macOS-14 floor concern. If non-European languages matter, that's the strongest case for
    Whisper. (Note: Dutch, German, etc. are fine on Parakeet — they're European.)
-   *(2026-07-20 addendum: this trigger now has an in-family answer — Nemotron 3.5, incl.
-   Turkish — see below.)*
+   *(2026-07-20 addendum: Nemotron 3.5 is an in-family candidate here (incl. Turkish) —
+   but it already lost a 2026-06-20 English feel-test; see below.)*
 2. **Noise robustness.** The one axis Whisper clearly won. If dictation-in-noise quality is a
    recurring complaint, that's the trigger.
 
@@ -73,8 +73,9 @@ questions again:
 ## Open questions (for the user, later)
 
 1. Do we need any **non-European language** (Turkish, Arabic, CJK, …)? If yes → strong pull
-   back to Whisper (or a dual-engine seam). *(2026-07-20: or Nemotron 3.5 in-family — spike
-   that first; see addendum.)*
+   back to Whisper (or a dual-engine seam). *(2026-07-20: Nemotron 3.5 covers Turkish
+   in-family but already lost an English feel-test — viable only behind a per-language
+   seam or after re-validation; see addendum.)*
 2. Is **dictation-in-noise** a real, recurring problem in daily use, or a lab artifact?
 3. Is the **literal transcript** (fillers/repairs kept, comma spray) a feature (fidelity) or a
    nuisance (want auto-polish) for how you actually dictate?
@@ -89,10 +90,11 @@ felt daily; the losses (noise, polish) are situational. If noise becomes the pai
 **spike SpeechAnalyzer before** re-adding WhisperKit — it targets exactly that axis without
 the ANE contention or the fork-pin maintenance WhisperKit carried.
 
-*2026-07-20 revision:* even if Q1 fires, **spike Nemotron 3.5 before** re-adding WhisperKit —
-it covers the missing languages (incl. Turkish) while keeping FluidAudio as the single speech
-library. WhisperKit drops to third choice on every trigger; see the addendum for why
-"switching back" would no longer even be a revert.
+*2026-07-20 revision (corrected same day after review):* if Q1 fires, the realistic options
+are WhisperKit back as the multilingual engine (mechanically ≈ reverting PR #21 — see
+addendum) or a **per-language seam** using Nemotron 3.5 only for the non-European language.
+Nemotron as the sole engine was already feel-tested and rejected on English quality
+(2026-06-20); don't re-spike it as a wholesale replacement without re-validating that first.
 
 ## 2026-07-20 addendum — findings from a mobile Claude session
 
@@ -100,17 +102,27 @@ Source: a same-day conversation walking the Argmax/FluidAudio ecosystem and engi
 trade-offs (<https://claude.ai/share/e6e923ca-5894-4572-a685-e0c507ab23d7>). New evidence
 only; the on-device measurements above are unchanged.
 
-### Nemotron 3.5 breaks the binary (revises Q1)
+### Nemotron 3.5 complicates the binary (revises Q1 — with a known strike against it)
 
 FluidAudio ships NVIDIA **Nemotron 3.5 ASR** on-device
 (`Nemotron-3.5-ASR-Streaming-Multilingual-0.6b-CoreML`, encoder int8 on the ANE): ~40
-locales in one 600M checkpoint via language-ID prompt conditioning — **including Turkish**,
-the language whose absence drove the original 2026-06-20 Parakeet rejection. Trade-offs:
-streaming-first (slightly worse English WER than batch Parakeet — ~2.31 vs ~1.93 in one
-comparison, acceptable for dictation); one declared language per stream (auto-detect
-optional); and the CoreML conversion is pruned/quantized post-training, with WER parity vs
-NVIDIA's own numbers still a tracked follow-up upstream. Net: the language-breadth trigger
-no longer implies WhisperKit — the in-family spike comes first.
+locales in one 600M checkpoint via language-ID prompt conditioning — **including Turkish
+(tr-TR, ~11 % WER)**, the language whose absence drove the original 2026-06-20 Parakeet
+rejection. So the language-breadth trigger has an in-family candidate.
+
+**But it was already evaluated — and quality, not language, was the blocker** (correction
+from review; the first cut of this addendum missed it). The 2026-06-20
+engine-configurability spike made Nemotron-multilingual the *default* engine precisely for
+Turkish, and a same-day live feel-test killed it: English noticeably rougher than Whisper,
+mangled acronyms and programming jargon ("direct test" → "director") — the exact axis agent
+dictation lives on. The default was flipped back to Whisper the same day; no formal
+benchmark, but the gap was immediate and decisive. There's also an integration wrinkle:
+Nemotron is exposed as a streaming manager, so batch dictation clips need a
+feed-and-finalize wrapper (more work than Parakeet's one-shot API).
+
+Net: if Q1 fires, Nemotron is realistic only behind a **per-language seam** (non-European
+language → Nemotron, everything else → Parakeet), or after a fresh feel-test shows its
+English has materially improved. As a wholesale engine it already lost once.
 
 ### Code-switching: nobody wins
 
@@ -140,15 +152,23 @@ languages. English-only Parakeet v2 (~6.05 %) is a hair better than v3 — the u
 multilingual tax. Consistent with our matched A/B: speed decisively Parakeet, quiet
 accuracy roughly a draw, non-English leaning Whisper.
 
-### "Switching back" no longer means the same library
+### "Switching back": mostly a revert, but into a commercially gated ecosystem
 
-As of v1.0.0 (May 2026) WhisperKit is folded into the **Argmax OSS SDK**
-(`argmax-oss-swift`; breaking API changes, Swift 6). The capabilities we'd actually want
-are **Pro-gated** behind per-device licensing (`ax_` key): real-time streaming, the
-~9×-faster model variants, and audio-based custom vocabulary — the OSS tier keeps only
-classic ~100-token `promptTokens` biasing, the mechanism whose prefill-EOT bug forced our
-fork pin. FluidAudio ships custom vocabulary in the open library. Re-adoption would be a
-fresh integration against a commercially gated SDK, not a revert of PR #21.
+Correction from review: the first cut here claimed re-adoption would be "a fresh
+integration, not a revert" — wrong. **The app already rode the v1.0.0 transition** before
+the removal: v1.5 raised the floor 0.9 → 1.0.0, hit a v1.0.0 quality regression (reverted
+to 0.18.0, then restored 1.0.0 with a tokenizer-path fix), and ended pinned to a fork =
+v1.0.0 + the prefill-EOT fix (synced to upstream main as of 2026-07-08). Re-adding
+WhisperKit is therefore mechanically ≈ reverting PR #21 and restoring that pin (or plain
+upstream, if the EOT abort is fixed by now — check before pinning).
+
+What the May 2026 Argmax restructuring (`argmax-oss-swift`) changes is the ceiling, not
+the floor: the capabilities that would *justify* a switch — real-time streaming, the
+~9×-faster model variants, audio-based custom vocabulary — are **Pro-gated** behind
+per-device licensing (`ax_` key). The OSS tier we'd return to is the same ~100-token
+`promptTokens` biasing we already carried a fork for. FluidAudio ships custom vocabulary
+in the open library. So: cheap to go back, but going back buys the same WhisperKit we
+left, not the faster Pro one.
 
 ### Footnotes
 
