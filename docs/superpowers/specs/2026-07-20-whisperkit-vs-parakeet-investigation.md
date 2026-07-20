@@ -68,7 +68,32 @@ questions again:
 
 - **Reddit — "30 days testing Parakeet v3 vs Whisper" (r/LocalLLaMA):**
   <https://www.reddit.com/r/LocalLLaMA/comments/1nf10ye/30_days_testing_parakeet_v3_vs_whisper/>
-  *(Automated fetch is blocked by Reddit — read directly. Add its key takeaways here on review.)*
+  Read 2026-07-20 (via real browser; Reddit blocks automated fetch). A macOS
+  dictation/meeting team's 30-day integration report, plus comments. Takeaways:
+  - **Corroborates the trade.** ~10× faster than Whisper (~30 s per hour of audio;
+    an Argmax dev cites ~9 s/hour on M3 Max, with a base M1 Air only ~50 % slower),
+    "a bit less accurate… matches big Whisper for general discussion". Their verdict
+    is literally *both*: Whisper the Swiss-army knife (dictionary, breadth), Parakeet
+    the race car.
+  - **Jargon was their killer too** ("Parakeet" → "Parakit", acronyms, company names)
+    — solved with LLM post-processing, i.e. the same text-layer answer as our
+    `VocabularyCorrector`. Argmax confirmed in-thread that Parakeet custom vocabulary
+    on their side is a **Pro SDK** feature.
+  - **Health warning for our documented escalation path.** A competing dictation-app
+    vendor (in-thread comment, ~11k benchmark runs across 4 engines; self-promotional,
+    weigh accordingly) reports FluidAudio's CTC vocabulary boosting is a **tuning
+    nightmare in practice**, especially multilingual: phonetic false positives
+    ("parles"/"parce" → "Parakeet", "si tu" → "SwiftUI" in French) survived threshold
+    tuning, confidence gates, and a spell-check revert filter; they ship it as an
+    experimental opt-in, useful mainly for English-only jargon-heavy workflows. If our
+    jargon trigger fires, budget real tuning time — or stay text-layer.
+  - **The 25 languages are uneven.** Dutch was "pretty rough" per the OP; a German
+    fixture hit a confident early-stop with a wrong-language fallback. Tempers this
+    doc's "Dutch, German are fine on Parakeet" note — coverage ≠ uniform quality.
+  - Misc: Parakeet degrades on very fast speech (fine at conversational pace); the
+    same vendor's matrix has SpeechAnalyzer winning clean accented English, Parakeet
+    winning **disfluent dictation**, WhisperKit winning brand names — "no single
+    winner".
 
 ## Open questions (for the user, later)
 
