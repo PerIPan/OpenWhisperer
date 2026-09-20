@@ -32,9 +32,22 @@ let package = Package(
         // chain returned on some Apple Silicon (e.g. M3/macOS 15), yielding fluent-but-WRONG words.
         // Release 0.15.6 adds #783: smart apostrophes (U+2019/U+2018/U+02BC) are folded to ASCII
         // before tokenizing, so "I’ll" no longer splits into "I" + "ll" and gets read as "I L".
+        //
+        // PINNED EXACTLY, not `from:` — upgrade deliberately, after measuring. 0.15.6 was
+        // versioned as a patch but carried ~60 PRs and a new `binaryTarget`:
+        // `NemoTextProcessing.xcframework`, a 56 MB static Rust library
+        // (`FluidInference/text-processing-rs`, a Rust port of NVIDIA NeMo text normalization).
+        // It added +9.1 MB to our binary — `__TEXT/__const` went 118 KB → 7.34 MB of compiled
+        // FST grammars, and 0 → 1096 Rust-mangled symbols — taking the DMG from 5.4 to 12.7 MB.
+        // We keep it because reverting would also drop upstream #816 (KokoroAne trapping on
+        // non-finite PostAlbert durations — a hard crash on our path) and #792/#810 (model-cache
+        // preservation and a stall watchdog on transient network errors, which matter behind a
+        // firewall that blocks the Xet CDN). It does almost nothing for us either way:
+        // `KokoroTTS.synthesize` runs `NumberNormalizer` first, so the digits are already words
+        // before the FST sees them. On the next bump, diff `size -m` on the built binary.
         .package(
             url: "https://github.com/FluidInference/FluidAudio.git",
-            from: "0.15.6"),
+            exact: "0.15.6"),
     ],
     targets: [
         // Pure, dependency-free logic that is unit-tested in isolation
