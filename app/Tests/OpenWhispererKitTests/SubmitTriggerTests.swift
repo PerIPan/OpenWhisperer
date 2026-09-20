@@ -27,6 +27,7 @@ struct KitTestRunner {
         failures += dotMatrixFailures()
         failures += overlayStyleFailures()
         failures += diagLogTrimFailures()
+        failures += axInsertionCheckFailures()
         failures += peakHoldFailures()
         failures += overlaySizeFailures()
         failures += vocabularyCorrectorFailures()

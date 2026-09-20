@@ -990,6 +990,10 @@ class DictationManager: ObservableObject {
         }
         let element = focused as! AXUIElement
 
+        // Baseline for verifying that a write actually landed (#49). nil means unreadable,
+        // which is different from empty — `AXInsertionCheck` trusts the write in that case.
+        let valueBefore = Self.readAXValue(element)
+
         // Strategy A: kAXSelectedTextAttribute — replaces current selection / inserts at cursor.
         // Works for NSTextField, NSTextView, and most native AppKit fields.
         var isSettable: DarwinBoolean = false
@@ -1006,10 +1010,17 @@ class DictationManager: ObservableObject {
                 text as CFString
             )
             if setErr == .success {
-                os_log(.default, log: dictLog, "AX: StrategyA success for PID %d", pid)
-                return true
+                if AXInsertionCheck.didInsert(before: valueBefore,
+                                              after: Self.readAXValue(element),
+                                              inserted: text) {
+                    os_log(.default, log: dictLog, "AX: StrategyA success for PID %d", pid)
+                    return true
+                }
+                os_log(.default, log: dictLog,
+                       "AX: StrategyA reported success but the value did not change for PID %d — falling through", pid)
+            } else {
+                os_log(.default, log: dictLog, "AX: StrategyA set failed (err=%d)", setErr.rawValue)
             }
-            os_log(.default, log: dictLog, "AX: StrategyA set failed (err=%d)", setErr.rawValue)
         } else {
             os_log(.default, log: dictLog, "AX: StrategyA not settable (settableErr=%d, settable=%d)", settableErr.rawValue, isSettable.boolValue ? 1 : 0)
         }
@@ -1058,6 +1069,17 @@ class DictationManager: ObservableObject {
                 nsNew as CFString
             )
             if setErr == .success {
+                // A `.success` here means the app accepted the message, not that it applied it:
+                // iTerm2 accepts this write and discards it, which made us report success and
+                // skip the CGEvent fallback that works there (#49). Read it back and only
+                // believe the write if the element actually changed.
+                guard AXInsertionCheck.didInsert(before: valueBefore,
+                                                 after: Self.readAXValue(element),
+                                                 inserted: text) else {
+                    os_log(.default, log: dictLog,
+                           "AX: StrategyB reported success but the value did not change for PID %d — falling back to CGEvent", pid)
+                    return false
+                }
                 // Move cursor to end of inserted text (UTF-16 length)
                 var newRange = CFRangeMake(safeIndex + (text as NSString).length, 0)
                 if let axRange = AXValueCreate(.cfRange, &newRange) {
@@ -1074,6 +1096,16 @@ class DictationManager: ObservableObject {
         }
 
         return false
+    }
+
+    /// `kAXValue` as a String, or nil when the element has no readable string value. The nil
+    /// case matters: `AXInsertionCheck` treats "couldn't read" as unverifiable and trusts the
+    /// write, where "" would be a baseline it could wrongly compare against.
+    private static func readAXValue(_ element: AXUIElement) -> String? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success
+        else { return nil }
+        return value as? String
     }
 
     // MARK: - CGEvent Unicode Typing
