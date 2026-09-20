@@ -19,6 +19,7 @@ struct KitTestRunner {
         failures += ttsVolumeFailures()
         failures += ttsVoiceRegistryFailures()
         failures += ttsVoiceRouterFailures()
+        failures += ttsLanguageFollowFailures()
         failures += voicePersonaFailures()
         failures += firstRunPaneFailures()
         failures += owThemeFailures()

@@ -72,6 +72,10 @@ enum Hook {
         }
 
         /// Response mode: voice (default) | text | always.
+        func writeTtsLanguage(_ code: String) {
+            try? code.write(to: appSupport.appendingPathComponent("tts_language"), atomically: true, encoding: .utf8)
+        }
+
         func writeResponseMode(_ mode: String) {
             try? mode.write(to: appSupport.appendingPathComponent("tts_response_mode"),
                             atomically: true, encoding: .utf8)

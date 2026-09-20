@@ -382,10 +382,13 @@ func voiceContextFailures() -> [String] {
     }
 
     // --- Reply language for the multilingual (Supertonic) voices ---
-    // A Dutch voice reading English text is the bug this layer exists to prevent, so the nudge
-    // must tell the model to write the spoken summary in the voice's language. Sentinel:
-    // "Write the text you pass to `speak` in" — deliberately distinct from the persona sentinel.
+    // The voice's language is the *default* reply language, not a directive: the engine follows
+    // whatever language the model writes (TTSLanguageFollow), so the model may switch when asked
+    // or when the conversation is in another language. A hard pin is `tts_language` /
+    // `OW_TTS_LANGUAGE` (cases 35–37). Sentinel: "Write the text you pass to `speak` in" —
+    // deliberately distinct from the persona sentinel.
     let langSentinel = "Write the text you pass to `speak` in"
+    let followsText = "the voice follows the language you write"
 
     // 28) Dutch voice → nudge carries the "write it in Dutch" instruction and the full voice id.
     do {
@@ -393,7 +396,8 @@ func voiceContextFailures() -> [String] {
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("supertonic:nl:F1")
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
         if n?.contains(langSentinel) != true { fail("dutchLanguageLine: missing: \(n?.debugDescription ?? "nil")") }
-        if n?.contains("in Dutch, not English") != true { fail("dutchLanguageLine: language not named Dutch") }
+        if n?.contains("in Dutch by default") != true { fail("dutchLanguageLine: language not named Dutch as the default") }
+        if n?.contains(followsText) != true { fail("dutchLanguageLine: model not told it may switch languages") }
         if n?.contains("voice=\"supertonic:nl:F1\"") != true { fail("dutchLanguageLine: speak voice arg lost") }
         if n?.contains("`speak` tool") != true { fail("dutchLanguageLine: base nudge lost") }
     }
@@ -403,7 +407,7 @@ func voiceContextFailures() -> [String] {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("supertonic:uk:M1")
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
-        if n?.contains("in Ukrainian, not English") != true { fail("ukrainianLanguageLine: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("in Ukrainian by default") != true { fail("ukrainianLanguageLine: \(n?.debugDescription ?? "nil")") }
     }
 
     // 30) a multilingual voice gets NO persona — personas are keyed to Kokoro's first-char scheme
@@ -413,7 +417,7 @@ func voiceContextFailures() -> [String] {
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("supertonic:de:F1")
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
         if n?.contains("voice speaking your reply") == true { fail("supertonicNoPersona: unexpected persona") }
-        if n?.contains("in German, not English") != true { fail("supertonicNoPersona: language line missing") }
+        if n?.contains("in German by default") != true { fail("supertonicNoPersona: language line missing") }
     }
 
     // 31) a Kokoro voice gets NO language line — English users see zero change.
@@ -438,7 +442,7 @@ func voiceContextFailures() -> [String] {
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
                          sandbox: s, env: ["OW_TTS_VOICE": "supertonic:pl:F1"])
         let n = nudge(r.stdout)
-        if n?.contains("in Polish, not English") != true { fail("languageFollowsOverride: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("in Polish by default") != true { fail("languageFollowsOverride: \(n?.debugDescription ?? "nil")") }
         if n?.contains("voice speaking your reply") == true { fail("languageFollowsOverride: unexpected persona from global") }
     }
 
@@ -448,7 +452,7 @@ func voiceContextFailures() -> [String] {
         let s = newSandbox()
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("supertonic:vi:F1")
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
-        if n?.contains("in Vietnamese, not English") != true { fail("vietnameseLanguageLine: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("in Vietnamese by default") != true { fail("vietnameseLanguageLine: \(n?.debugDescription ?? "nil")") }
     }
 
     // 34) an unknown language code yields no line rather than a broken sentence.
@@ -457,6 +461,60 @@ func voiceContextFailures() -> [String] {
         s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("supertonic:xx:F1")
         let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
         if n?.contains(langSentinel) == true { fail("unknownLanguageNoLine: unexpected language line") }
+    }
+
+    // --- Pinned reply language: tts_language / OW_TTS_LANGUAGE ---
+    // The one way to make the spoken language *not* follow the conversation. Any language the
+    // voice map knows, for any voice — a Kokoro voice can be pinned too.
+
+    // 35) tts_language=de with a Kokoro voice → a hard pin, named German, no "by default".
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("af_heart"); s.writeTtsLanguage("de")
+        let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
+        if n?.contains("in German, whatever language the conversation is in") != true { fail("pinnedGerman: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("by default") == true { fail("pinnedGerman: a pin must not read as a default") }
+    }
+
+    // 36) OW_TTS_LANGUAGE=en beats a German Supertonic voice: English is pinned, and the
+    //     per-project env var wins over the voice, matching every other OW_* override.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("supertonic:de:M1")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
+                         sandbox: s, env: ["OW_TTS_LANGUAGE": "en"])
+        let n = nudge(r.stdout)
+        if n?.contains("in English, whatever language the conversation is in") != true { fail("pinnedEnglishOverVoice: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("in German") == true { fail("pinnedEnglishOverVoice: voice language leaked into a pinned line") }
+    }
+
+    // 38) a BCP-47 pin with a region or script subtag pins the base language: `pt-BR`, `pt_BR`.
+    do {
+        for raw in ["pt-BR", "pt_BR", "PT-br"] {
+            let s = newSandbox()
+            s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("af_heart"); s.writeTtsLanguage(raw)
+            let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
+            if n?.contains("in Portuguese, whatever language the conversation is in") != true { fail("pinSubtag(\(raw)): \(n?.debugDescription ?? "nil")") }
+        }
+    }
+
+    // 39) `english` keeps working as a pin — the first cut of OW_TTS_LANGUAGE accepted it, and
+    //     a hand-written tts_language file may still say so. Case-insensitive, like the codes.
+    do {
+        for raw in ["english", "English", " ENGLISH "] {
+            let s = newSandbox()
+            s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("supertonic:de:M1"); s.writeTtsLanguage(raw)
+            let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
+            if n?.contains("in English, whatever language the conversation is in") != true { fail("pinEnglishAlias(\(raw)): \(n?.debugDescription ?? "nil")") }
+        }
+    }
+
+    // 37) an unknown tts_language is ignored, not turned into a broken pin: the voice rule applies.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("supertonic:de:M1"); s.writeTtsLanguage("klingon")
+        let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
+        if n?.contains("in German by default") != true { fail("unknownPinIgnored: \(n?.debugDescription ?? "nil")") }
     }
 
     return failures

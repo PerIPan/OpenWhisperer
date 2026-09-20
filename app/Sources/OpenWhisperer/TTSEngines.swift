@@ -51,8 +51,26 @@ final class TTSEngines: Sendable {
             return try await kokoro.synthesize(text, voice: route.voice, speed: speed)
         case .supertonic:
             return try await supertonic.synthesize(
-                text, language: route.language ?? "en", style: route.voice, speed: speed)
+                text, language: Self.supertonicLanguage(for: text, route: route), style: route.voice, speed: speed)
         }
+    }
+
+    /// Supertonic follows the language of the *text*, not the voice: a `supertonic:de:M1` voice
+    /// handed an English sentence speaks English (same style), instead of phonemizing English
+    /// as German. Falls back to the voice's own language whenever the detector is unsure or
+    /// names a language Supertonic can't speak — see `TTSLanguageFollow`.
+    private static func supertonicLanguage(for text: String, route: TTSVoiceRoute) -> String {
+        let voiceLanguage = route.language ?? "en"
+        let guess = TextLanguageDetector.guess(for: text)
+        let language = TTSLanguageFollow.language(forVoiceLanguage: voiceLanguage, text: text, guess: guess)
+        if language != voiceLanguage {
+            // A heuristic that can misfire deserves a trace: this is the line to look for when a
+            // sentence comes out in the wrong language. Metadata only — the text is the user's
+            // conversation and NSLog lands in system logs.
+            let confidence = guess.map { String(format: "%.2f", $0.confidence) } ?? "n/a"
+            NSLog("TTSEngines: supertonic \(voiceLanguage) → \(language) (confidence \(confidence), \(text.count) chars)")
+        }
+        return language
     }
 
     /// The rate `AudioPlaybackEngine`'s node is wired at. It builds one fixed-format graph in
@@ -77,7 +95,7 @@ final class TTSEngines: Sendable {
             return try await kokoro.synthesizeSamples(text, voice: route.voice, speed: speed)
         case .supertonic:
             let native = try await supertonic.synthesizeSamples(
-                text, language: route.language ?? "en", style: route.voice, speed: speed)
+                text, language: Self.supertonicLanguage(for: text, route: route), style: route.voice, speed: speed)
             guard native.sampleRate != Self.playbackSampleRate else { return native }
             let converter = AudioConverter(sampleRate: Double(Self.playbackSampleRate))
             let resampled = try converter.resample(native.samples, from: Double(native.sampleRate))

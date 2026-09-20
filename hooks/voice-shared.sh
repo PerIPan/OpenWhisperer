@@ -182,39 +182,63 @@ article() {
 # Kokoro voices are unaffected (their language is implied by the voice and the model already
 # replies in the user's language); `en` gets no line since English is the default.
 resolve_language_line() {
-  local lang_override="$OW_TTS_LANGUAGE"
-  [ -z "$lang_override" ] && lang_override=$(cat "$APP_SUPPORT/tts_language" 2>/dev/null | tr -d '[:space:]')
-  lang_override=$(printf '%s' "$lang_override" | tr '[:upper:]' '[:lower:]')
-  if [ "$lang_override" = "en" ] || [ "$lang_override" = "english" ]; then
-    echo " Write the text you pass to \`speak\` in English, keeping the voice's persona."
-    return
-  fi
+  # The reply language has two layers. A *pin* — per-project OW_TTS_LANGUAGE, else the global
+  # tts_language file — names the language every spoken reply is written in, whatever the
+  # conversation is in. Without a pin, a Supertonic voice's own language is only the *default*:
+  # the model may switch when asked or when the conversation is in another language, because
+  # the engine follows the language of the text it is handed (TTSLanguageFollow in the app),
+  # not the language fused into the voice id. Kokoro voices get no line at all; an English
+  # Supertonic voice gets none either (English is already the default).
+  local pin="$OW_TTS_LANGUAGE"
+  [ -z "$pin" ] && pin=$(cat "$APP_SUPPORT/tts_language" 2>/dev/null)
+  # Normalize the pin: whitespace, case, and a BCP-47 region/script subtag (`pt-BR`, `pt_BR`
+  # → `pt`). `english` stays accepted — the first cut of OW_TTS_LANGUAGE took it, and a
+  # hand-written tts_language file may still say so. Codes are the contract otherwise.
+  pin=$(printf '%s' "$pin" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' | cut -d- -f1 | cut -d_ -f1)
+  [ "$pin" = "english" ] && pin="en"
 
   local voice="$OW_TTS_VOICE"
   [ -z "$voice" ] && voice=$(cat "$APP_SUPPORT/tts_voice" 2>/dev/null)
   voice=$(printf '%s' "$voice" | tr -d '[:space:]')
+  local vcode=""
   case "$voice" in
-    supertonic:*|SUPERTONIC:*) ;;
-    *) echo ""; return ;;
+    supertonic:*|SUPERTONIC:*) vcode=$(printf '%s' "$voice" | cut -d: -f2 | tr '[:upper:]' '[:lower:]') ;;
   esac
-  local code language
-  code=$(printf '%s' "$voice" | cut -d: -f2 | tr '[:upper:]' '[:lower:]')
-  case "$code" in
-    nl) language="Dutch" ;;      de) language="German" ;;      pl) language="Polish" ;;
-    ru) language="Russian" ;;    uk) language="Ukrainian" ;;   fr) language="French" ;;
-    it) language="Italian" ;;    es) language="Spanish" ;;     pt) language="Portuguese" ;;
-    hi) language="Hindi" ;;      ja) language="Japanese" ;;    ko) language="Korean" ;;
-    ar) language="Arabic" ;;     bg) language="Bulgarian" ;;   cs) language="Czech" ;;
-    da) language="Danish" ;;     el) language="Greek" ;;       et) language="Estonian" ;;
-    fi) language="Finnish" ;;    hr) language="Croatian" ;;    hu) language="Hungarian" ;;
-    id) language="Indonesian" ;; lt) language="Lithuanian" ;;  lv) language="Latvian" ;;
-    ro) language="Romanian" ;;   sk) language="Slovak" ;;      sl) language="Slovenian" ;;
-    sv) language="Swedish" ;;    tr) language="Turkish" ;;     vi) language="Vietnamese" ;;
-    *) echo ""; return ;;
-  esac
-  # Sentinel phrase kept distinct from resolve_flavor's "voice speaking your reply" so the two
-  # layers stay independently assertable in HookTests.
-  echo " Write the text you pass to \`speak\` in ${language}, not English — that is the language the selected voice speaks. Your on-screen reply stays in the language of the conversation."
+
+  # One code → name map, consulted for the pin first and the voice second. Keep the arms in
+  # their current shape (code, close-paren, language=name): HookTests parses them for parity
+  # with TTSVoiceRegistry's group names and the Pi extension's LANGUAGES map.
+  local kind code language
+  for kind in pin voice; do
+    if [ "$kind" = "pin" ]; then code="$pin"; else code="$vcode"; fi
+    [ -z "$code" ] && continue
+    language=""
+    case "$code" in
+      en) language="English" ;;
+      nl) language="Dutch" ;;      de) language="German" ;;      pl) language="Polish" ;;
+      ru) language="Russian" ;;    uk) language="Ukrainian" ;;   fr) language="French" ;;
+      it) language="Italian" ;;    es) language="Spanish" ;;     pt) language="Portuguese" ;;
+      hi) language="Hindi" ;;      ja) language="Japanese" ;;    ko) language="Korean" ;;
+      ar) language="Arabic" ;;     bg) language="Bulgarian" ;;   cs) language="Czech" ;;
+      da) language="Danish" ;;     el) language="Greek" ;;       et) language="Estonian" ;;
+      fi) language="Finnish" ;;    hr) language="Croatian" ;;    hu) language="Hungarian" ;;
+      id) language="Indonesian" ;; lt) language="Lithuanian" ;;  lv) language="Latvian" ;;
+      ro) language="Romanian" ;;   sk) language="Slovak" ;;      sl) language="Slovenian" ;;
+      sv) language="Swedish" ;;    tr) language="Turkish" ;;     vi) language="Vietnamese" ;;
+    esac
+    [ -z "$language" ] && continue
+    # Sentinel phrase "Write the text you pass to `speak` in" is kept distinct from
+    # resolve_flavor's "voice speaking your reply" so the two layers stay independently
+    # assertable in HookTests.
+    if [ "$kind" = "pin" ]; then
+      echo " Write the text you pass to \`speak\` in ${language}, whatever language the conversation is in. Your on-screen reply stays in the language of the conversation."
+      return
+    fi
+    [ "$code" = "en" ] && { echo ""; return; }
+    echo " Write the text you pass to \`speak\` in ${language} by default — that is the selected voice's language — but switch to whatever language I ask for or the conversation is in; the voice follows the language you write. Your on-screen reply stays in the language of the conversation."
+    return
+  done
+  echo ""
 }
 
 # Speak tool args → tell the model the exact voice/speed to pass to `speak` to prevent guesswork.

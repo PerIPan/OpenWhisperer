@@ -56,10 +56,12 @@ struct VoiceTab: View {
                         }
 
                     // The genuinely surprising half of picking a non-English voice: the
-                    // model is told to write the spoken text in that language too
-                    // (resolve_language_line in voice-shared.sh). Nothing said so before.
+                    // model is told to write the spoken text in that language by default
+                    // (resolve_language_line in voice-shared.sh), and the engine follows
+                    // whatever language it actually writes (TTSLanguageFollow), so replies
+                    // switch with the conversation unless tts_language pins one.
                     if let language = SettingsData.voiceLanguageName(selectedVoice) {
-                        Text("Replies will be spoken in \(language). Your on-screen reply stays in the language of the conversation.")
+                        Text("Replies are spoken in \(language) by default and follow the language you write in. Your on-screen reply stays in the language of the conversation.")
                             .font(OWFont.caption())
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

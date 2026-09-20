@@ -117,11 +117,14 @@ function article(word: string): string {
 }
 
 /**
- * Reply language for the multilingual (Supertonic) voices — mirrors `resolve_language_line()`.
- * The language rides inside the voice id (`supertonic:<lang>:<style>`), so this is a plain
- * code → name lookup. Kokoro voices get nothing; `en` gets nothing (English is the default).
+ * Reply language — mirrors `resolve_language_line()` in hooks/voice-shared.sh, including the
+ * `en` entry. A *pin* (`OW_TTS_LANGUAGE`, else the `tts_language` file) names the language
+ * every spoken reply is written in. Without one, a Supertonic voice's own language is only
+ * the default: the engine follows the language of the text (TTSLanguageFollow), so the model
+ * may switch when asked. Kokoro voices get nothing; an English Supertonic voice gets nothing.
  */
 const LANGUAGES: Record<string, string> = {
+  en: "English",
   nl: "Dutch", de: "German", pl: "Polish", ru: "Russian", uk: "Ukrainian", fr: "French",
   it: "Italian", es: "Spanish", pt: "Portuguese", hi: "Hindi", ja: "Japanese", ko: "Korean",
   ar: "Arabic", bg: "Bulgarian", cs: "Czech", da: "Danish", el: "Greek", et: "Estonian",
@@ -130,15 +133,30 @@ const LANGUAGES: Record<string, string> = {
 };
 
 function resolveLanguageLine(): string {
-  const voice = readPref("OW_TTS_VOICE", "tts_voice", "").replace(/\s+/g, "");
-  if (!/^supertonic:/i.test(voice)) return "";
-  const language = LANGUAGES[(voice.split(":")[1] ?? "").toLowerCase()];
-  if (!language) return "";
+  // Same normalization as the hook: whitespace, case, a BCP-47 subtag (`pt-BR` → `pt`), and
+  // the `english` alias the first cut of OW_TTS_LANGUAGE accepted.
+  let pin = readPref("OW_TTS_LANGUAGE", "tts_language", "").replace(/\s+/g, "").toLowerCase().split(/[-_]/)[0];
+  if (pin === "english") pin = "en";
+  const pinned = LANGUAGES[pin];
   // Sentinel phrase kept distinct from resolveFlavor's "voice speaking your reply" so the two
   // layers stay independently assertable.
+  if (pinned) {
+    return (
+      ` Write the text you pass to \`openwhisperer_speak\` in ${pinned}, whatever language the` +
+      ` conversation is in. Your on-screen reply stays in the language of the conversation.`
+    );
+  }
+  const voice = readPref("OW_TTS_VOICE", "tts_voice", "").replace(/\s+/g, "");
+  if (!/^supertonic:/i.test(voice)) return "";
+  const code = (voice.split(":")[1] ?? "").toLowerCase();
+  if (code === "en") return "";
+  const language = LANGUAGES[code];
+  if (!language) return "";
   return (
-    ` Write the text you pass to \`openwhisperer_speak\` in ${language}, not English — that is the` +
-    ` language the selected voice speaks. Your on-screen reply stays in the language of the conversation.`
+    ` Write the text you pass to \`openwhisperer_speak\` in ${language} by default — that is the` +
+    ` selected voice's language — but switch to whatever language I ask for or the conversation` +
+    ` is in; the voice follows the language you write. Your on-screen reply stays in the language` +
+    ` of the conversation.`
   );
 }
 
