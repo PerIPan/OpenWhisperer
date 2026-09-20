@@ -22,10 +22,4 @@ enum TextLanguageDetector {
         }
         return TTSLanguageFollow.Guess(language: language.rawValue, confidence: confidence)
     }
-
-    /// The Supertonic language to synthesize `text` in for a voice whose own language is
-    /// `voiceLanguage`.
-    static func language(for text: String, voiceLanguage: String) -> String {
-        TTSLanguageFollow.language(forVoiceLanguage: voiceLanguage, text: text, guess: guess(for: text))
-    }
 }
