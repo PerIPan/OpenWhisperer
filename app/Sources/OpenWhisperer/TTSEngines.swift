@@ -9,8 +9,8 @@ import OpenWhispererKit
 /// `synthesizeSamples` — so `TTSPlaybackController`, `TTSHTTPServer`, and `ServeTTSMode` are
 /// type-swapped rather than rewritten, and every downstream concern (sentence streaming,
 /// barge-in, the `speak` MCP tool, `/v1/audio/speech`) is untouched. `AudioPlaybackEngine`
-/// already takes a per-item sample rate, so Supertonic's 44.1 kHz mixes with Kokoro's 24 kHz
-/// with no resampling.
+/// does **not** take a per-item sample rate — it builds one fixed 24 kHz graph in `init` — so
+/// `synthesizeSamples` resamples Supertonic's native 44.1 kHz down to it before scheduling.
 ///
 /// A plain `final class` rather than an actor: it holds no mutable state of its own and both
 /// engines are actors that serialize themselves on the compute unit.

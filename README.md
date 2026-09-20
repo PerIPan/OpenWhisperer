@@ -40,7 +40,9 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 - **Dictation works in iTerm2 again.** Transcribed text wasn't being inserted there at all — and because Auto-Submit's Enter *was* delivered, you got an empty command submitted instead. The accessibility write reported success while silently doing nothing, so the app never fell back to the typing path that works. Writes are now verified rather than trusted, on every app. Thanks to [@natronite](https://github.com/natronite) for the report and the diagnosis ([#49](https://github.com/PerIPan/OpenWhisperer/issues/49)).
 - **Multilingual voices follow the language you write in.** A `supertonic:de:M1` voice used to be a hard pin to German — ask for a reply in English and the model would refuse, citing the instruction. Now the engine detects the language of each sentence on-device and speaks it in that language, keeping the same speaker. Kokoro voices are unchanged: a Kokoro voice *is* its language.
 - **Pin the reply language if you want one.** `tts_language` (or `OW_TTS_LANGUAGE` per project) names the language every spoken reply is written in, for any voice, whatever the conversation is in.
-- **Supertonic upgraded** to FluidAudio 0.15.6.
+- **Half the download size.** The app bundle is roughly half what the last build was — a text-normalization engine that OpenWhisperer never actually used is no longer linked in.
+- **Audio engine upgraded** to FluidAudio 0.15.8: better handling of possessives in spoken replies, plus a batch of speech-recognition fixes.
+- **Note for `scripts/speak.sh` users:** the blocking `/v1/audio/speech` endpoint is about 10 dB quieter, because it now returns the model's native level instead of normalizing each clip to full scale. Spoken replies are unaffected — different path, same loudness as before.
 
 ### 2.0.5
 
@@ -242,14 +244,15 @@ Most settings are configured in the Settings window (voice, volume, language, ho
 
 | Variable | Default | Used by | Description |
 |----------|---------|---------|-------------|
-| `TTS_VOICE` | `af_heart` | hooks, `speak.sh` | Voice id — a Kokoro name (`af_heart`) or a multilingual id (`supertonic:nl:F1`); the menubar voice picker overrides this |
-| `TTS_PLAY_URL` | `http://localhost:8000/v1/audio/play` | hooks | In-app streaming-playback endpoint (loopback only) |
+| `TTS_VOICE` | `af_heart` | `speak.sh` | Voice id — a Kokoro name (`af_heart`) or a multilingual id (`supertonic:nl:F1`); the menubar voice picker overrides this |
 | `TTS_URL` | `http://localhost:8000/v1/audio/speech` | `speak.sh` | Blocking synthesize-to-WAV endpoint |
 | `TTS_VOLUME` | `1` | `speak.sh` | Playback volume (the in-app player uses the menubar volume setting instead) |
 | `OW_TTS_STYLE` | Settings → Voice → **Length** | hooks | Per-project spoken-summary length (`terse`/`normal`/`rich`/`full`); overrides the global `tts_style` |
 | `OW_TTS_VOICE` | menubar voice | hooks | Per-project voice id, Kokoro or `supertonic:<lang>:<style>` (any of its 31 languages — the picker shows the 24 Kokoro can't speak); overrides the global `tts_voice` |
 | `OW_TTS_RESPONSE` | menubar **Response** | hooks | Per-project response mode (`voice`/`always`/`needed`); overrides the global `tts_response_mode` |
 | `OW_TTS_PERSONA` | Settings → Voice → **Persona** | hooks | Per-project persona (`auto`, or an id such as `british`/`japanese`/`dutch`); overrides the global `tts_persona`. An unrecognized value falls back to the voice's own persona rather than removing it |
+| `OW_TTS_SPEED` | Settings → Voice → **Speed** | hooks | Per-project playback rate, clamped to 0.7–1.5; overrides the global `tts_speed` |
+| `OW_TTS_LANGUAGE` | — (no Settings control) | hooks, Pi | Per-project reply-language pin: the language every spoken reply is written in, for any voice, whatever the conversation is in. A language code (`de`, `pt-BR` → Portuguese); `english` is accepted for `en`, anything unrecognized is ignored. Overrides the global `tts_language`, a hand-written file. Without it, a multilingual voice's language is the *default* and the engine follows whatever the model writes |
 
 > **Tip:** A specific language beats auto-detect. It prevents the model hallucinating text in other languages during silence or background noise, skips a decoding pass, and is more reliable on short phrases — which is most of what dictation produces. English is the default for exactly this reason; change it in Settings → Dictate if you dictate in something else.
 

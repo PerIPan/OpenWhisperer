@@ -44,7 +44,7 @@ credentials, and (b) the licensing/update code, which does not exist yet.
 1. **Store the credential profile once** (keychain-backed; the build script reads it by name):
    ```bash
    xcrun notarytool store-credentials "openwhisperer-notary" \
-       --apple-id "peripan@outlook.com" \
+       --apple-id "you@example.com" \
        --team-id "TEAMID" \
        --password "xxxx-xxxx-xxxx-xxxx"   # the app-specific password
    ```

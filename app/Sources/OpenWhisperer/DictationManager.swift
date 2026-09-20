@@ -44,16 +44,16 @@ class DictationManager: ObservableObject {
     @Published var sttFailed = false
     /// Last whole percent shown for the first-run model download (dedups UI updates).
     private var lastReportedDownloadPct = -1
-    /// True while the next/current turn's reply is expected to be spoken: a fresh
-    /// unclaimed `voice_turn` signal (pre-submit), or a claimed turn whose reply is
-    /// still pending (`speak_pending/` marker). Drives the will-speak indicator in
-    /// the menu bar icon and the status pill.
+    /// True while the next/current turn's reply is expected to be spoken — i.e. a fresh,
+    /// unclaimed `voice_turn` signal is on disk. Drives the will-speak indicator in the
+    /// menu bar icon and the status pill. Pre-submit only: once the hook claims the signal
+    /// nothing tracks the turn, so the icon goes dark when the reply is still coming.
     @Published var speakArmed = false
     private var speakArmedTimer: Timer?
     /// True when the last dictation landed in a plausible CLI host (terminal/IDE)
     /// — an app where a hooked Claude Code / Codex prompt could actually claim the
-    /// voice_turn signal. Gates the pre-submit will-speak indicator; false means a
-    /// bare voice_turn never lights the icon (post-submit speak_pending still does).
+    /// voice_turn signal. Gates the will-speak indicator; false means a bare voice_turn
+    /// never lights the icon.
     private var lastDictationTargetIsCLIHost = false
 
     private var isTyping = false  // prevent concurrent typeText
@@ -778,7 +778,6 @@ class DictationManager: ObservableObject {
     }
 
     private static func computeSpeakArmed(voiceTurnEligible: Bool) -> Bool {
-        let fm = FileManager.default
         let now = Date()
         // Pre-submit: a fresh unclaimed voice_turn — except in "text" Response mode,
         // where a dictated turn is exactly the one that will NOT be spoken, and only
@@ -794,19 +793,10 @@ class DictationManager: ObservableObject {
                 return true
             }
         }
-        // Post-submit: a claimed turn awaiting its reply (any mode — the marker only
-        // exists for turns the hooks decided to speak). Same freshness cap so a
-        // marker orphaned by a killed session can't pin the indicator on.
-        if let entries = try? fm.contentsOfDirectory(at: Paths.speakPendingDir,
-                                                     includingPropertiesForKeys: [.contentModificationDateKey]) {
-            for entry in entries {
-                if let mtime = try? entry.resourceValues(forKeys: [.contentModificationDateKey])
-                    .contentModificationDate,
-                   now.timeIntervalSince(mtime) <= voiceTurnTTL {
-                    return true
-                }
-            }
-        }
+        // There is no post-submit half any more. This used to also scan `speak_pending/`
+        // markers, but nothing has written them since the Stop hook was replaced by the
+        // model's own mid-turn `speak` call — so the branch was dead from the day the
+        // indicator was written, and its comment claimed a mechanism that did not exist.
         return false
     }
 
@@ -1016,8 +1006,14 @@ class DictationManager: ObservableObject {
                     os_log(.default, log: dictLog, "AX: StrategyA success for PID %d", pid)
                     return true
                 }
+                // Do NOT fall through to Strategy B here. B would take a fresh baseline
+                // from the same element, so if A's write actually landed and only the
+                // read-back lied, B would insert the text a second time. CGEvent typing is
+                // the safe universal path. (#49's iTerm2 case never reaches this: there
+                // StrategyA is not settable, so it never ran.)
                 os_log(.default, log: dictLog,
-                       "AX: StrategyA reported success but the value did not change for PID %d — falling through", pid)
+                       "AX: StrategyA reported success but the value did not change for PID %d — falling back to CGEvent", pid)
+                return false
             } else {
                 os_log(.default, log: dictLog, "AX: StrategyA set failed (err=%d)", setErr.rawValue)
             }

@@ -14,6 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Package.swift declares swift-tools-version 6.2 (needed to reach FluidAudio's
+      # NemoTextProcessing opt-out trait). SwiftPM hard-fails if the selected toolchain is
+      # older, so pick the newest Xcode on the image rather than the default, and print the
+      # version — if this job ever fails at "Build", that line says why.
+      - name: Select the newest Xcode and report the toolchain
+        run: |
+          latest=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$latest" ]; then sudo xcode-select -s "$latest"; fi
+          xcodebuild -version
+          swift --version
+
       - name: Cache SwiftPM
         uses: actions/cache@v4
         with:

@@ -31,3 +31,7 @@ ROADMAP.md
 
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
+
+# Scratch planning + tool output, alongside ROADMAP.md / docs/plans (see above).
+todo.md
+.playwright-mcp/

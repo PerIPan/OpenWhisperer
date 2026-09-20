@@ -1,2 +1,0 @@
-[      80ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8787/_vercel/insights/script.js:0
-[      80ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8787/_vercel/speed-insights/script.js:0

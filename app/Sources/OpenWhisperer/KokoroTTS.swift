@@ -69,6 +69,12 @@ actor KokoroTTS {
 
     /// Helper to download and cache alternative voice .bin files if they are missing or corrupted on disk,
     /// because the upstream FluidInference repository only hosts af_heart.bin in its ANE folder.
+    ///
+    /// **Not redundant with FluidAudio's own voice-pack downloader** (added 0.15.8, #896/#901),
+    /// which fetches from `FluidInference/kokoro-82m-coreml` — that repo has only af_heart.
+    /// Verified live 2026-09-20: `.../kokoro-82m-coreml/ANE/af_heart.bin` → 200, the same path
+    /// for `bf_emma` → 404, while `onnx-community/.../voices/bf_emma.bin` → 200. Deleting this
+    /// as duplicate machinery would break every voice except the default.
     private func ensureVoicePack(_ voice: String) async {
         let sanitized = voice.filter { $0.isLetter || $0.isNumber || $0 == "_" }
         guard !sanitized.isEmpty && sanitized != "af_heart" else { return }
