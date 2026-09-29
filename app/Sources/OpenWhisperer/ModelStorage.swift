@@ -35,8 +35,18 @@ enum ModelStorage {
                 name: "Parakeet STT models (removed engine)",
                 url: home.appendingPathComponent("Library/Application Support/FluidAudio/Models")),
             Location(
+                // `swift run` builds cache under the executable name...
                 name: "Compiled model cache",
                 url: home.appendingPathComponent("Library/Caches/OpenWhisperer/com.apple.e5rt.e5bundlecache")),
+            Location(
+                // ...but the installed .app caches under its *bundle identifier*, so the
+                // entry above only ever matched dev builds: a shipped user's compiled ANE
+                // bytecode (269 MB measured) was neither counted by `breakdown()` nor
+                // removed by `deleteAll()`. Both are listed because either binary can be
+                // the one that populated a cache; empty locations are hidden anyway.
+                name: "Compiled model cache (installed app)",
+                url: home.appendingPathComponent(
+                    "Library/Caches/\(Bundle.main.bundleIdentifier ?? "com.openwhisperer.app")/com.apple.e5rt.e5bundlecache")),
         ]
     }
 
