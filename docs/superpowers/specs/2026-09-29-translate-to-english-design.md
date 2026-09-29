@@ -203,11 +203,24 @@ Consequences for the design:
 
 - **No guard is needed.** Translate mode can stay on across a bilingual conversation: Dutch comes
   out English, English stays English. This was the main open risk and it is closed.
-- **Auto-detect is viable**, costing ~0.2 s over a pinned source language and producing identical
-  text. It is the right setting for a mixed conversation. The app's default is `en`, which is
-  wrong for this mode, so the setting's caption should point at Auto-detect. Do **not** silently
-  override the user's Language choice — pinning is still slightly faster and more accurate when
-  the conversation really is single-language.
+- **SETTLED: translate mode always auto-detects the source language.** `readLanguage()` returns
+  `nil` (auto) whenever `stt_translate` is set, *overriding the stored `stt_language` at read
+  time without rewriting it* — so unticking restores the user's pinned choice for free, with no
+  restore logic and no way to get wedged on `auto` if the app dies mid-session.
+
+  Rationale: translate mode exists for conversations the user cannot follow, so the spoken
+  language is often unknown and frequently mixed. Auto-detect measured ~0.2 s slower than a
+  pinned language with byte-identical output — negligible against a ~2 s decode. Decisively, the
+  app's `stt_language` default is `en`, and `en` + translate is precisely the combination that
+  produced mangled output on turbo; overriding makes that state unreachable.
+
+  Cost accepted: pinning is marginally faster (1.81 s vs 1.97 s on Dutch) for a genuinely
+  single-language conversation. Spent to remove the footgun.
+
+  Because the stored value is overridden rather than changed, the Dictate tab's Language picker
+  will still display the pinned language while translate mode is active. The Advanced setting's
+  caption must state that translate mode detects the language automatically, so the two surfaces
+  do not appear to contradict each other.
 - Translation quality is good but not lossless: "de vergadering van volgende week" → "the meeting"
   dropped "next week's". Worth knowing; not a blocker for the use case.
 
