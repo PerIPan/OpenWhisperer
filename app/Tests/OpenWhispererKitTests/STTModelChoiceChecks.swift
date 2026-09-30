@@ -47,12 +47,30 @@ func sttModelChoiceFailures() -> [String] {
         failures.append("STTModelChoice: fast and translating resolve to the same model name")
     }
 
-    // Turbo is the one that cannot translate, so it must NOT be the translating variant.
-    if STTModelChoice.translating.modelName.contains("turbo") {
+    // The translating variant must not be a checkpoint that cannot translate. The word
+    // "turbo" alone is NOT a reliable discriminator in either direction:
+    //   - `openai_whisper-large-v3-v20240930_626MB` IS a turbo build (WhisperKit's README
+    //     lists it as "Large v3 Turbo (compressed)") and contains no "turbo";
+    //   - `openai_whisper-large-v2_turbo_955MB` exists although OpenAI never shipped a
+    //     large-v2 turbo.
+    // `v20240930` is the tag that actually identifies the 4-decoder-layer turbo release.
+    // `distil-*` models are English-only distillations and equally cannot translate.
+    let cannotTranslate = ["turbo", "v20240930", "distil"]
+    for marker in cannotTranslate where STTModelChoice.translating.modelName.contains(marker) {
         failures.append("""
-            STTModelChoice.translating.modelName: "\(STTModelChoice.translating.modelName)" is a \
-            turbo build. OpenAI excluded translation data from the turbo fine-tune — measured: \
-            task=.translate returns byte-identical source text.
+            STTModelChoice.translating.modelName: "\(STTModelChoice.translating.modelName)" \
+            contains "\(marker)", which marks a checkpoint that cannot translate. Measured \
+            2026-09-29: task=.translate on a turbo build returns byte-identical source text, \
+            no error. Distilled builds are English-only. Picking one here silently restores \
+            the bug this type exists to prevent.
+            """)
+    }
+
+    // ...and the fast variant must remain a turbo build, or plain dictation loses its speed.
+    if !STTModelChoice.fast.modelName.contains("v20240930") {
+        failures.append("""
+            STTModelChoice.fast.modelName: "\(STTModelChoice.fast.modelName)" is not the \
+            v20240930 turbo release; plain dictation would decode several times slower.
             """)
     }
 

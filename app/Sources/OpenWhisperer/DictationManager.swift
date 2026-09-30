@@ -238,7 +238,7 @@ class DictationManager: ObservableObject {
             }
             do {
                 await self.whisper.setDownloadProgressHandler(progressHandler)
-                _ = try await self.whisper.prepare(want)
+                _ = try await self.whisper.prepare(want, supersedable: true)
                 await MainActor.run {
                     guard generation == self.sttLoadGeneration else { return }  // superseded
                     self.sttModelReady = true
@@ -356,11 +356,18 @@ class DictationManager: ObservableObject {
         let want = SpeechTranscriber.activeChoice
         guard !sttWarm || flagsChoice != want else { return }
         sttStatus = "Loading the speech model… the first dictation can take a minute or two."
+        // Pre-warm is the second writer of the ready/warm/failed flags. It must share
+        // `prepareSTT`'s generation, or a pre-warm that joined the load for a checkpoint the
+        // user has since switched away from stamps "ready" (or a Retry banner) over a newer
+        // load that is still running.
+        sttLoadGeneration += 1
+        let generation = sttLoadGeneration
         Task { [weak self] in
             guard let self else { return }
             do {
-                _ = try await self.whisper.prepare(want)
+                _ = try await self.whisper.prepare(want, supersedable: true)
                 await MainActor.run {
+                    guard generation == self.sttLoadGeneration else { return }  // superseded
                     self.sttWarm = true
                     self.flagsChoice = want
                     // Mirror prepareSTT's success state. Without this, a launch-time
@@ -372,6 +379,7 @@ class DictationManager: ObservableObject {
                 }
             } catch {
                 await MainActor.run {
+                    guard generation == self.sttLoadGeneration else { return }  // superseded
                     self.sttFailed = true
                     self.sttStatus = Self.sttFailureMessage(for: error)
                 }

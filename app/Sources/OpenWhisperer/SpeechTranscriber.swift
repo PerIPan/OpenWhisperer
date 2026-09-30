@@ -92,6 +92,11 @@ actor SpeechTranscriber {
     private var loadingChoice: STTModelChoice?
     /// Bumped per load so a superseded load cannot install itself over a newer one.
     private var loadGeneration = 0
+    /// The checkpoint most recently asked for by a *supersedable* caller (a pre-warm or a
+    /// Settings-driven reload). A waiter that no longer matches has been overtaken — the user
+    /// flipped the toggle back while it was waiting — and must abandon rather than drop the
+    /// resident model to compile something nobody wants any more.
+    private var newestSupersedableRequest: STTModelChoice?
     /// Called with 0…1 while the ~1.5 GB model archive downloads on first run.
     /// Set before `prepare()`; never called when the model is already cached.
     private var downloadProgressHandler: (@Sendable (Double) -> Void)?
@@ -116,8 +121,13 @@ actor SpeechTranscriber {
     /// Download (first run) + load the model. Idempotent: concurrent callers await the
     /// same in-flight load rather than starting a second one.
     @discardableResult
-    func prepare(_ choice: STTModelChoice? = nil) async throws -> WhisperKit {
+    /// `supersedable`: true for speculative loads (launch prepare, pre-warm, a Settings
+    /// toggle) — these may be abandoned if the user changes their mind while they wait.
+    /// A transcription's own load is NOT supersedable: it has audio to turn into text.
+    func prepare(_ choice: STTModelChoice? = nil,
+                 supersedable: Bool = false) async throws -> WhisperKit {
         let want = choice ?? Self.activeChoice
+        if supersedable { newestSupersedableRequest = want }
         if let whisperKit, loadedChoice == want { return whisperKit }
         if let loadTask, loadingChoice == want { return try await loadTask.value }
 
@@ -137,6 +147,14 @@ actor SpeechTranscriber {
             // else having loaded exactly what we want.
             if let whisperKit, loadedChoice == want { return whisperKit }
             if let loadTask, loadingChoice == want { return try await loadTask.value }
+            // Overtaken while waiting. Falling through here would drop the model another
+            // caller just installed and start compiling a checkpoint the user has already
+            // cancelled — leaving the flags reading "ready" while nothing is resident, and
+            // every dictation blocking behind a load nobody asked for until the 35 s
+            // watchdog kills it.
+            if supersedable, let newest = newestSupersedableRequest, newest != want {
+                throw CancellationError()
+            }
         }
 
         // Swapping checkpoints: drop our reference instead of calling `unloadModels()`.
