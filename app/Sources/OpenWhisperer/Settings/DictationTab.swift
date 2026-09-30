@@ -211,6 +211,18 @@ struct DictationTab: View {
                     try? newValue.write(to: Paths.sttLanguage, atomically: true, encoding: .utf8)
                 }
 
+                // "Translate to English" is NOT here: it swaps the whole speech model, so it
+                // lives with the model rows in Settings → Advanced. While it is on, the
+                // Language picker above is overridden (translate mode auto-detects) — hence
+                // the note below rather than a silent contradiction between the two tabs.
+                if dictationManager.translateToEnglish {
+                    Text("Translating to English — the spoken language is detected automatically, so this setting is ignored. Turn it off in Advanced, or from the menubar menu.")
+                        .font(OWFont.caption(11))
+                        .foregroundColor(OWColor.warn)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 OWInternalDivider()
 
                 HStack(spacing: 8) {

@@ -177,16 +177,19 @@ struct GeneralTab: View {
                 // hardcoded copy ("9 languages, plus Supertonic-3 for Dutch, German,
                 // Polish, Russian and Ukrainian") silently went stale when the pickers
                 // were widened, and shipped wrong.
+                // Model name is read from the active checkpoint, never written here: it
+                // changes when "Translate to English" swaps the model, and the hardcoded
+                // copy in this card has already shipped stale once.
                 engineRow(icon: "waveform",
                           title: "Speech to text",
-                          detail: "WhisperKit large-v3 turbo — on the Apple Neural Engine, \(SettingsData.supportedLanguages.count) languages")
+                          detail: "\(SpeechTranscriber.activeChoice.displayName) — on the Apple Neural Engine, \(SettingsData.supportedLanguages.count) languages")
                 engineRow(icon: "speaker.wave.2",
                           title: "Text to speech",
                           detail: "Kokoro-82M and Supertonic-3 — \(TTSVoiceRegistry.allVoices.count) voices across \(TTSVoiceRegistry.languageCount) languages, on the Neural Engine")
 
                 OWInternalDivider()
 
-                Text("Three ways to dictate (hold, press, or hands-free), spoken replies for Claude Code, Codex, Pi and Antigravity, and a live transcription overlay.")
+                Text("Three ways to dictate (hold, press, or hands-free), spoken replies for Claude Code, Codex, Pi and Antigravity, and a live transcription overlay. Settings → Advanced can also translate what you say into English as you dictate.")
                     .font(OWFont.caption(11))
                     .foregroundColor(OWColor.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)

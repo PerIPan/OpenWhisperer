@@ -63,6 +63,13 @@ struct OpenWhispererApp: App {
 private struct MenuBarMenu: View {
     let appDelegate: AppDelegate
     @ObservedObject private var overlay = TranscriptionOverlay.shared
+    /// Observed so the checkmark tracks changes made in Settings → Advanced too.
+    @ObservedObject private var dictation: DictationManager
+
+    init(appDelegate: AppDelegate) {
+        self.appDelegate = appDelegate
+        self.dictation = appDelegate.dictationManager
+    }
 
     var body: some View {
         Button("Settings…") {
@@ -77,6 +84,14 @@ private struct MenuBarMenu: View {
         ))
 
         Button("Record Voice & Text") { RecordingWindow.show() }
+
+        // Quick access on purpose: this gets flipped mid-conversation, which is exactly when
+        // you don't want to go hunting through Settings. Same consent + model swap as the
+        // Advanced tab — both go through `TranslateToggle`.
+        Toggle("Translate to English", isOn: Binding(
+            get: { dictation.translateToEnglish },
+            set: { TranslateToggle.request($0, on: dictation) }
+        ))
 
         Divider()
 

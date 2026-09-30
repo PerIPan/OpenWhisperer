@@ -42,6 +42,12 @@ class DictationManager: ObservableObject {
     @Published var sttModelReady = false
     /// True when the speech-model load failed (offers a Retry in the UI).
     @Published var sttFailed = false
+    /// "Translate to English" — mirrors the `stt_translate` flag file. Published (rather than
+    /// each surface holding its own `@State`) so the menubar toggle and Settings → Advanced
+    /// cannot disagree about it. Set it through `setTranslate(_:)`, never directly: it selects
+    /// a different speech model.
+    @Published private(set) var translateToEnglish =
+        FileManager.default.fileExists(atPath: Paths.sttTranslate.path)
     /// Last whole percent shown for the first-run model download (dedups UI updates).
     private var lastReportedDownloadPct = -1
     /// True while the next/current turn's reply is expected to be spoken — i.e. a fresh,
@@ -81,6 +87,20 @@ class DictationManager: ObservableObject {
     /// Sizes the transcription watchdog: a cold model's first dictation pays the
     /// load inside the transcribe task, so it gets a longer leash.
     private var sttWarm = false
+    /// The checkpoint the published flags describe — the one loaded, or the one currently
+    /// being loaded. Set when a load *starts*, not only when it succeeds: a failed or
+    /// in-flight swap must not leave this describing the previous model, or
+    /// `reloadSTTForChoiceChange()` concludes there is nothing to do and the app sits with
+    /// "Translate" on and no model resident.
+    ///
+    /// `sttWarm` is only ever set true alongside a *successful* load or transcription of
+    /// this checkpoint, so the watchdog can still tell "loading X" from "X is warm".
+    private var flagsChoice: STTModelChoice = SpeechTranscriber.activeChoice
+    /// Bumped whenever a model load is requested. Each load's completion handler carries the
+    /// value it started with and writes nothing if it no longer matches — otherwise a load
+    /// the user has already superseded (by flipping Translate again) stamps `sttModelReady`
+    /// for a checkpoint that is no longer the one being loaded.
+    private var sttLoadGeneration = 0
     /// The in-flight transcription. Cancelled on mode switch / timeout; a cancelled
     /// task's result is dropped via the `Task.isCancelled` guard so it can never type
     /// into the wrong app (the T1.2/T1.4 invariant). Note: cancelling does NOT interrupt
@@ -181,12 +201,24 @@ class DictationManager: ObservableObject {
     /// Kick off the one-time Whisper model download + load. Call at launch so the
     /// first dictation isn't blocked on a multi-minute download. Idempotent.
     func prepareSTT() {
-        guard !sttModelReady else { return }
-        // Set expectations: the first launch downloads (~1.5 GB) and then compiles
-        // the model for the Neural Engine. Without this, a slow first load looks "stuck".
+        // Ready *and* already on the right checkpoint — nothing to do. The second clause
+        // matters after a swap: `sttModelReady` can still be true for the previous model.
+        guard !sttModelReady || flagsChoice != SpeechTranscriber.activeChoice else { return }
+        // Set expectations: a first load downloads the checkpoint and then compiles it for
+        // the Neural Engine. Without this, a slow load looks "stuck". The size is read from
+        // the active checkpoint — the two differ (turbo ~1.5 GB, translating ~948 MB) and a
+        // hardcoded figure would be wrong for one of them.
+        let size = SpeechTranscriber.activeChoice.approximateDownloadDescription
         sttStatus = SpeechTranscriber.isModelCached
             ? "Preparing the speech model… first launch compiles it for the Neural Engine. Dictation will be ready when it finishes."
-            : "Downloading the speech model… one-time, about 1.5 GB. This can take a few minutes on first launch."
+            : "Downloading the speech model… one-time, \(size). This can take a few minutes."
+        let want = SpeechTranscriber.activeChoice
+        // Claim the target before the load starts, so a failure or a mid-load reversal is
+        // distinguishable from "nothing changed".
+        flagsChoice = want
+        sttWarm = false
+        sttLoadGeneration += 1
+        let generation = sttLoadGeneration
         Task { [weak self] in
             guard let self else { return }
             // Live percent while the archive downloads (first run only — the handler
@@ -200,28 +232,70 @@ class DictationManager: ObservableObject {
                         self.sttStatus = "Download done — compiling for the Neural Engine…"
                     } else if pct != self.lastReportedDownloadPct {
                         self.lastReportedDownloadPct = pct
-                        self.sttStatus = "Downloading the speech model… \(pct)% of ~1.5 GB (one-time)."
+                        self.sttStatus = "Downloading the speech model… \(pct)% of \(size) (one-time)."
                     }
                 }
             }
             do {
                 await self.whisper.setDownloadProgressHandler(progressHandler)
-                _ = try await self.whisper.prepare()
+                _ = try await self.whisper.prepare(want)
                 await MainActor.run {
+                    guard generation == self.sttLoadGeneration else { return }  // superseded
                     self.sttModelReady = true
                     self.sttWarm = true
+                    self.flagsChoice = want
                     self.sttFailed = false
                     self.sttStatus = nil
                 }
             } catch {
                 let message = Self.sttFailureMessage(for: error)
                 await MainActor.run {
+                    guard generation == self.sttLoadGeneration else { return }  // superseded
                     self.sttFailed = true
                     self.sttStatus = message
                     self.error = error.localizedDescription
                 }
             }
         }
+    }
+
+    /// Turn "Translate to English" on or off: persists the flag, then swaps the speech model.
+    /// The caller is responsible for getting the user's consent to the download first when the
+    /// translating checkpoint isn't on disk yet (see `TranslateToggle.request`).
+    func setTranslate(_ enable: Bool) {
+        guard enable != translateToEnglish else { return }
+        if enable {
+            try? "on".write(to: Paths.sttTranslate, atomically: true, encoding: .utf8)
+        } else {
+            try? FileManager.default.removeItem(at: Paths.sttTranslate)
+        }
+        // Read the flag back rather than trusting the write: `try?` swallows failures, and a
+        // published value that disagrees with disk would promise English output the engine
+        // never delivers (`activeChoice` reads the file, not this property).
+        translateToEnglish = FileManager.default.fileExists(atPath: Paths.sttTranslate.path)
+        reloadSTTForChoiceChange()
+    }
+
+    /// Call after `stt_translate` changes. "Translate to English" selects a different
+    /// checkpoint (turbo cannot translate — see `STTModelChoice`), so the model is swapped
+    /// and the published status re-driven. Doing it here, on the toggle, is what keeps the
+    /// cold load out of a dictation and away from the watchdog. No-op when the choice is
+    /// unchanged.
+    func reloadSTTForChoiceChange() {
+        let want = SpeechTranscriber.activeChoice
+        // Three reasons to act, not one:
+        //   - the checkpoint changed (the ordinary case);
+        //   - nothing is resident (a swap is still in flight, and the user just reversed it);
+        //   - the last attempt failed (offline, or the CDN blocked) — without this, turning
+        //     Translate back off could not recover, because `want` would equal the target we
+        //     already failed on and the guard would swallow the retry, leaving the app with
+        //     no model at all.
+        guard want != flagsChoice || !sttModelReady || sttFailed else { return }
+        sttModelReady = false
+        sttWarm = false
+        sttFailed = false
+        lastReportedDownloadPct = -1
+        prepareSTT()
     }
 
     /// Re-attempt the speech-model load after a failure (wired to a Retry button).
@@ -235,8 +309,8 @@ class DictationManager: ObservableObject {
     /// A short, actionable message for a model-load failure.
     /// Transcribe via Whisper, which self-prepares on first use, and mark the
     /// model warm on success so the watchdog can tighten.
-    private func transcribeSTT(samples: [Float], language: String?) async throws -> String {
-        let text = try await whisper.transcribe(samples: samples, language: language)
+    private func transcribeSTT(samples: [Float], language: String?, translate: Bool) async throws -> String {
+        let text = try await whisper.transcribe(samples: samples, language: language, translate: translate)
         // Fillers first: removing "um" restores word adjacency for the
         // corrector's split-absorption window ("code, um, x" -> "Codex").
         //
@@ -249,28 +323,46 @@ class DictationManager: ObservableObject {
         let glossary = VocabularyCorrector.parseGlossary(
             try? String(contentsOf: Paths.sttVocabulary, encoding: .utf8))
         let corrected = VocabularyCorrector.apply(defillered, glossary: glossary)
-        await MainActor.run { self.sttWarm = true }
+        // Record which checkpoint is warm, not merely that one is: a transcription proves
+        // the model it actually ran on is loaded. Without the choice, `transcriptionTimeout()`
+        // would keep returning the cold 180 s budget after every swap — safe, but it would
+        // never tighten again.
+        let used = STTModelChoice.forTranslate(translate)
+        await MainActor.run {
+            // Only claim warmth if nothing has changed under us. A transcription still in
+            // flight when the user flips Translate would otherwise stamp "warm" for a model
+            // the actor has already released, and `transcriptionTimeout()` would then grant
+            // the *next*, genuinely cold, dictation the 35 s budget and cancel it.
+            guard used == SpeechTranscriber.activeChoice, self.sttModelReady else { return }
+            self.sttWarm = true
+            self.flagsChoice = used
+        }
         return corrected
     }
 
     /// Watchdog budget for one transcription: 35 s once the model is warm;
     /// generous when the first dictation must load the model inside the task.
     private func transcriptionTimeout() -> TimeInterval {
-        sttWarm ? 35 : 180
+        // `sttWarm` alone is not enough: it stays true across a "Translate to English"
+        // flip, but the newly-selected checkpoint has not been loaded. Granting that
+        // cold load 35 s would cancel the first translated dictation every time.
+        (sttWarm && flagsChoice == SpeechTranscriber.activeChoice) ? 35 : 180
     }
 
     /// Kick the model load as recording starts, so a cold first dictation overlaps
     /// the load with the user speaking instead of paying it all inside the
     /// watchdogged transcribe task.
     private func prewarmSTTIfNeeded() {
-        guard !sttWarm else { return }
+        let want = SpeechTranscriber.activeChoice
+        guard !sttWarm || flagsChoice != want else { return }
         sttStatus = "Loading the speech model… the first dictation can take a minute or two."
         Task { [weak self] in
             guard let self else { return }
             do {
-                _ = try await self.whisper.prepare()
+                _ = try await self.whisper.prepare(want)
                 await MainActor.run {
                     self.sttWarm = true
+                    self.flagsChoice = want
                     // Mirror prepareSTT's success state. Without this, a launch-time
                     // load failure that later succeeds here left the menubar on the
                     // hourglass and Advanced on "Loading…" while dictation worked.
@@ -472,6 +564,7 @@ class DictationManager: ObservableObject {
     /// Flush current audio buffer and transcribe (hands-free — engine stays running).
     private func handsFreeFlushAndTranscribe() {
         let language = readLanguage()
+        let translate = readTranslate()
         let pid = targetPID
 
         guard let samples = recorder.flushAndContinueFloat() else {
@@ -508,7 +601,7 @@ class DictationManager: ObservableObject {
             guard let self else { return }
             let result: Result<String, Error>
             do {
-                let text = try await self.transcribeSTT(samples: samples, language: language)
+                let text = try await self.transcribeSTT(samples: samples, language: language, translate: translate)
                 result = .success(text)
             } catch {
                 result = .failure(error)
@@ -617,6 +710,7 @@ class DictationManager: ObservableObject {
         recorder.stopRecording()  // → .uploading; engine stopped, buffers complete
 
         let language = readLanguage()
+        let translate = readTranslate()
         let pid = targetPID  // capture on main thread right now
 
         // Cancel any previous watchdog before creating a new one (C-5)
@@ -654,7 +748,7 @@ class DictationManager: ObservableObject {
             guard let self else { return }
             let result: Result<String, Error>
             do {
-                let text = try await self.transcribeSTT(samples: samples, language: language)
+                let text = try await self.transcribeSTT(samples: samples, language: language, translate: translate)
                 result = .success(text)
             } catch {
                 result = .failure(error)
@@ -1196,9 +1290,22 @@ class DictationManager: ObservableObject {
     // MARK: - Language
 
     private func readLanguage() -> String? {
+        // Translate mode always auto-detects. The stored `stt_language` is *overridden*, not
+        // rewritten, so unticking restores the user's pinned choice with no restore logic and
+        // no way to get wedged on `auto` after a crash. Translation exists for conversations
+        // the user cannot follow — the spoken language is often unknown and frequently mixed —
+        // and, decisively, `stt_language` defaults to `en`, which is the exact pairing that
+        // produced mangled output. Overriding makes that state unreachable.
+        // Costs ~0.2 s versus a pinned language, with identical text (measured 2026-09-29).
+        if readTranslate() { return nil }
         let path = Paths.sttLanguage.path
         guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
         let lang = content.trimmingCharacters(in: .whitespacesAndNewlines)
         return lang.isEmpty || lang == "auto" ? nil : lang
+    }
+
+    /// "Translate to English" — presence of the flag file means on, like auto-submit.
+    private func readTranslate() -> Bool {
+        FileManager.default.fileExists(atPath: Paths.sttTranslate.path)
     }
 }

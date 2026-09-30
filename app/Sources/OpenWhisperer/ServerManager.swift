@@ -14,7 +14,9 @@ class ServerManager: ObservableObject {
 
     @Published var status: ServerStatus = .stopped
     @Published var port: Int = 8000
-    @Published var sttModel: String = SpeechTranscriber.modelName  // native WhisperKit
+    /// Computed, never stored: "Translate to English" swaps the checkpoint, and a value
+    /// captured at init would describe whichever model happened to be active at launch.
+    var sttModel: String { SpeechTranscriber.activeChoice.displayName }  // native WhisperKit
     @Published var ttsModel: String = "kokoro-82m"              // native FluidAudio
     @Published var lastError: String = ""
 

@@ -35,6 +35,13 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## What's New
 
+### 2.0.7
+
+- **Translate as you dictate.** Speak Dutch, German, Spanish — anything Whisper knows — and get **English text** typed into whatever app you're in. Useful well beyond coding: follow a conversation you don't speak. Toggle it straight from the **menubar menu**, or in **Settings → Advanced**.
+- It needs a different speech model, because the fast one the app ships with genuinely cannot translate — OpenAI left translation out of its training, so asking it to translate silently returns the original language. Ticking the box asks first, then downloads about 948 MB once. Dictation is a bit slower while translation is on, and normal dictation is completely unaffected when it's off.
+- While translating, the spoken language is detected automatically — your Dictate → Language choice is ignored, and restored when you turn translation off. Mixing languages mid-conversation works: English stays English, everything else arrives in English.
+- **"Delete models" now actually frees everything.** The compiled Neural Engine cache the installed app builds — a few hundred MB — was invisible to it, so it was never counted or reclaimed.
+
 ### 2.0.6
 
 - **Dictation works in iTerm2 again.** Transcribed text wasn't being inserted there at all — and because Auto-Submit's Enter *was* delivered, you got an empty command submitted instead. The accessibility write reported success while silently doing nothing, so the app never fell back to the typing path that works. Writes are now verified rather than trusted, on every app. Thanks to [@natronite](https://github.com/natronite) for the report and the diagnosis ([#49](https://github.com/PerIPan/OpenWhisperer/issues/49)).
@@ -135,7 +142,7 @@ On first launch, the app:
 
 While that one-time download and Neural-Engine compile runs, Settings opens on **General**, which shows live progress so you know it isn't stuck. The menubar icon shows an hourglass for the same reason.
 
-The menubar icon is a small dropdown — **Settings…**, a **Show Overlay** toggle, **Record Voice & Text**, and **Quit**. The icon itself doubles as a status light: an hourglass while models load, a speaker when your next reply will be spoken, and a warning triangle if a permission is missing.
+The menubar icon is a small dropdown — **Settings…**, a **Show Overlay** toggle, **Record Voice & Text**, a **Translate to English** toggle, **Setup…**, and **Quit**. The icon itself doubles as a status light: an hourglass while models load, a speaker when your next reply will be spoken, and a warning triangle if a permission is missing.
 
 Everything else lives in the **Settings** window (⌘,), across five tabs:
 
@@ -144,6 +151,7 @@ Everything else lives in the **Settings** window (⌘,), across five tabs:
 - **Overlay** — off, or pick a style: Wave (default), LED Bars, Graph, Curtain
 - **Language** — **all 100 languages Whisper supports**, searchable, and grouped by how well the model actually does: **Good accuracy** (56 languages at 35% word errors or fewer), **Limited accuracy** (9, each labelled with its own rate), and **Untested** (35 with no published benchmark). Nothing is hidden — whether a marginal language is usable depends on what you're dictating, so the app tells you what to expect instead of deciding for you. Rates come from OpenAI's published large-v3 benchmarks. **English is the default**; Auto-detect is still there as an explicit choice, but pinning a language avoids hallucinated text during silence and is measurably more accurate on short phrases
 - **Custom vocabulary** — a glossary of your own terms, edited in its own window; a fuzzy corrector post-fixes transcripts against it
+- **Translate to English** — not here: it swaps the speech model, so it lives in **Settings → Advanced**, and in the menubar dropdown for quick access mid-conversation. Speak any language, get English text. One-time ~948 MB download, asked for before it starts; while it's on the spoken language is auto-detected and dictation is roughly twice as slow
 - **App Focus** — switch to a target app before typing, press Return afterwards, and hand focus back
 
 **Voice**
@@ -154,7 +162,7 @@ Everything else lives in the **Settings** window (⌘,), across five tabs:
 
 **Agents** — all four agents (Claude Code, Codex CLI, Pi, Antigravity) with their own status and **Connect** button; connect as many as you use. Each has an ⓘ explaining exactly which files get written.
 
-**Advanced** — model status (Whisper STT / TTS engines), the TTS server and port, delete downloaded models, server/events logs, and Copy Diagnostics.
+**Advanced** — model status (Whisper STT / TTS engines), **Translate to English** (it swaps the speech model, so it lives with the model settings), the TTS server and port, delete downloaded models, server/events logs, and Copy Diagnostics.
 
 **General** (the logo tab, on the right) — version and engine summary, first-run and model-loading progress, **Themes** (Cream · Light · Dark · Pastel · Champagne · Sky), launch at login, and the permission list (Accessibility, Microphone, and Speech Recognition in Hands-Free). Each permission row opens the matching System Settings pane; the logo tab is badged whenever a grant is missing.
 
@@ -254,7 +262,7 @@ Most settings are configured in the Settings window (voice, volume, language, ho
 | `OW_TTS_SPEED` | Settings → Voice → **Speed** | hooks | Per-project playback rate, clamped to 0.7–1.5; overrides the global `tts_speed` |
 | `OW_TTS_LANGUAGE` | — (no Settings control) | hooks, Pi | Per-project reply-language pin: the language every spoken reply is written in, for any voice, whatever the conversation is in. A language code (`de`, `pt-BR` → Portuguese); `english` is accepted for `en`, anything unrecognized is ignored. Overrides the global `tts_language`, a hand-written file. Without it, a multilingual voice's language is the *default* and the engine follows whatever the model writes |
 
-> **Tip:** A specific language beats auto-detect. It prevents the model hallucinating text in other languages during silence or background noise, skips a decoding pass, and is more reliable on short phrases — which is most of what dictation produces. English is the default for exactly this reason; change it in Settings → Dictate if you dictate in something else.
+> **Tip:** A specific language beats auto-detect. It prevents the model hallucinating text in other languages during silence or background noise, skips a decoding pass, and is more reliable on short phrases — which is most of what dictation produces. English is the default for exactly this reason; change it in Settings → Dictate if you dictate in something else. The exception is **Translate to English**, which auto-detects on purpose — you often don't know in advance what language you're about to hear, and pinning the wrong one garbles the result.
 
 ## Troubleshooting
 

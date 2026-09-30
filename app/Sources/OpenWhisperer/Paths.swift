@@ -52,6 +52,10 @@ enum Paths {
     /// absent/"auto" = model auto-detect)
     static let sttLanguage = appSupport.appendingPathComponent("stt_language")
 
+    /// "Translate to English" flag — presence means on, matching `autoSubmitFlag`.
+    /// Whisper's translate task is X->English only, so there is no target to store.
+    static let sttTranslate = appSupport.appendingPathComponent("stt_translate")
+
     /// Optional STT glossary (comma/newline-separated terms; see VocabularyCorrector).
     static let sttVocabulary = appSupport.appendingPathComponent("stt_vocabulary")
 

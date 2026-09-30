@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OpenWhispererKit
 
 /// Local engine internals — model status, the TTS server process, and logs.
 /// Troubleshooting surface; a typical user never opens this.
@@ -23,7 +24,7 @@ struct AdvancedTab: View {
                         ModernStatusRow(
                             label: "Whisper STT",
                             subtitle: dictationManager.sttModelReady
-                                ? SpeechTranscriber.modelName
+                                ? SpeechTranscriber.activeChoice.displayName
                                 : (dictationManager.sttStatus ?? "Loading…"),
                             port: "local",
                             status: dictationManager.sttModelReady ? .running : .starting
@@ -35,6 +36,24 @@ struct AdvancedTab: View {
                             port: "\(serverManager.port)",
                             status: serverManager.status
                         )
+                    }
+
+                    OWInternalDivider()
+
+                    // Translation lives here, beside the model rows, because it *is* a model
+                    // decision: the default turbo checkpoint cannot translate at all, so
+                    // enabling this swaps the whole speech model (see `STTModelChoice`).
+                    VStack(alignment: .leading, spacing: 6) {
+                        OWCheckbox(
+                            label: "Translate to English",
+                            isOn: Binding(get: { dictationManager.translateToEnglish },
+                                          set: { TranslateToggle.request($0, on: dictationManager) })
+                        )
+                        Text(translateHint)
+                            .font(OWFont.caption(11))
+                            .foregroundColor(dictationManager.sttFailed ? OWColor.warn : OWColor.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     // Destructive: must not look identical to "Server Log".
@@ -143,6 +162,22 @@ struct AdvancedTab: View {
         // "running" but unreachable if the port is taken or it failed to bind.
         .onAppear(perform: probeServer)
         .onChange(of: serverManager.status) { _, _ in probeServer() }
+    }
+
+    private var translateHint: String {
+        // A failed swap leaves translation *selected* but no model resident, so saying it
+        // works would be a lie and the user would have no idea why dictation went quiet.
+        if dictationManager.sttFailed {
+            return dictationManager.translateToEnglish
+                ? "The translation model couldn't be loaded, so dictation is unavailable. Turn this off to go back to the normal speech model, or retry from the model row above."
+                : "The speech model couldn't be loaded — dictation is unavailable until it succeeds."
+        }
+        if !dictationManager.sttModelReady, dictationManager.translateToEnglish {
+            return "Getting the translation model ready — this takes a couple of minutes the first time. Dictation is unavailable until it finishes."
+        }
+        return dictationManager.translateToEnglish
+            ? "Speak any language — it's typed out in English. Uses a larger speech model, so dictation takes about twice as long, and the spoken language is detected automatically (your Dictation → Language choice is ignored while this is on)."
+            : "Off — transcripts stay in the language you speak."
     }
 
     private func probeServer() {

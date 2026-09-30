@@ -35,6 +35,7 @@ struct KitTestRunner {
         failures += vocabularyPromptFailures()
         failures += disfluencyFilterFailures()
         failures += sttLanguageFailures()
+        failures += sttModelChoiceFailures()
         failures += pickerSearchFailures()
         failures += ttsSampleTextFailures()
         failures += hooksJSONFailures()

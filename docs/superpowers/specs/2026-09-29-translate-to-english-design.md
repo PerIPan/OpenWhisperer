@@ -6,31 +6,31 @@
 
 ---
 
-## RESUME HERE (state as of 2026-09-29 ~22:20)
+## Status: implemented in 2.0.7
 
-If a session ended abruptly, this section is the handoff.
+Shipped. This document is kept for the *why* — particularly the two traps in "Model selection"
+and the watchdog reasoning, which are not obvious from the code.
 
-**Done and committed to `main`:**
-- `6192d0e` — `fix(models): reclaim the installed app's ANE cache too`. Unrelated pre-existing
-  bug found during this work; `ModelStorage.locations` listed only the dev-build cache path.
+What landed, against the plan below:
 
-**Done, uncommitted, in the working tree (a no-op against turbo — see below):**
-- `Paths.swift` — added `sttTranslate` flag path
-- `SpeechTranscriber.swift` — `transcribe(samples:language:translate:)`, sets `task:`
-- `DictationManager.swift` — `readTranslate()`, threaded through both capture points
-- `Settings/DictationTab.swift` — checkbox + conditional caption **(must MOVE to AdvancedTab)**
-- `AGENTS.md` — `stt_translate` documented in the State & IPC list
+- `STTModelChoice` (Kit, unit-tested) holds the two checkpoints. Its checks **fail the build**
+  if a non-`large-v3` variant is ever added, because that would silently reproduce the original
+  no-op through the tokenizer id shift.
+- `SpeechTranscriber.prepare(_:)` swaps checkpoints, serialising loads (never two ANE compiles
+  at once) and using a generation counter so a superseded load cannot install itself.
+- `DictationManager.flagsChoice` tracks which checkpoint the published flags describe, claimed
+  when a load *starts* — so a failed or reversed swap is distinguishable from "nothing changed".
+- `TranslateToggle` owns the download consent; the menubar menu and Settings → Advanced both
+  go through it, and `DictationManager.setTranslate` is the only writer of `stt_translate`.
+- Translate mode overrides `stt_language` to auto-detect at read time without rewriting it.
 
-**Temporary, must be reverted before any commit:**
-- `app/Package.swift` — carries a `TranslateSpike` executable target whose sources live in
-  gitignored `app/Tools/`. **This breaks `swift build` on a fresh clone.** `git checkout
-  app/Package.swift` and `rm -rf app/Tools/TranslateSpike`.
+Not done, deliberately: per-model disk reclaim. `ModelStorage`'s "Whisper STT model" entry
+points at the hub **root**, so it already counts and reclaims both checkpoints; adding a nested
+per-model entry would double-count in `breakdown()`.
 
-**Remaining work:** see "Implementation plan" below.
-
-**Owner instruction:** when implementation is complete, have the `swift-expert` agent review it.
-
----
+**Never verified by a human using the app**: the toggle, consent prompt, runtime swap and
+download progress UI were measured only through a throwaway harness and a build. The
+translation itself *is* measured on real audio — see below.
 
 ## The problem
 

@@ -25,6 +25,8 @@ enum Diagnostics {
         lines.append("")
 
         lines.append("— Speech model (WhisperKit) —")
+        lines.append("Active: \(SpeechTranscriber.activeChoice.displayName) (\(SpeechTranscriber.modelName))")
+        lines.append("Translate to English: \(SpeechTranscriber.activeChoice.canTranslate ? "on" : "off")")
         lines.append("Cached on disk: \(SpeechTranscriber.isModelCached ? "yes" : "no")")
         lines.append("Ready: \(dictation.sttModelReady ? "yes" : "no")\(dictation.sttFailed ? " (FAILED)" : "")")
         if let status = dictation.sttStatus { lines.append("Status: \(status)") }
