@@ -56,7 +56,7 @@ enum ConfigManager {
             2) The `speak` MCP tool (in ~/.claude.json) — lets Claude play that summary:
 
                claude mcp add --scope user --transport http \\
-                 OpenWhisperer http://localhost:8000/mcp
+                 OpenWhisperer \(mcpURL)
 
             Then RESTART Claude Code so it loads the tool. Verify with:  /mcp
             """
@@ -146,7 +146,7 @@ enum ConfigManager {
             1) The `speak` MCP tool (in ~/.codex/config.toml):
 
                [mcp_servers.OpenWhisperer]
-               url = "http://localhost:8000/mcp"
+               url = "\(mcpURL)"
 
             2) UserPromptSubmit hook (in ~/.codex/hooks.json, merged with any hooks
                already there) — nudges Codex to speak a summary first on dictated turns:
@@ -208,11 +208,10 @@ enum ConfigManager {
 
         // config.toml keeps the MCP server; our inline hook tables and the legacy notify line go.
         let existing = (try? String(contentsOf: Paths.codexConfig, encoding: .utf8)) ?? ""
-        var toml = CodexConfigTOML.strippingOwnHooks(from: existing)
-        if !toml.contains("[mcp_servers.OpenWhisperer]") {
-            while !toml.isEmpty && !toml.hasSuffix("\n\n") { toml += "\n" }
-            toml += "[mcp_servers.OpenWhisperer]\nurl = \"http://localhost:8000/mcp\"\n"
-        }
+        // Sets the URL even when the table exists: it used to be added once and never updated,
+        // so a port change silently cost Codex its speak tool.
+        let toml = CodexConfigTOML.settingOwnMCPServerURL(
+            mcpURL, in: CodexConfigTOML.strippingOwnHooks(from: existing))
         let tomlChanged = toml != existing
         if tomlChanged {
             do { try toml.write(to: Paths.codexConfig, atomically: true, encoding: .utf8) }
@@ -297,7 +296,7 @@ enum ConfigManager {
 
                {
                  "mcpServers": {
-                   "openwhisperer": { "serverUrl": "http://localhost:8000/mcp" }
+                   "openwhisperer": { "serverUrl": "\(mcpURL)" }
                  }
                }
 
@@ -336,7 +335,7 @@ enum ConfigManager {
             mcpRoot = json
         }
         var servers = mcpRoot["mcpServers"] as? [String: Any] ?? [:]
-        servers["openwhisperer"] = ["serverUrl": "http://localhost:8000/mcp"]
+        servers["openwhisperer"] = ["serverUrl": mcpURL]
         mcpRoot["mcpServers"] = servers
         guard let mcpOut = try? JSONSerialization.data(withJSONObject: mcpRoot, options: [.prettyPrinted, .withoutEscapingSlashes]) else {
             return (false, "Failed to serialize mcp_config.json")
@@ -383,6 +382,19 @@ enum ConfigManager {
     }
 
     // MARK: - Platform-dispatching wrappers
+
+    /// The `speak` MCP endpoint every agent is pointed at — on the port the server last bound.
+    static var mcpURL: String { TTSPort.mcpURL(port: TTSPort.stored) }
+
+    /// Re-run Connect for every agent that is connected, after the TTS port changed. Each apply
+    /// is idempotent and rewrites only our own entries; Pi's extension reads `tts_port` itself,
+    /// so re-copying it is a harmless no-op. Called once per committed port change.
+    static func reapplyConnectedAgents() {
+        for platform in Platform.allCases where checkHookConfigured(for: platform) {
+            let result = applyHook(for: platform)
+            NSLog("TTS port changed to \(TTSPort.stored): re-applied \(platform.rawValue): \(result.success ? "ok" : "FAILED") — \(result.message)")
+        }
+    }
 
     static func applyHook(for platform: Platform) -> (success: Bool, message: String) {
         switch platform {
@@ -460,7 +472,7 @@ enum ConfigManager {
             root = json
         }
         var servers = root["mcpServers"] as? [String: Any] ?? [:]
-        servers["OpenWhisperer"] = ["type": "http", "url": "http://localhost:8000/mcp"]
+        servers["OpenWhisperer"] = ["type": "http", "url": mcpURL]
         root["mcpServers"] = servers
         guard let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .withoutEscapingSlashes]) else {
             return (false, "Failed to serialize ~/.claude.json")

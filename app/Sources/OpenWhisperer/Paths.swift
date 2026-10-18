@@ -61,6 +61,10 @@ enum Paths {
     /// Written only by `DictationManager.setRepliesMuted(_:)`.
     static let ttsMuted = appSupport.appendingPathComponent("tts_muted")
 
+    /// The port the TTS/MCP server last bound (absent = 8000). Every agent config points at it;
+    /// see `TTSPort`. Written only by `ServerManager.startAll()`, read by the Pi extension too.
+    static let ttsPort = appSupport.appendingPathComponent("tts_port")
+
     /// Optional STT glossary (comma/newline-separated terms; see VocabularyCorrector).
     static let sttVocabulary = appSupport.appendingPathComponent("stt_vocabulary")
 

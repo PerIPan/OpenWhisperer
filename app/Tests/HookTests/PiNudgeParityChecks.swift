@@ -40,6 +40,11 @@ func piNudgeParityFailures() -> [String] {
     if shared.contains("tts_muted"), !ext.contains("\"tts_muted\"") {
         failures.append("pi/openwhisperer.ts: voice-shared.sh honours tts_muted (Mute Spoken Replies) but the Pi extension never reads it")
     }
+    // Port: the app re-points MCP agents when the TTS port changes; Pi has no MCP config to
+    // rewrite, so it must read the stored port itself or lose speak on any non-8000 port.
+    if !ext.contains("\"tts_port\"") {
+        failures.append("pi/openwhisperer.ts: never reads tts_port — Pi would keep calling :8000 after the TTS port changes")
+    }
     if !ext.contains(MCPServer.mutedMessage) {
         failures.append("pi/openwhisperer.ts: its muted reply differs from MCPServer.mutedMessage — the model would be told two different things")
     }

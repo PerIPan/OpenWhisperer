@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import OpenWhispererKit
 
 /// Hosts the in-process native TTS: a `KokoroTTS` actor (FluidAudio CoreML/ANE) behind a
 /// tiny embedded HTTP server (`TTSHTTPServer`) on :8000. Ported from the former out-of-process Python
@@ -13,7 +14,9 @@ class ServerManager: ObservableObject {
     }
 
     @Published var status: ServerStatus = .stopped
-    @Published var port: Int = 8000
+    /// Edited in Settings → Advanced while stopped; committed (stored + agents re-pointed) only
+    /// once the server has actually bound it — see `startAll()`.
+    @Published var port: Int = TTSPort.stored
     /// Computed, never stored: "Translate to English" swaps the checkpoint, and a value
     /// captured at init would describe whichever model happened to be active at launch.
     var sttModel: String { SpeechTranscriber.activeChoice.displayName }  // native WhisperKit
@@ -47,6 +50,13 @@ class ServerManager: ObservableObject {
             do {
                 try server.start()
                 httpServer = server
+                // The bind succeeded, so this is now THE port: store it and re-point every
+                // connected agent. Done here rather than as the field is edited, which would
+                // rewrite four agents' configs on every keystroke ("1800" on the way to "18000").
+                if port != TTSPort.stored {
+                    TTSPort.store(port)
+                    ConfigManager.reapplyConnectedAgents()
+                }
             } catch {
                 status = .error
                 lastError = "Failed to bind port \(port): \(error.localizedDescription)"
@@ -95,5 +105,20 @@ extension FileHandle {
             fm.createFile(atPath: url.path, contents: nil)
         }
         return (try? FileHandle(forWritingTo: url)) ?? FileHandle.nullDevice
+    }
+}
+
+extension TTSPort {
+    /// The port the server last bound — what every agent config must point at.
+    static var stored: Int { parse(try? String(contentsOf: Paths.ttsPort, encoding: .utf8)) }
+
+    /// Persist `port`; the default removes the file, so an install that never changed it has
+    /// nothing new on disk.
+    static func store(_ port: Int) {
+        if port == defaultPort {
+            try? FileManager.default.removeItem(at: Paths.ttsPort)
+        } else {
+            try? "\(port)".write(to: Paths.ttsPort, atomically: true, encoding: .utf8)
+        }
     }
 }

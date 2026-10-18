@@ -6,7 +6,10 @@
 # then plays it with afplay. The Stop / notify hooks instead POST /v1/audio/play for low-latency,
 # sentence-streamed in-app playback; speak.sh stays a simple blocking helper.
 
-TTS_URL="${TTS_URL:-http://localhost:8000/v1/audio/speech}"
+# The port the app's server last bound (Settings → Advanced), else 8000.
+TTS_PORT=$(tr -d '[:space:]' 2>/dev/null < "$HOME/Library/Application Support/OpenWhisperer/tts_port")
+case "$TTS_PORT" in ''|*[!0-9]*) TTS_PORT=8000 ;; esac
+TTS_URL="${TTS_URL:-http://localhost:$TTS_PORT/v1/audio/speech}"
 VOICE="${TTS_VOICE:-af_heart}"
 TMPFILE=$(mktemp /tmp/tts_XXXXXX.wav)
 

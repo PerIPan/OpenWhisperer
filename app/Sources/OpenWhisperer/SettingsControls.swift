@@ -989,7 +989,7 @@ struct PortField: View {
 
     private var isValid: Bool {
         guard let p = Int(text) else { return false }
-        return p >= 1024 && p <= 65535
+        return TTSPort.validRange.contains(p)
     }
 
     var body: some View {
@@ -1007,7 +1007,7 @@ struct PortField: View {
                 .foregroundColor(isValid || text.isEmpty ? OWColor.ink : OWColor.danger)
                 .onAppear { text = "\(port)" }
                 .onChange(of: text) { _, newValue in
-                    if let p = Int(newValue), p >= 1024, p <= 65535 {
+                    if let p = Int(newValue), TTSPort.validRange.contains(p) {
                         port = p
                     }
                 }

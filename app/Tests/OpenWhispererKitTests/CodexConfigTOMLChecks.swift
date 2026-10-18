@@ -113,5 +113,71 @@ func codexConfigTOMLFailures() -> [String] {
     expect(CodexConfigTOML.strippingOwnHooks(from: foreignNotify) == foreignNotify, "keepsForeignNotify")
     expect(!CodexConfigTOML.hasOwnInlineHook(legacy), "legacyNotifyIsNotAnInlineHook")
 
+    // settingOwnMCPServerURL — a changed TTS port must reach Codex. Before this, Connect only
+    // ADDED the table when missing, so an existing `url = "http://localhost:8000/mcp"` stayed
+    // forever and Codex lost `speak` the moment the port changed.
+    do {
+        let url = "http://localhost:8123/mcp"
+        // Missing table → appended, separated by a blank line.
+        let added = CodexConfigTOML.settingOwnMCPServerURL(url, in: "model = \"o3\"\n")
+        if !added.contains("[mcp_servers.OpenWhisperer]\nurl = \"\(url)\"") {
+            failures.append("settingOwnMCPServerURL(missing): table not appended: \(added.debugDescription)")
+        }
+        if !added.hasPrefix("model = \"o3\"\n\n") { failures.append("settingOwnMCPServerURL(missing): preamble changed or no blank line") }
+
+        // Existing table → only our url line changes; other keys in it and other tables stay.
+        let existing = """
+            model = "o3"
+
+            [mcp_servers.OpenWhisperer]
+            url = "http://localhost:8000/mcp"
+            startup_timeout_sec = 20
+
+            [mcp_servers.other]
+            url = "http://localhost:9000/mcp"
+            """
+        let updated = CodexConfigTOML.settingOwnMCPServerURL(url, in: existing)
+        let want = existing.replacingOccurrences(of: "url = \"http://localhost:8000/mcp\"", with: "url = \"\(url)\"")
+        if updated != want { failures.append("settingOwnMCPServerURL(existing): got \(updated.debugDescription)") }
+        if !updated.contains("url = \"http://localhost:9000/mcp\"") { failures.append("settingOwnMCPServerURL: touched a foreign table's url") }
+
+        // Already right → byte-identical (Connect reports "Already configured").
+        if CodexConfigTOML.settingOwnMCPServerURL(url, in: updated) != updated {
+            failures.append("settingOwnMCPServerURL: not idempotent")
+        }
+
+        // Table present without a url line (hand-edited) → url inserted under the header.
+        let bare = "[mcp_servers.OpenWhisperer]\nstartup_timeout_sec = 20\n"
+        let fixed = CodexConfigTOML.settingOwnMCPServerURL(url, in: bare)
+        if fixed != "[mcp_servers.OpenWhisperer]\nurl = \"\(url)\"\nstartup_timeout_sec = 20\n" {
+            failures.append("settingOwnMCPServerURL(no url line): got \(fixed.debugDescription)")
+        }
+
+        // `url_extra = ...` is a different key and must not be rewritten.
+        let lookalike = "[mcp_servers.OpenWhisperer]\nurl_extra = 1\nurl = \"http://localhost:8000/mcp\"\n"
+        let la = CodexConfigTOML.settingOwnMCPServerURL(url, in: lookalike)
+        if !la.contains("url_extra = 1") || !la.contains("url = \"\(url)\"") {
+            failures.append("settingOwnMCPServerURL(lookalike key): got \(la.debugDescription)")
+        }
+    }
+
+    return failures
+}
+
+/// Checks for `TTSPort` — the port every agent config points at.
+func ttsPortFailures() -> [String] {
+    var failures: [String] = []
+    if TTSPort.parse(nil) != 8000 { failures.append("TTSPort.parse(nil): expected 8000") }
+    if TTSPort.parse("8123\n") != 8123 { failures.append("TTSPort.parse: whitespace not trimmed") }
+    for bad in ["", "abc", "80", "1023", "65536", "-1", "8000.5"] where TTSPort.parse(bad) != 8000 {
+        failures.append("TTSPort.parse(\(bad.debugDescription)): expected the 8000 fallback, got \(TTSPort.parse(bad))")
+    }
+    if TTSPort.parse("1024") != 1024 || TTSPort.parse("65535") != 65535 { failures.append("TTSPort.parse: range ends rejected") }
+    if TTSPort.mcpURL(port: 8123) != "http://localhost:8123/mcp" { failures.append("TTSPort.mcpURL: wrong shape") }
+    // The default must stay what every pre-2.0.8 config already says, or every existing
+    // install would read as stale and get rewritten on first launch.
+    if TTSPort.mcpURL(port: TTSPort.defaultPort) != "http://localhost:8000/mcp" {
+        failures.append("TTSPort: default URL changed from http://localhost:8000/mcp")
+    }
     return failures
 }

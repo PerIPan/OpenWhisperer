@@ -116,7 +116,7 @@ struct AdvancedTab: View {
                     }
 
                     if serverManager.status != .stopped {
-                        Text("Stop the server to change the port.")
+                        Text("Stop the server to change the port. Connected agents follow it when the server starts again.")
                             .font(OWFont.caption())
                             .foregroundColor(OWColor.inkFaint)
                     }

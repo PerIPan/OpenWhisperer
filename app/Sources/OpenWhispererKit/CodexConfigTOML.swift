@@ -69,6 +69,41 @@ public enum CodexConfigTOML {
         return kept.flatMap { $0.lines }.joined(separator: "\n")
     }
 
+    static let mcpHeader = "[mcp_servers.OpenWhisperer]"
+
+    /// Point our `[mcp_servers.OpenWhisperer]` table at `url`, adding the table when it's
+    /// missing. Only that table's `url` line changes — another key in it (a user's
+    /// `startup_timeout_sec`) and every other table stay byte-for-byte. Idempotent.
+    ///
+    /// Connect used to add the table only when absent, so once written, the URL never changed:
+    /// moving the TTS server off :8000 silently cost Codex its `speak` tool.
+    public static func settingOwnMCPServerURL(_ url: String, in toml: String) -> String {
+        let urlLine = "url = \"\(url)\""
+        var secs = sections(toml.components(separatedBy: "\n"))
+        if let i = secs.firstIndex(where: { $0.header == mcpHeader }) {
+            var lines = secs[i].lines
+            if let j = lines.indices.dropFirst().first(where: { isURLKey(lines[$0]) }) {
+                let indent = lines[j].prefix { $0 == " " || $0 == "\t" }
+                lines[j] = indent + urlLine
+            } else {
+                lines.insert(urlLine, at: 1)
+            }
+            secs[i].lines = lines
+            return secs.flatMap { $0.lines }.joined(separator: "\n")
+        }
+        var out = toml
+        while !out.isEmpty && !out.hasSuffix("\n\n") { out += "\n" }
+        return out + mcpHeader + "\n" + urlLine + "\n"
+    }
+
+    /// The bare `url` key — not `url_extra`, not a comment.
+    private static func isURLKey(_ line: String) -> Bool {
+        let t = line.trimmingCharacters(in: .whitespaces)
+        guard t.hasPrefix("url") else { return false }
+        guard let f = t.dropFirst(3).first else { return false }
+        return f == " " || f == "=" || f == "\t"
+    }
+
     /// `notify = [...]` naming our old hook — matched on the bare key so `notify_on_error` and a
     /// user's unrelated notify are left alone.
     private static func isOwnNotifyLine(_ line: String) -> Bool {

@@ -27,7 +27,16 @@ const VOICE_TURN = join(APP_SUPPORT, "voice_turn");
 const TTS_MUTED = join(APP_SUPPORT, "tts_muted");
 const MUTED_MESSAGE =
   "Not spoken: the user has muted spoken replies in OpenWhisperer. Do not retry; reply in text only.";
-const TTS_PLAY_URL = "http://localhost:8000/v1/audio/play";
+// The port the app's TTS server last bound (Settings → Advanced), else 8000. Read per call, so a
+// port change reaches Pi without a /reload. Same 1024–65535 range as the app's TTSPort.
+function ttsPlayURL(): string {
+  let port = 8000;
+  try {
+    const n = Number.parseInt(readFileSync(join(APP_SUPPORT, "tts_port"), "utf8").trim(), 10);
+    if (Number.isInteger(n) && n >= 1024 && n <= 65535) port = n;
+  } catch {}
+  return `http://localhost:${port}/v1/audio/play`;
+}
 const FRESHNESS_S = 900; // voice_turn TTL — matches voice-context.sh
 
 function readPref(envVar: string, file: string, fallback: string): string {
@@ -239,7 +248,7 @@ export default function (pi: ExtensionAPI) {
       if (voice) body.voice = voice;
       if (Number.isFinite(speed)) body.speed = speed;
       try {
-        await fetch(TTS_PLAY_URL, {
+        await fetch(ttsPlayURL(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
