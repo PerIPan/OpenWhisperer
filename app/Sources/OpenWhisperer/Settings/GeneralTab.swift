@@ -10,6 +10,7 @@ struct GeneralTab: View {
     @EnvironmentObject var dictationManager: DictationManager
     @EnvironmentObject var accessibilityManager: AccessibilityManager
     @ObservedObject private var themeManager = ThemeManager.shared
+    @ObservedObject private var updates = UpdateChecker.shared
 
     @State private var launchAtLogin = false
     @State private var diagnosticsCopied = false
@@ -117,7 +118,7 @@ struct GeneralTab: View {
         OWCard {
             VStack(alignment: .leading, spacing: 10) {
                 OWCardHeader(title: "Startup", icon: "power",
-                             help: "Launch Open Whisperer automatically when you log in.")
+                             help: "Launch Open Whisperer automatically when you log in, and whether it checks GitHub once a day for a newer release.")
                 OWCheckbox(label: "Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in
                         let service = SMAppService.mainApp
@@ -128,6 +129,21 @@ struct GeneralTab: View {
                             DispatchQueue.main.async { launchAtLogin = service.status == .enabled }
                         }
                     }
+                HStack(spacing: 10) {
+                    OWCheckbox(label: "Check for updates", isOn: Binding(
+                        get: { updates.isEnabled },
+                        set: { updates.setEnabled($0) }
+                    ))
+                    if updates.isEnabled {
+                        Button("Check now") { updates.checkNow() }
+                            .buttonStyle(.link)
+                            .font(OWFont.caption(11))
+                    }
+                }
+                Text(updates.lastResult ?? "Once a day, asks GitHub for the latest version number. Nothing about you or your dictation is sent.")
+                    .font(OWFont.caption(11))
+                    .foregroundColor(OWColor.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -159,16 +175,23 @@ struct GeneralTab: View {
                         Text("Open Whisperer")
                             .font(OWFont.title(17))
                             .foregroundColor(OWColor.ink)
-                        Text("Voice mode for your coding agent — dictation in, spoken replies out. Everything runs on this Mac; nothing is sent to the cloud.")
+                        Text("Voice mode for your coding agent — dictation in, spoken replies out. Everything runs on this Mac; nothing you say or type leaves it.")
                             .font(OWFont.caption(11))
                             .foregroundColor(OWColor.inkSoft)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 6)
-                    Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
-                        .font(OWFont.body(11))
-                        .foregroundColor(OWColor.inkSoft)
-                        .monospacedDigit()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
+                            .font(OWFont.body(11))
+                            .foregroundColor(OWColor.inkSoft)
+                            .monospacedDigit()
+                        if let release = updates.available {
+                            Button("\(release.version) available") { updates.openReleasePage() }
+                                .buttonStyle(.link)
+                                .font(OWFont.caption(11))
+                        }
+                    }
                 }
 
                 OWInternalDivider()

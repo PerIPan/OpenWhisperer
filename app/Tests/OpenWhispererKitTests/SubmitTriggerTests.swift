@@ -43,6 +43,7 @@ struct KitTestRunner {
         failures += hotkeyStateMachineFailures()
         failures += transcriptionBudgetFailures()
         failures += ttsPortFailures()
+        failures += updateCheckFailures()
 
         if failures.isEmpty {
             print("✅ OpenWhispererKit: all checks passed")

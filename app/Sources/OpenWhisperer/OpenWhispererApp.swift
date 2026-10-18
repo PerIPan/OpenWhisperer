@@ -65,6 +65,7 @@ private struct MenuBarMenu: View {
     @ObservedObject private var overlay = TranscriptionOverlay.shared
     /// Observed so the checkmark tracks changes made in Settings → Advanced too.
     @ObservedObject private var dictation: DictationManager
+    @ObservedObject private var updates = UpdateChecker.shared
 
     init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
@@ -72,6 +73,13 @@ private struct MenuBarMenu: View {
     }
 
     var body: some View {
+        // First, because it's the one item that is only sometimes there — and the only place
+        // most people would ever see it (Settings → General shows it too).
+        if let release = updates.available {
+            Button("Update Available — \(release.version)…") { updates.openReleasePage() }
+            Divider()
+        }
+
         Button("Settings…") {
             SettingsWindow.show(tab: SettingsWindow.preferredTab(for: appDelegate),
                                 appDelegate: appDelegate)

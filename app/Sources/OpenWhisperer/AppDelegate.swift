@@ -140,6 +140,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         hotkeyManager.start()
+        UpdateChecker.shared.start()
 
         TranscriptionOverlay.shared.dictationManager = dictationManager
         TranscriptionOverlay.shared.setupManager = setupManager

@@ -65,6 +65,11 @@ enum Paths {
     /// see `TTSPort`. Written only by `ServerManager.startAll()`, read by the Pi extension too.
     static let ttsPort = appSupport.appendingPathComponent("tts_port")
 
+    /// Update check (Settings → General). Presence of `update_check_off` = the user turned it
+    /// off; `update_check` memoises the last successful check (unix time, latest tag).
+    static let updateCheckOff = appSupport.appendingPathComponent("update_check_off")
+    static let updateCheckMemo = appSupport.appendingPathComponent("update_check")
+
     /// Optional STT glossary (comma/newline-separated terms; see VocabularyCorrector).
     static let sttVocabulary = appSupport.appendingPathComponent("stt_vocabulary")
 
