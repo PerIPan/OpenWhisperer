@@ -66,6 +66,8 @@ class DictationManager: ObservableObject {
 
     /// Minimum sample count to bother transcribing (~0.1s at 16kHz mono).
     private static let minSampleCount = 1600
+    /// Pending `RecordingCap` stop for the current hold/press recording.
+    private var recordingCap: DispatchWorkItem?
 
     /// The PID of the app that was frontmost when the user pressed the hotkey.
     /// Captured on the main thread at press-time, before any focus shifts.
@@ -324,14 +326,14 @@ class DictationManager: ObservableObject {
             try? String(contentsOf: Paths.sttVocabulary, encoding: .utf8))
         let corrected = VocabularyCorrector.apply(defillered, glossary: glossary)
         // Record which checkpoint is warm, not merely that one is: a transcription proves
-        // the model it actually ran on is loaded. Without the choice, `transcriptionTimeout()`
+        // the model it actually ran on is loaded. Without the choice, `transcriptionTimeout(sampleCount:)`
         // would keep returning the cold 180 s budget after every swap — safe, but it would
         // never tighten again.
         let used = STTModelChoice.forTranslate(translate)
         await MainActor.run {
             // Only claim warmth if nothing has changed under us. A transcription still in
             // flight when the user flips Translate would otherwise stamp "warm" for a model
-            // the actor has already released, and `transcriptionTimeout()` would then grant
+            // the actor has already released, and `transcriptionTimeout(sampleCount:)` would then grant
             // the *next*, genuinely cold, dictation the 35 s budget and cancel it.
             guard used == SpeechTranscriber.activeChoice, self.sttModelReady else { return }
             self.sttWarm = true
@@ -340,13 +342,16 @@ class DictationManager: ObservableObject {
         return corrected
     }
 
-    /// Watchdog budget for one transcription: 35 s once the model is warm;
-    /// generous when the first dictation must load the model inside the task.
-    private func transcriptionTimeout() -> TimeInterval {
+    /// Watchdog budget for one transcription: a fixed base (35 s warm, 180 s when the model
+    /// must load inside the task) plus one second per second of audio — see
+    /// `TranscriptionBudget` for why a flat budget lost long translated dictations.
+    private func transcriptionTimeout(sampleCount: Int) -> TimeInterval {
         // `sttWarm` alone is not enough: it stays true across a "Translate to English"
         // flip, but the newly-selected checkpoint has not been loaded. Granting that
-        // cold load 35 s would cancel the first translated dictation every time.
-        (sttWarm && flagsChoice == SpeechTranscriber.activeChoice) ? 35 : 180
+        // cold load the warm base would cancel the first translated dictation every time.
+        TranscriptionBudget.seconds(
+            warm: sttWarm && flagsChoice == SpeechTranscriber.activeChoice,
+            sampleCount: sampleCount)
     }
 
     /// Kick the model load as recording starts, so a cold first dictation overlaps
@@ -473,6 +478,7 @@ class DictationManager: ObservableObject {
             prewarmSTTIfNeeded()
             // captureTargetApp() already called by HotkeyManager.onKeyDown (L-4)
             recorder.startRecording()
+            armRecordingCap()
         case .recording:
             playClick()
             finishAndTranscribe()
@@ -493,6 +499,35 @@ class DictationManager: ObservableObject {
         prewarmSTTIfNeeded()
         captureTargetApp()
         recorder.startRecording()
+        armRecordingCap()
+    }
+
+    /// Called when another key goes down during the hold (Ctrl+C with Ctrl as the trigger):
+    /// the press was a shortcut, so the recording it started is discarded, not transcribed.
+    func holdToTalkCancel() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard interactionMode == .holdToTalk else { return }
+        guard recorder.state == .recording else { return }
+        recordingCap?.cancel()
+        recordingCap = nil
+        recorder.stopRecording()
+        _ = recorder.exportPCMFloat()   // drain, so the next recording starts empty
+        recorder.reset()
+        os_log(.default, log: dictLog, "Hold-to-talk: key combo during hold, recording discarded")
+    }
+
+    /// Stop-and-transcribe a hold/press recording that reaches `RecordingCap` — a forgotten
+    /// press-to-talk, or a release nothing saw. Never discards: what was said gets typed.
+    private func armRecordingCap() {
+        recordingCap?.cancel()
+        let cap = DispatchWorkItem { [weak self] in
+            guard let self, self.recorder.state == .recording, self.interactionMode != .handsFree else { return }
+            os_log(.default, log: dictLog, "Recording reached the %.0fs cap, stopping and transcribing", RecordingCap.seconds)
+            self.playClick()
+            self.finishAndTranscribe()
+        }
+        recordingCap = cap
+        DispatchQueue.main.asyncAfter(deadline: .now() + RecordingCap.seconds, execute: cap)
     }
 
     /// Called on hotkey release for hold-to-talk mode.
@@ -603,7 +638,7 @@ class DictationManager: ObservableObject {
             self.error = "Transcription timed out"
         }
         uploadWatchdog = watchdog
-        DispatchQueue.main.asyncAfter(deadline: .now() + transcriptionTimeout(), execute: watchdog)
+        DispatchQueue.main.asyncAfter(deadline: .now() + transcriptionTimeout(sampleCount: samples.count), execute: watchdog)
 
         activeTranscribeTask = Task { [weak self] in
             guard let self else { return }
@@ -715,17 +750,32 @@ class DictationManager: ObservableObject {
     // MARK: - Press-to-Talk Finish Recording & Transcribe
 
     private func finishAndTranscribe() {
+        recordingCap?.cancel()
+        recordingCap = nil
         recorder.stopRecording()  // → .uploading; engine stopped, buffers complete
 
         let language = readLanguage()
         let translate = readTranslate()
         let pid = targetPID  // capture on main thread right now
 
+        // Export before arming the watchdog: its budget depends on how much audio there is.
+        guard let samples = recorder.exportPCMFloat() else {
+            recorder.reset()
+            return
+        }
+
+        // Skip very short recordings (~0.1s at 16kHz)
+        if samples.count < Self.minSampleCount {
+            recorder.reset()
+            return
+        }
+
         // Cancel any previous watchdog before creating a new one (C-5)
         uploadWatchdog?.cancel()
+        let budget = transcriptionTimeout(sampleCount: samples.count)
         let watchdog = DispatchWorkItem { [weak self] in
             guard let self, self.recorder.state == .uploading else { return }
-            os_log(.default, log: dictLog, "Watchdog: transcription exceeded 35s, forcing reset")
+            os_log(.default, log: dictLog, "Watchdog: transcription exceeded %.0fs, forcing reset", budget)
             self.activeTranscribeTask?.cancel()
             self.activeTranscribeTask = nil
             self.isTyping = false  // Clear isTyping so dictation isn't bricked (C-1)
@@ -733,22 +783,7 @@ class DictationManager: ObservableObject {
             self.error = "Transcription timed out"
         }
         uploadWatchdog = watchdog
-        DispatchQueue.main.asyncAfter(deadline: .now() + transcriptionTimeout(), execute: watchdog)
-
-        guard let samples = recorder.exportPCMFloat() else {
-            uploadWatchdog?.cancel()
-            uploadWatchdog = nil
-            recorder.reset()
-            return
-        }
-
-        // Skip very short recordings (~0.1s at 16kHz)
-        if samples.count < Self.minSampleCount {
-            uploadWatchdog?.cancel()
-            uploadWatchdog = nil
-            recorder.reset()
-            return
-        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + budget, execute: watchdog)
 
         os_log(.default, log: dictLog, "PTT samples: %d, transcribing", samples.count)
 

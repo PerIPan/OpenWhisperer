@@ -123,6 +123,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.dictationManager.holdToTalkUp()
             }
         }
+        hotkeyManager.onCombo = { [weak self] in
+            guard let self else { return }
+            // Hold-to-talk started recording on key down; the press was a shortcut (Ctrl+C),
+            // so discard it. Before #26's fix the release was swallowed instead and the
+            // recording ran until the next tap.
+            if self.dictationManager.interactionMode == .holdToTalk {
+                self.dictationManager.holdToTalkCancel()
+            }
+        }
         hotkeyManager.onToggle = { [weak self] in
             guard let self else { return }
             // Press-to-talk and hands-free use toggle
