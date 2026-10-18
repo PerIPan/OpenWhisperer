@@ -22,9 +22,19 @@ Full interactive Voice mode for [Claude Code](https://claude.ai/claude-code), [C
 
 You use your coding agent — **Claude Code, Codex, Antigravity, or Pi** — normally. After a turn you dictated by voice, the AI's reply is automatically spoken aloud through your Mac's speakers using a local TTS model. Pick one of the nine accented English/European voices and the reply is written in a persona to match; pick one of the 24 multilingual voices and it's written in that language instead (you can also set replies to always speak — see Response mode). Three voice input modes: **Press-to-Talk** (press hotkey to start/stop), **Hold-to-Talk** (hold hotkey to record, release to transcribe), or **Hands-Free** (say "initiate" to start recording, 3s silence auto-transcribes, say "hold on" to interrupt TTS).
 
-Everything runs on your Mac — no cloud APIs, no data leaves your machine.
+Everything runs on your Mac — no cloud APIs; nothing you say or type leaves your machine. The only network traffic is the one-time model downloads and, unless you turn it off, a once-a-day check of GitHub for a newer version number.
 
 ## What's New
+
+### 2.0.8
+
+- **Hold-to-talk no longer sticks in recording.** Pressing a shortcut while holding the trigger key — Ctrl+C with Ctrl as the trigger, which terminal users do all day — used to leave the recording running until your next tap, which then typed everything captured in between. A shortcut during a hold now cancels that recording. A key release macOS never reports (it happens in password fields and Secure Keyboard Entry terminals) is also recovered within about half a second. ([#26](https://github.com/PerIPan/OpenWhisperer/issues/26))
+- **Mute spoken replies from the menubar.** A **Mute Spoken Replies** toggle silences every agent's spoken replies — for a call, or music — without touching dictation. Muting stops whatever is playing; the menubar icon shows a slashed speaker while it's on, and the agent is told its reply wasn't spoken so it won't retry. ([#51](https://github.com/PerIPan/OpenWhisperer/issues/51))
+- **The app tells you when a newer version is out.** Once a day it asks GitHub for the latest version number — nothing about you or what you say is sent — and offers the release page in the menubar and in Settings → General. It never downloads or installs anything. Turn it off in Settings → General if you'd rather it didn't ask.
+- **Changing the TTS port no longer disconnects your agents.** The port in Settings → Advanced wasn't saved, and every agent was pointed at port 8000 regardless, so changing it quietly took the `speak` tool away from all of them. The port now sticks, and connected agents follow it.
+- **Long dictations while translating no longer time out.** The transcription watchdog allowed a flat 35 seconds, which the slower translating model ran past somewhere beyond a minute of speech — losing the whole recording. The budget now grows with the length of what you said. Recordings also stop themselves at ten minutes, so a forgotten press-to-talk can't record forever; the transcript is kept in Record Voice & Text rather than typed into whatever app happens to be in front.
+- **The Install link pointed at the previous version.** Fixed, and now checked at build time so it can't drift again. There's also a proper [first-launch guide](#first-launch-on-a-new-mac) for a new Mac: Gatekeeper on macOS 15, and why permissions must be granted again after every update.
+- Speech engine updated to WhisperKit 1.1.1 (crash fixes; same speed).
 
 ### 2.0.7
 
@@ -124,7 +134,7 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## Install
 
-[**Download OpenWhisperer-2.0.7.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v2.0.7/OpenWhisperer-2.0.7.dmg) — drag to Applications and launch. Or build it yourself: see [Building from Source](#building-from-source).
+[**Download OpenWhisperer-2.0.8.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v2.0.8/OpenWhisperer-2.0.8.dmg) — drag to Applications and launch. Or build it yourself: see [Building from Source](#building-from-source).
 
 ### First launch on a new Mac
 
@@ -133,7 +143,7 @@ OpenWhisperer isn't signed with a paid Apple Developer ID, so macOS blocks the f
 - **macOS 15 (Sequoia) and later:** open the app and dismiss the *"Apple could not verify…"* warning. Then open **System Settings → Privacy & Security**, scroll to *"OpenWhisperer was blocked"*, and click **Open Anyway**. (Right-click → Open no longer gets past this on macOS 15.)
 - **Any macOS, from Terminal:** clear the download's quarantine flag before you open the DMG:
   ```bash
-  xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-2.0.7.dmg
+  xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-2.0.8.dmg
   ```
   If you already copied the app to Applications: `xattr -cr /Applications/OpenWhisperer.app`
 
@@ -148,7 +158,7 @@ On first launch, the app:
 
 While that one-time download and Neural-Engine compile runs, Settings opens on **General**, which shows live progress so you know it isn't stuck. The menubar icon shows an hourglass for the same reason.
 
-The menubar icon is a small dropdown — **Settings…**, a **Show Overlay** toggle, **Record Voice & Text**, a **Translate to English** toggle, **Setup…**, and **Quit**. The icon itself doubles as a status light: an hourglass while models load, a speaker when your next reply will be spoken, and a warning triangle if a permission is missing.
+The menubar icon is a small dropdown — **Settings…**, a **Show Overlay** toggle, **Record Voice & Text**, a **Translate to English** toggle, a **Mute Spoken Replies** toggle, **Setup…**, and **Quit** — plus an **Update Available** item whenever a newer release is out. The icon itself doubles as a status light: an hourglass while models load, a speaker when your next reply will be spoken, a slashed speaker while replies are muted, and a warning triangle if a permission is missing.
 
 Everything else lives in the **Settings** window (⌘,), across five tabs:
 
@@ -168,9 +178,9 @@ Everything else lives in the **Settings** window (⌘,), across five tabs:
 
 **Agents** — all four agents (Claude Code, Codex CLI, Pi, Antigravity) with their own status and **Connect** button; connect as many as you use. Each has an ⓘ explaining exactly which files get written.
 
-**Advanced** — model status (Whisper STT / TTS engines), **Translate to English** (it swaps the speech model, so it lives with the model settings), the TTS server and port, delete downloaded models, server/events logs, and Copy Diagnostics.
+**Advanced** — model status (Whisper STT / TTS engines), **Translate to English** (it swaps the speech model, so it lives with the model settings), the TTS server and port (connected agents follow a changed port), delete downloaded models, server/events logs, and Copy Diagnostics.
 
-**General** (the logo tab, on the right) — version and engine summary, first-run and model-loading progress, **Themes** (Cream · Light · Dark · Pastel · Champagne · Sky), launch at login, and the permission list (Accessibility, Microphone, and Speech Recognition in Hands-Free). Each permission row opens the matching System Settings pane; the logo tab is badged whenever a grant is missing.
+**General** (the logo tab, on the right) — version and engine summary, first-run and model-loading progress, **Themes** (Cream · Light · Dark · Pastel · Champagne · Sky), launch at login, the daily update check (with **Check now**), and the permission list (Accessibility, Microphone, and Speech Recognition in Hands-Free). Each permission row opens the matching System Settings pane; the logo tab is badged whenever a grant is missing.
 
 Hover the **ⓘ** on any section for in-app help.
 
