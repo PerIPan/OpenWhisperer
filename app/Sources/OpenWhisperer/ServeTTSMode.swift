@@ -14,12 +14,20 @@ enum ServeTTSMode {
         Task { try? await tts.prepare() }
 
         do {
-            try server.start()
+            // The bind is asynchronous: a port in use arrives through the callback, not the throw.
+            try server.start { result in
+                switch result {
+                case .success:
+                    FileHandle.standardError.write(Data("serve-tts: native TTS serving on http://127.0.0.1:\(port)\n".utf8))
+                case .failure(let error):
+                    FileHandle.standardError.write(Data("serve-tts: failed to bind :\(port) — \(error)\n".utf8))
+                    exit(1)
+                }
+            }
         } catch {
-            FileHandle.standardError.write(Data("serve-tts: failed to bind :8000 — \(error)\n".utf8))
+            FileHandle.standardError.write(Data("serve-tts: failed to bind :\(port) — \(error)\n".utf8))
             exit(1)
         }
-        FileHandle.standardError.write(Data("serve-tts: native TTS serving on http://127.0.0.1:8000\n".utf8))
         RunLoop.main.run()
     }
 }

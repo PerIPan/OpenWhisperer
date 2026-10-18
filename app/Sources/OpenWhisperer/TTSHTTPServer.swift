@@ -24,17 +24,34 @@ final class TTSHTTPServer {
         self.playback = playback
     }
 
-    func start() throws {
+    /// Start listening. Throws only when Network.framework rejects the parameters; the bind
+    /// itself is **asynchronous**, and a port already in use arrives later as `.failed`. So the
+    /// outcome is reported through `bound`, exactly once, on the server's own queue: `.success`
+    /// on the first `.ready`, `.failure` on `.failed` before that. Callers must not treat a
+    /// non-throwing return as a bound port — 2.0.8's first cut did, and would have re-pointed
+    /// every agent at a port another process owned.
+    func start(bound: @escaping (Result<Void, Error>) -> Void) throws {
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
         params.requiredInterfaceType = .loopback  // localhost only
         let l = try NWListener(using: params, on: port)
         let boundPort = port.rawValue
+        var reported = false
         l.stateUpdateHandler = { state in
-            // Surface a bind failure (e.g. port already in use) instead of silently appearing
-            // healthy while the endpoint is dead.
-            if case .failed(let err) = state {
+            switch state {
+            case .ready:
+                guard !reported else { return }
+                reported = true
+                bound(.success(()))
+            case .failed(let err):
+                // Surface a bind failure (e.g. port already in use) instead of silently
+                // appearing healthy while the endpoint is dead.
                 NSLog("TTSHTTPServer: listener failed on port \(boundPort): \(err)")
+                guard !reported else { return }
+                reported = true
+                bound(.failure(err))
+            default:
+                break
             }
         }
         l.newConnectionHandler = { [weak self] conn in self?.accept(conn) }

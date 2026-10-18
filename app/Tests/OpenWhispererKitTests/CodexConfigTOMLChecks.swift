@@ -153,6 +153,25 @@ func codexConfigTOMLFailures() -> [String] {
             failures.append("settingOwnMCPServerURL(no url line): got \(fixed.debugDescription)")
         }
 
+        // Trailing comment holding a "]" (review): the header must still be recognised, or a
+        // duplicate table — invalid TOML, Codex refuses the whole file — gets appended.
+        let commented = "[mcp_servers.OpenWhisperer] # speak [tts]\nurl = \"http://localhost:8000/mcp\"\n"
+        let cm = CodexConfigTOML.settingOwnMCPServerURL(url, in: commented)
+        if cm.components(separatedBy: "[mcp_servers.OpenWhisperer]").count != 2 {
+            failures.append("settingOwnMCPServerURL(header with trailing comment): duplicate table appended: \(cm.debugDescription)")
+        }
+        if !cm.contains("url = \"\(url)\"") || !cm.contains("# speak [tts]") {
+            failures.append("settingOwnMCPServerURL(header with trailing comment): url not updated or comment lost: \(cm.debugDescription)")
+        }
+
+        // hasOwnMCPServerTable: a real header counts; a commented-out one does not.
+        if !CodexConfigTOML.hasOwnMCPServerTable(existing) { failures.append("hasOwnMCPServerTable: missed a real table") }
+        if !CodexConfigTOML.hasOwnMCPServerTable("[ mcp_servers.OpenWhisperer ]  # x\n") { failures.append("hasOwnMCPServerTable: missed a spaced/commented header") }
+        if CodexConfigTOML.hasOwnMCPServerTable("# [mcp_servers.OpenWhisperer]\n# url = \"http://localhost:8000/mcp\"\n") {
+            failures.append("hasOwnMCPServerTable: a commented-out table counted as connected — a port change would re-enable it")
+        }
+        if CodexConfigTOML.hasOwnMCPServerTable("[mcp_servers.OpenWhispererX]\n") { failures.append("hasOwnMCPServerTable: prefix match") }
+
         // `url_extra = ...` is a different key and must not be rewritten.
         let lookalike = "[mcp_servers.OpenWhisperer]\nurl_extra = 1\nurl = \"http://localhost:8000/mcp\"\n"
         let la = CodexConfigTOML.settingOwnMCPServerURL(url, in: lookalike)

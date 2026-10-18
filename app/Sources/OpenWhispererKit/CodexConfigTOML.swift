@@ -40,7 +40,12 @@ public enum CodexConfigTOML {
                 continue
             }
             if current.header != nil || !current.lines.isEmpty { out.append(current) }
-            let close = t.lastIndex(of: "]").map { t.index(after: $0) } ?? t.endIndex
+            // Cut at the FIRST run of closing brackets, not the last "]": a trailing comment
+            // holding a "]" (`[mcp_servers.OpenWhisperer] # speak [tts]`) used to stay in the
+            // header, so the table went unrecognised and a duplicate — invalid TOML, which Codex
+            // refuses to load at all — was appended.
+            var close = t.firstIndex(of: "]") ?? t.endIndex
+            while close < t.endIndex, t[close] == "]" { close = t.index(after: close) }
             current = Section(header: String(t[..<close].filter { !$0.isWhitespace }), lines: [line])
         }
         out.append(current)
@@ -70,6 +75,14 @@ public enum CodexConfigTOML {
     }
 
     static let mcpHeader = "[mcp_servers.OpenWhisperer]"
+
+    /// Whether our `[mcp_servers.OpenWhisperer]` table is present — as a real table header, so a
+    /// commented-out `# [mcp_servers.OpenWhisperer]` does not count. The old substring check
+    /// said "connected" for exactly that, and a port change would then have appended a live
+    /// table the user had deliberately disabled.
+    public static func hasOwnMCPServerTable(_ toml: String) -> Bool {
+        sections(toml.components(separatedBy: "\n")).contains { $0.header == mcpHeader }
+    }
 
     /// Point our `[mcp_servers.OpenWhisperer]` table at `url`, adding the table when it's
     /// missing. Only that table's `url` line changes — another key in it (a user's

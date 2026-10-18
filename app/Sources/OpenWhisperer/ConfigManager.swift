@@ -229,7 +229,7 @@ enum ConfigManager {
     /// inline copy left behind to trip Codex's both-representations warning.
     static func checkCodexHookConfigured() -> Bool {
         guard let toml = try? String(contentsOf: Paths.codexConfig, encoding: .utf8),
-              toml.contains("[mcp_servers.OpenWhisperer]"),
+              CodexConfigTOML.hasOwnMCPServerTable(toml),
               !CodexConfigTOML.hasOwnInlineHook(toml),
               let data = try? Data(contentsOf: Paths.codexHooks),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
@@ -329,9 +329,12 @@ enum ConfigManager {
         // MCP registration.
         try? fm.createDirectory(at: Paths.agyMCPConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
         var mcpRoot: [String: Any] = [:]
-        if fm.fileExists(atPath: Paths.agyMCPConfig.path),
-           let data = try? Data(contentsOf: Paths.agyMCPConfig),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if fm.fileExists(atPath: Paths.agyMCPConfig.path) {
+            // Same rule as ~/.claude.json: never treat a file that won't parse as empty.
+            guard let data = try? Data(contentsOf: Paths.agyMCPConfig),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return (false, "mcp_config.json isn't valid JSON — fix it, then connect again")
+            }
             mcpRoot = json
         }
         var servers = mcpRoot["mcpServers"] as? [String: Any] ?? [:]
@@ -341,7 +344,7 @@ enum ConfigManager {
             return (false, "Failed to serialize mcp_config.json")
         }
         do {
-            try mcpOut.write(to: Paths.agyMCPConfig)
+            try mcpOut.write(to: Paths.agyMCPConfig, options: .atomic)
         } catch {
             return (false, "mcp_config.json write failed: \(error.localizedDescription)")
         }
@@ -386,13 +389,54 @@ enum ConfigManager {
     /// The `speak` MCP endpoint every agent is pointed at — on the port the server last bound.
     static var mcpURL: String { TTSPort.mcpURL(port: TTSPort.stored) }
 
-    /// Re-run Connect for every agent that is connected, after the TTS port changed. Each apply
-    /// is idempotent and rewrites only our own entries; Pi's extension reads `tts_port` itself,
-    /// so re-copying it is a harmless no-op. Called once per committed port change.
+    /// After the TTS port changed: re-point every agent config that already names our MCP
+    /// server. Deliberately narrower than Connect — review found the first cut re-ran the full
+    /// apply, which would re-add a server the user had removed (`claude mcp remove`) and, via
+    /// `registerClaudeMCPServer`, replace an unparsable `~/.claude.json` wholesale. Here a file
+    /// that won't parse is skipped, an absent entry is skipped, and only the URL of an existing
+    /// entry changes. Pi needs nothing: its extension reads `tts_port` itself.
     static func reapplyConnectedAgents() {
-        for platform in Platform.allCases where checkHookConfigured(for: platform) {
-            let result = applyHook(for: platform)
-            NSLog("TTS port changed to \(TTSPort.stored): re-applied \(platform.rawValue): \(result.success ? "ok" : "FAILED") — \(result.message)")
+        let url = mcpURL
+        repointJSONServer(at: Paths.claudeJSON, key: "OpenWhisperer", field: "url", url: url, label: "Claude")
+        repointJSONServer(at: Paths.agyMCPConfig, key: "openwhisperer", field: "serverUrl", url: url, label: "Antigravity")
+        repointCodexServer(url: url)
+    }
+
+    /// Change `mcpServers.<key>.<field>` in a JSON config to `url`, only if the file parses and
+    /// the entry exists. Written atomically so a crash mid-write can't leave a truncated file.
+    private static func repointJSONServer(at file: URL, key: String, field: String, url: String, label: String) {
+        guard FileManager.default.fileExists(atPath: file.path) else { return }
+        guard let data = try? Data(contentsOf: file),
+              var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            NSLog("TTS port: \(label) config at \(file.lastPathComponent) isn't valid JSON — left alone")
+            return
+        }
+        guard var servers = root["mcpServers"] as? [String: Any],
+              var entry = servers[key] as? [String: Any] else { return }   // not connected: nothing to re-point
+        if entry[field] as? String == url { return }
+        entry[field] = url
+        servers[key] = entry
+        root["mcpServers"] = servers
+        guard let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .withoutEscapingSlashes]) else { return }
+        do {
+            try out.write(to: file, options: .atomic)
+            NSLog("TTS port: \(label) re-pointed to \(url)")
+        } catch {
+            NSLog("TTS port: \(label) write failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Codex: edit only an existing `[mcp_servers.OpenWhisperer]` table's `url` line.
+    private static func repointCodexServer(url: String) {
+        guard let toml = try? String(contentsOf: Paths.codexConfig, encoding: .utf8),
+              CodexConfigTOML.hasOwnMCPServerTable(toml) else { return }
+        let updated = CodexConfigTOML.settingOwnMCPServerURL(url, in: toml)
+        guard updated != toml else { return }
+        do {
+            try updated.write(to: Paths.codexConfig, atomically: true, encoding: .utf8)
+            NSLog("TTS port: Codex re-pointed to \(url)")
+        } catch {
+            NSLog("TTS port: Codex write failed: \(error.localizedDescription)")
         }
     }
 
@@ -466,9 +510,14 @@ enum ConfigManager {
     static func registerClaudeMCPServer() -> (success: Bool, message: String) {
         let fm = FileManager.default
         var root: [String: Any] = [:]
-        if fm.fileExists(atPath: Paths.claudeJSON.path),
-           let data = try? Data(contentsOf: Paths.claudeJSON),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if fm.fileExists(atPath: Paths.claudeJSON.path) {
+            // A file that doesn't parse must not be treated as empty: ~/.claude.json also holds
+            // the user's account, projects and per-project MCP config, and writing `{mcpServers}`
+            // over it would lose all of that.
+            guard let data = try? Data(contentsOf: Paths.claudeJSON),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return (false, "~/.claude.json isn't valid JSON — fix it, then connect again")
+            }
             root = json
         }
         var servers = root["mcpServers"] as? [String: Any] ?? [:]
@@ -477,7 +526,7 @@ enum ConfigManager {
         guard let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .withoutEscapingSlashes]) else {
             return (false, "Failed to serialize ~/.claude.json")
         }
-        do { try out.write(to: Paths.claudeJSON); return (true, "speak tool registered") }
+        do { try out.write(to: Paths.claudeJSON, options: .atomic); return (true, "speak tool registered") }
         catch { return (false, "Write failed: \(error.localizedDescription)") }
     }
 

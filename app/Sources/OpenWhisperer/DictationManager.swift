@@ -73,6 +73,8 @@ class DictationManager: ObservableObject {
     private static let minSampleCount = 1600
     /// Pending `RecordingCap` stop for the current hold/press recording.
     private var recordingCap: DispatchWorkItem?
+    /// Set when the cap stopped the recording: the transcript is kept, never typed.
+    private var cappedRecording = false
 
     /// The PID of the app that was frontmost when the user pressed the hotkey.
     /// Captured on the main thread at press-time, before any focus shifts.
@@ -536,13 +538,19 @@ class DictationManager: ObservableObject {
         os_log(.default, log: dictLog, "Hold-to-talk: key combo during hold, recording discarded")
     }
 
-    /// Stop-and-transcribe a hold/press recording that reaches `RecordingCap` — a forgotten
-    /// press-to-talk, or a release nothing saw. Never discards: what was said gets typed.
+    /// Stop a hold/press recording that reaches `RecordingCap` — a forgotten press-to-talk, or
+    /// a release nothing saw. It is transcribed and kept in the history (Record Voice & Text),
+    /// but **never typed**: by definition nobody is watching, `targetPID` may by now be whatever
+    /// app the trigger key was last pressed in (every press re-captures it), and Auto-Submit
+    /// would press Enter after ten minutes of room audio. Review caught the first cut doing
+    /// exactly that.
     private func armRecordingCap() {
         recordingCap?.cancel()
+        cappedRecording = false
         let cap = DispatchWorkItem { [weak self] in
             guard let self, self.recorder.state == .recording, self.interactionMode != .handsFree else { return }
-            os_log(.default, log: dictLog, "Recording reached the %.0fs cap, stopping and transcribing", RecordingCap.seconds)
+            os_log(.default, log: dictLog, "Recording reached the %.0fs cap: stopping; transcript kept, not typed", RecordingCap.seconds)
+            self.cappedRecording = true
             self.playClick()
             self.finishAndTranscribe()
         }
@@ -772,6 +780,8 @@ class DictationManager: ObservableObject {
     private func finishAndTranscribe() {
         recordingCap?.cancel()
         recordingCap = nil
+        let capped = cappedRecording
+        cappedRecording = false
         recorder.stopRecording()  // → .uploading; engine stopped, buffers complete
 
         let language = readLanguage()
@@ -818,7 +828,7 @@ class DictationManager: ObservableObject {
             }
             if Task.isCancelled { return }  // dropped by mode switch / watchdog (T1.2)
             await MainActor.run { [weak self] in
-                self?.handlePushToTalkResult(result, pid: pid)
+                self?.handlePushToTalkResult(result, pid: pid, typeIt: !capped)
             }
         }
     }
@@ -827,7 +837,7 @@ class DictationManager: ObservableObject {
     /// flag is set, strip the trailing trigger phrase (as the server used to) and let
     /// `insertText` press Enter — it already does so whenever the flag exists, so there
     /// is exactly one Enter and no double-submit.
-    private func handlePushToTalkResult(_ result: Result<String, Error>, pid: pid_t) {
+    private func handlePushToTalkResult(_ result: Result<String, Error>, pid: pid_t, typeIt: Bool = true) {
         activeTranscribeTask = nil
         uploadWatchdog?.cancel()
         uploadWatchdog = nil
@@ -839,6 +849,13 @@ class DictationManager: ObservableObject {
             guard !trimmed.isEmpty else { return }
             let autoSubmit = FileManager.default.fileExists(atPath: Paths.autoSubmitFlag.path)
             let finalText = autoSubmit ? SubmitTrigger.process(trimmed).cleaned : trimmed
+            guard typeIt else {
+                // Capped recording: keep it where the user can find it, type nowhere.
+                os_log(.default, log: dictLog, "Transcribed %d chars from a capped recording; kept in history, not typed", finalText.count)
+                lastTranscription = finalText
+                error = "Recording stopped after \(Int(RecordingCap.seconds / 60)) minutes — the transcript is in Record Voice & Text, not typed"
+                return
+            }
             os_log(.default, log: dictLog, "Transcribed: %{public}@, inserting into PID %d", finalText, pid)
             lastTranscription = finalText
             error = nil

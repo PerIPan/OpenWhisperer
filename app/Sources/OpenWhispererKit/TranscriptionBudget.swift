@@ -28,10 +28,11 @@ public enum TranscriptionBudget {
 
 /// The longest a hold- or press-to-talk recording may run before it is stopped and transcribed.
 ///
-/// A forgotten press-to-talk (or a release no layer ever saw) would otherwise record without end
-/// and then type the whole of it into whatever app is focused. Ten minutes is far beyond any
-/// dictation; hitting it stops and transcribes — it never discards what was said. Hands-free is
-/// exempt: it segments on silence by itself.
+/// A forgotten press-to-talk (or a release no layer ever saw) would otherwise record without end.
+/// Ten minutes is far beyond any dictation; hitting it stops and transcribes into the history,
+/// but **types nothing** — nobody is watching, the captured target app may have changed, and
+/// Auto-Submit would press Enter after ten minutes of room audio. Hands-free is exempt: it
+/// segments on silence by itself.
 public enum RecordingCap {
     public static let seconds: TimeInterval = 600
 }

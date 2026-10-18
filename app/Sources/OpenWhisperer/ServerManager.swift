@@ -29,6 +29,12 @@ class ServerManager: ObservableObject {
     let playback: TTSPlaybackController
     private var httpServer: TTSHTTPServer?
     private var prepareTask: Task<Void, Never>?
+    /// `.running` needs both: the listener reached `.ready` AND the TTS model is resident.
+    /// Either alone used to flip the status — a dead listener read as "Running".
+    private var listenerReady = false
+    private var ttsReady = false
+    /// Which `startAll` a late listener/prepare callback belongs to; a stale one is ignored.
+    private var startGeneration = 0
 
     init() {
         playback = TTSPlaybackController(tts: tts)
@@ -45,21 +51,44 @@ class ServerManager: ObservableObject {
             Paths.ensureDirectories()
             status = .starting
             lastError = ""
+            listenerReady = false
+            ttsReady = false
+            startGeneration += 1
+            let generation = startGeneration
+            let requestedPort = port
 
-            let server = TTSHTTPServer(port: UInt16(port), tts: tts, playback: playback)
+            let server = TTSHTTPServer(port: UInt16(requestedPort), tts: tts, playback: playback)
             do {
-                try server.start()
-                httpServer = server
-                // The bind succeeded, so this is now THE port: store it and re-point every
-                // connected agent. Done here rather than as the field is edited, which would
-                // rewrite four agents' configs on every keystroke ("1800" on the way to "18000").
-                if port != TTSPort.stored {
-                    TTSPort.store(port)
-                    ConfigManager.reapplyConnectedAgents()
+                // `start` throws only for bad parameters; the bind is asynchronous and reports
+                // through the callback. Nothing is committed until the listener is `.ready`.
+                try server.start { [weak self] result in
+                    DispatchQueue.main.async {
+                        guard let self, generation == self.startGeneration else { return }
+                        switch result {
+                        case .success:
+                            self.listenerReady = true
+                            // NOW this is the port: store it and re-point every connected agent.
+                            // Done here rather than as the field is edited, which would rewrite
+                            // four agents' configs on every keystroke ("1800" on the way to "18000").
+                            if requestedPort != TTSPort.stored {
+                                TTSPort.store(requestedPort)
+                                ConfigManager.reapplyConnectedAgents()
+                            }
+                            self.settleStatus()
+                        case .failure(let error):
+                            // Port in use, most likely. The stored port and the agents' configs
+                            // are untouched, so a relaunch comes back on the last good port.
+                            self.httpServer?.stop()
+                            self.httpServer = nil
+                            self.status = .error
+                            self.lastError = "Failed to bind port \(requestedPort): \(error.localizedDescription)"
+                        }
+                    }
                 }
+                httpServer = server
             } catch {
                 status = .error
-                lastError = "Failed to bind port \(port): \(error.localizedDescription)"
+                lastError = "Failed to bind port \(requestedPort): \(error.localizedDescription)"
                 NSLog("TTS server failed to start: \(error)")
                 return
             }
@@ -68,9 +97,14 @@ class ServerManager: ObservableObject {
                 guard let self else { return }
                 do {
                     try await self.tts.prepare()
-                    await MainActor.run { self.status = .running }
+                    await MainActor.run {
+                        guard generation == self.startGeneration else { return }
+                        self.ttsReady = true
+                        self.settleStatus()
+                    }
                 } catch {
                     await MainActor.run {
+                        guard generation == self.startGeneration else { return }
                         self.status = .error
                         self.lastError = error.localizedDescription
                     }
@@ -80,13 +114,22 @@ class ServerManager: ObservableObject {
         if Thread.isMainThread { work() } else { DispatchQueue.main.async(execute: work) }
     }
 
+    /// `.running` only once both halves are up; a failure has already set `.error` and wins.
+    private func settleStatus() {
+        guard status == .starting, listenerReady, ttsReady else { return }
+        status = .running
+    }
+
     /// Stop the embedded server. In-process, so there is no child process to reap — stop is
     /// immediate (the `synchronous` flag is retained for call-site compatibility).
     func stopAll(synchronous: Bool = false) {
+        startGeneration += 1   // a late callback from the stopped server must not revive it
         prepareTask?.cancel()
         prepareTask = nil
         httpServer?.stop()
         httpServer = nil
+        listenerReady = false
+        ttsReady = false
         status = .stopped
     }
 
