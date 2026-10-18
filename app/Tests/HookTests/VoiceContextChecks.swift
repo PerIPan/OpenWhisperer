@@ -517,5 +517,23 @@ func voiceContextFailures() -> [String] {
         if n?.contains("in German by default") != true { fail("unknownPinIgnored: \(n?.debugDescription ?? "nil")") }
     }
 
+    // 38) Muted (#51): a dictated turn gets no nudge — no tokens spent on a summary nobody
+    //     will hear — but its voice_turn is still claimed, so unmuting can't revive it.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "fix the login bug"); s.writeMuted()
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "fix the login bug", session: "s1"), sandbox: s)
+        if !r.stdout.isEmpty { fail("mutedSilent: expected no nudge while muted, got \(r.stdout.debugDescription)") }
+        if s.voiceTurnExists() { fail("mutedSilent: voice_turn should still be claimed while muted") }
+    }
+
+    // 39) Muted beats Response mode "always": nothing is spoken on any turn.
+    do {
+        let s = newSandbox()
+        s.writeResponseMode("always"); s.writeMuted()
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed prompt", session: "s1"), sandbox: s)
+        if !r.stdout.isEmpty { fail("mutedBeatsAlways: expected silence, got \(r.stdout.debugDescription)") }
+    }
+
     return failures
 }

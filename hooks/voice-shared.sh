@@ -23,6 +23,13 @@ resolve_mode() {
   printf '%s' "$mode"
 }
 
+# "Mute Spoken Replies" (menubar): while tts_muted exists, no turn is spoken, whatever the
+# Response mode. Callers check it AFTER match_and_claim_voice_turn, so a dictated turn is still
+# claimed and unmuting later can't revive it. Global on purpose — there is no per-project mute.
+replies_muted() {
+  [ -e "$APP_SUPPORT/tts_muted" ]
+}
+
 # Determine whether THIS turn was voice-dictated: a fresh voice_turn whose hash matches the
 # given prompt text. On a match, atomically claim (consume) the signal so a later typed turn
 # isn't also matched. A stale signal is swept. Echoes "1" (matched+claimed) or "0" (no match).

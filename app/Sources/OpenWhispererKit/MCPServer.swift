@@ -20,7 +20,15 @@ public struct MCPServer {
 
     public init() {}
 
-    public func handle(_ body: Data, isVoiceCached: (String) -> Bool = { _ in false }) -> MCPOutcome {
+    /// What `speak` answers while the user has muted spoken replies (menubar → Mute Spoken
+    /// Replies). Phrased for the model: don't retry, don't claim you spoke.
+    public static let mutedMessage =
+        "Not spoken: the user has muted spoken replies in OpenWhisperer. Do not retry; reply in text only."
+
+    /// - Parameter isMuted: the `tts_muted` flag. When set, `speak` returns `mutedMessage` and
+    ///   produces no `.speak` side effect; every other method is unaffected.
+    public func handle(_ body: Data, isVoiceCached: (String) -> Bool = { _ in false },
+                       isMuted: Bool = false) -> MCPOutcome {
         guard let msg = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
             return .json(Self.errorResponse(id: NSNull(), code: -32700, message: "Parse error"))
         }
@@ -99,6 +107,12 @@ public struct MCPServer {
             }
             guard let text = args["text"] as? String, !text.isEmpty else {
                 return .json(Self.toolError(id: requestID, message: "Missing required argument: text"))
+            }
+            if isMuted {
+                return .json(Self.resultResponse(id: requestID, result: [
+                    "content": [["type": "text", "text": Self.mutedMessage]],
+                    "isError": false,
+                ]))
             }
             let voice = Self.validVoiceID(args["voice"] as? String)
             let speed = args["speed"] as? Double

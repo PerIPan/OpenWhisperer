@@ -42,6 +42,7 @@ case "$MODE" in
   needed) SPEAK=1 ;;   # candidate on every turn; build_nudge makes the model gate it
   *)      [ "$IS_VOICE" -eq 1 ] && SPEAK=1 ;;
 esac
+replies_muted && SPEAK=0   # menubar mute wins over every Response mode
 [ "$SPEAK" -eq 1 ] || { echo '{}'; exit 0; }
 
 NUDGE=$(build_nudge "$IS_VOICE")

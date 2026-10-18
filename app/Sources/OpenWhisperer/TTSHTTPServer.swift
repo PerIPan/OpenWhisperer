@@ -194,6 +194,11 @@ final class TTSHTTPServer {
             // cache another copy of the same pack.
             let voice = MCPServer.validVoiceID(json?["voice"] as? String) ?? Self.userVoice()
             let speed = (json?["speed"] as? Double).flatMap { $0.isFinite ? TTSSpeed.clamp(Float($0)) : nil } ?? Self.userSpeed()
+            // Muted (menubar): accept and drop, saying so — the Pi extension reads the status.
+            if FileManager.default.fileExists(atPath: Paths.ttsMuted.path) {
+                respond(conn, "200 OK", Data(#"{"status":"muted"}"#.utf8), contentType: "application/json")
+                return
+            }
             Task { [playback] in await playback.play(text: input, voice: voice, speed: speed) }
             respond(conn, "202 Accepted",
                     Data(#"{"status":"accepted"}"#.utf8), contentType: "application/json")
@@ -201,7 +206,8 @@ final class TTSHTTPServer {
         case ("POST", "/mcp"):
             // Minimal MCP over Streamable HTTP. All JSON-RPC shaping is pure (OpenWhispererKit);
             // here we only map the outcome onto HTTP and perform the one side effect (playback).
-            switch MCPServer().handle(req.body, isVoiceCached: VoiceCache.isCached) {
+            let muted = FileManager.default.fileExists(atPath: Paths.ttsMuted.path)
+            switch MCPServer().handle(req.body, isVoiceCached: VoiceCache.isCached, isMuted: muted) {
             case .json(let data):
                 respond(conn, "200 OK", data, contentType: "application/json")
             case .accepted:

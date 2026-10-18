@@ -56,6 +56,11 @@ enum Paths {
     /// Whisper's translate task is X->English only, so there is no target to store.
     static let sttTranslate = appSupport.appendingPathComponent("stt_translate")
 
+    /// "Mute Spoken Replies" (menubar) — presence means muted. Read by the `speak` tool and
+    /// `/v1/audio/play` here, and by the hooks + Pi extension (which then skip the speak nudge).
+    /// Written only by `DictationManager.setRepliesMuted(_:)`.
+    static let ttsMuted = appSupport.appendingPathComponent("tts_muted")
+
     /// Optional STT glossary (comma/newline-separated terms; see VocabularyCorrector).
     static let sttVocabulary = appSupport.appendingPathComponent("stt_vocabulary")
 

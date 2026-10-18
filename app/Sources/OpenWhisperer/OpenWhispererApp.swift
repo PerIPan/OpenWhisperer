@@ -93,6 +93,13 @@ private struct MenuBarMenu: View {
             set: { TranslateToggle.request($0, on: dictation) }
         ))
 
+        // Silences every agent's spoken replies without touching dictation (#51) — for a call,
+        // or music. The icon shows a slashed speaker while it's on, so it can't be forgotten.
+        Toggle("Mute Spoken Replies", isOn: Binding(
+            get: { dictation.repliesMuted },
+            set: { dictation.setRepliesMuted($0) }
+        ))
+
         Divider()
 
         // The setup sheet's "Skip setup" tooltip promises you can reopen it from here, and
@@ -111,8 +118,8 @@ private struct MenuBarMenu: View {
 
 /// The menu-bar icon. Shows an hourglass while a model is still loading (most visible on the
 /// very first launch), a speaker while a dictated turn is armed to be spoken (the will-speak
-/// indicator), an exclamation badge when a required permission is missing, and the waveform
-/// otherwise. The badge is the only permission signal visible with the window closed.
+/// indicator), a slashed speaker while spoken replies are muted, an exclamation badge when a
+/// required permission is missing, and the waveform otherwise. The badge is the only permission signal visible with the window closed.
 private struct MenuBarStatusIcon: View {
     @ObservedObject var dictation: DictationManager
     @ObservedObject var server: ServerManager
@@ -126,7 +133,9 @@ private struct MenuBarStatusIcon: View {
         } else if needsGrant {
             Image(systemName: "exclamationmark.triangle")
         } else {
-            Image(systemName: dictation.speakArmed ? "speaker.wave.2" : "waveform")
+            // Muted outranks the will-speak speaker: nothing will be spoken, so don't promise it.
+            Image(systemName: dictation.repliesMuted ? "speaker.slash"
+                  : (dictation.speakArmed ? "speaker.wave.2" : "waveform"))
         }
     }
 }

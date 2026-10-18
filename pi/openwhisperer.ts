@@ -23,6 +23,10 @@ import { join } from "node:path";
 
 const APP_SUPPORT = join(homedir(), "Library", "Application Support", "OpenWhisperer");
 const VOICE_TURN = join(APP_SUPPORT, "voice_turn");
+// "Mute Spoken Replies" (menubar). Mirrors replies_muted() in hooks/voice-shared.sh.
+const TTS_MUTED = join(APP_SUPPORT, "tts_muted");
+const MUTED_MESSAGE =
+  "Not spoken: the user has muted spoken replies in OpenWhisperer. Do not retry; reply in text only.";
 const TTS_PLAY_URL = "http://localhost:8000/v1/audio/play";
 const FRESHNESS_S = 900; // voice_turn TTL — matches voice-context.sh
 
@@ -226,6 +230,11 @@ export default function (pi: ExtensionAPI) {
       // deterministic — no dependency on the model echoing args). Precedence: env → file.
       const voice = readPref("OW_TTS_VOICE", "tts_voice", "");
       const speed = Number.parseFloat(readPref("OW_TTS_SPEED", "tts_speed", ""));
+      // Muted (menubar): say so instead of "Speaking." — same text as the MCP speak tool's
+      // MCPServer.mutedMessage (HookTests holds them equal).
+      if (existsSync(TTS_MUTED)) {
+        return { content: [{ type: "text", text: MUTED_MESSAGE }] };
+      }
       const body: Record<string, unknown> = { input: params.text };
       if (voice) body.voice = voice;
       if (Number.isFinite(speed)) body.speed = speed;
@@ -261,9 +270,11 @@ export default function (pi: ExtensionAPI) {
     // Response mode: "always" speaks every turn; "needed" makes every turn a candidate but
     // hands the decision to the model; "voice" (default, and any stale "text") speaks only
     // dictated turns. Mirrors the mode table in hooks/voice-shared.sh.
-    const speak = mode === "always" || mode === "needed" ? true : isVoice;
+    // Muted wins over every mode; isVoice was computed (and the voice_turn claimed) first.
+    const muted = existsSync(TTS_MUTED);
+    const speak = !muted && (mode === "always" || mode === "needed" ? true : isVoice);
 
-    debug(`before_agent_start mode=${mode} isVoice=${isVoice} speak=${speak}`);
+    debug(`before_agent_start mode=${mode} isVoice=${isVoice} muted=${muted} speak=${speak}`);
     if (!speak) return;
 
     const style = readPref("OW_TTS_STYLE", "tts_style", "normal");

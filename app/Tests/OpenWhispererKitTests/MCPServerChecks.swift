@@ -67,6 +67,24 @@ func mcpServerFailures() -> [String] {
         failures.append("tools/call(speak): expected .speak outcome")
     }
 
+    // Muted (#51): speak plays nothing and TELLS the model, so it neither retries nor claims
+    // it spoke. A success, not an error — muting is the user's choice, not a failure.
+    switch server.handle(Data(#"{"jsonrpc":"2.0","id":40,"method":"tools/call","params":{"name":"speak","arguments":{"text":"hello"}}}"#.utf8), isMuted: true) {
+    case .speak:
+        failures.append("tools/call(muted): must not produce a .speak side effect")
+    case let .json(data):
+        let r = decode(data)?["result"] as? [String: Any]
+        if (r?["isError"] as? Bool) != false { failures.append("tools/call(muted): isError should be false") }
+        let text = (r?["content"] as? [[String: Any]])?.first?["text"] as? String ?? ""
+        if !text.contains("muted") { failures.append("tools/call(muted): result should say replies are muted, got \(text.debugDescription)") }
+    case .accepted:
+        failures.append("tools/call(muted): expected a .json result")
+    }
+    // ...but only speak is muted: list_voices still answers.
+    if case .speak = server.handle(Data(#"{"jsonrpc":"2.0","id":41,"method":"tools/call","params":{"name":"list_voices","arguments":{}}}"#.utf8), isMuted: true) {
+        failures.append("tools/call(muted list_voices): unexpected .speak")
+    }
+
     // tools/call speak without voice/speed → both nil (handler must not invent them).
     switch req(#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"speak","arguments":{"text":"hi"}}}"#) {
     case let .speak(_, text, voice, speed):

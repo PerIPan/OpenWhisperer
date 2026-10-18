@@ -76,6 +76,11 @@ enum Hook {
             try? code.write(to: appSupport.appendingPathComponent("tts_language"), atomically: true, encoding: .utf8)
         }
 
+        /// "Mute Spoken Replies" (menubar): the flag's presence silences every agent.
+        func writeMuted() {
+            try? "".write(to: appSupport.appendingPathComponent("tts_muted"), atomically: true, encoding: .utf8)
+        }
+
         func writeResponseMode(_ mode: String) {
             try? mode.write(to: appSupport.appendingPathComponent("tts_response_mode"),
                             atomically: true, encoding: .utf8)

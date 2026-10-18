@@ -117,5 +117,15 @@ func agyPreInvocationFailures() -> [String] {
         if ephemeralMessage(r.stdout) == nil { fail("lastEntryOnly: expected a nudge") }
     }
 
+    // Muted (#51): same rule as voice-context.sh, through the shared replies_muted().
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "fix the login bug"); s.writeMuted()
+        let transcript = s.writeAgyTranscript(["fix the login bug"])
+        let r = Hook.run("agy-previnvocation.sh", stdin: input(invocationNum: 0, transcriptPath: transcript.path), sandbox: s)
+        if !isEmptyObject(r.stdout) { fail("mutedSilent: expected {} while muted, got \(r.stdout.debugDescription)") }
+        if s.voiceTurnExists() { fail("mutedSilent: voice_turn should still be claimed while muted") }
+    }
+
     return failures
 }

@@ -1,4 +1,5 @@
 import Foundation
+import OpenWhispererKit
 
 /// Cross-target parity: the Pi extension's nudge must carry the same persona map and the same
 /// reply-language map as `hooks/voice-shared.sh`.
@@ -33,6 +34,15 @@ func piNudgeParityFailures() -> [String] {
     let hookLanguages = VoiceSharedMaps.languages(inLanguageBody: languageBody)
     let piPersonas = VoiceSharedMaps.personas(inTypeScript: ext)
     let piLanguages = VoiceSharedMaps.languages(inTypeScript: ext)
+
+    // Mute (#51): the hook silences every turn while tts_muted exists; Pi must honour the same
+    // flag, or a muted user still hears every Pi reply.
+    if shared.contains("tts_muted"), !ext.contains("\"tts_muted\"") {
+        failures.append("pi/openwhisperer.ts: voice-shared.sh honours tts_muted (Mute Spoken Replies) but the Pi extension never reads it")
+    }
+    if !ext.contains(MCPServer.mutedMessage) {
+        failures.append("pi/openwhisperer.ts: its muted reply differs from MCPServer.mutedMessage — the model would be told two different things")
+    }
 
     if hookPersonas.isEmpty { failures.append("voice-shared.sh: resolve_flavor's case arms did not parse") }
     if hookLanguages.isEmpty { failures.append("voice-shared.sh: resolve_language_line's case arms did not parse") }

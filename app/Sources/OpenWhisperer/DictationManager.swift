@@ -48,6 +48,11 @@ class DictationManager: ObservableObject {
     /// a different speech model.
     @Published private(set) var translateToEnglish =
         FileManager.default.fileExists(atPath: Paths.sttTranslate.path)
+    /// "Mute Spoken Replies" — mirrors the `tts_muted` flag file, for the same reason as
+    /// `translateToEnglish`: the menubar toggle and the status icon must agree. Set it through
+    /// `setRepliesMuted(_:)`, the flag's only writer.
+    @Published private(set) var repliesMuted =
+        FileManager.default.fileExists(atPath: Paths.ttsMuted.path)
     /// Last whole percent shown for the first-run model download (dedups UI updates).
     private var lastReportedDownloadPct = -1
     /// True while the next/current turn's reply is expected to be spoken — i.e. a fresh,
@@ -276,6 +281,21 @@ class DictationManager: ObservableObject {
         // never delivers (`activeChoice` reads the file, not this property).
         translateToEnglish = FileManager.default.fileExists(atPath: Paths.sttTranslate.path)
         reloadSTTForChoiceChange()
+    }
+
+    /// Mute or unmute spoken replies (issue #51). Muting also stops what is playing right now —
+    /// the reason to mute is usually that something is talking at the wrong moment. Dictation
+    /// is unaffected; voice previews in Settings still play (an explicit click).
+    func setRepliesMuted(_ mute: Bool) {
+        guard mute != repliesMuted else { return }
+        if mute {
+            try? "".write(to: Paths.ttsMuted, atomically: true, encoding: .utf8)
+            killTTS()
+        } else {
+            try? FileManager.default.removeItem(at: Paths.ttsMuted)
+        }
+        // Read back, as setTranslate does: the hooks and the speak tool read the file, not this.
+        repliesMuted = FileManager.default.fileExists(atPath: Paths.ttsMuted.path)
     }
 
     /// Call after `stt_translate` changes. "Translate to English" selects a different
