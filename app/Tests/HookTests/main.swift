@@ -9,6 +9,7 @@ failures += agyPreInvocationFailures()
 failures += voiceLanguageParityFailures()
 failures += voicePersonaParityFailures()
 failures += piNudgeParityFailures()
+failures += readmeVersionFailures()
 
 if failures.isEmpty {
     print("✅ HookTests: all checks passed")

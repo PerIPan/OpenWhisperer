@@ -18,15 +18,6 @@ Full interactive Voice mode for [Claude Code](https://claude.ai/claude-code), [C
   <img src="docs/screenshots/general.png" width="45%" alt="Settings — General tab: version, the speech engines in use, permissions and launch at login">
 </p>
 
-Build from source or DMG, do not pay the 99/year so you would have to allow it to run.
-
-The command to bypass Gatekeeper for the DMG:
-xattr -cr /Applications/OpenWhisperer.app
-
-If you want to do it on the DMG itself before opening:
-xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-2.0.6.dmg
-
-
 ## What It Does
 
 You use your coding agent — **Claude Code, Codex, Antigravity, or Pi** — normally. After a turn you dictated by voice, the AI's reply is automatically spoken aloud through your Mac's speakers using a local TTS model. Pick one of the nine accented English/European voices and the reply is written in a persona to match; pick one of the 24 multilingual voices and it's written in that language instead (you can also set replies to always speak — see Response mode). Three voice input modes: **Press-to-Talk** (press hotkey to start/stop), **Hold-to-Talk** (hold hotkey to record, release to transcribe), or **Hands-Free** (say "initiate" to start recording, 3s silence auto-transcribes, say "hold on" to interrupt TTS).
@@ -133,7 +124,22 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## Install
 
-[**Download OpenWhisperer-2.0.6.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v2.0.6/OpenWhisperer-2.0.6.dmg) — drag to Applications and launch.
+[**Download OpenWhisperer-2.0.7.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v2.0.7/OpenWhisperer-2.0.7.dmg) — drag to Applications and launch. Or build it yourself: see [Building from Source](#building-from-source).
+
+### First launch on a new Mac
+
+OpenWhisperer isn't signed with a paid Apple Developer ID, so macOS blocks the first launch. Do one of these, once:
+
+- **macOS 15 (Sequoia) and later:** open the app and dismiss the *"Apple could not verify…"* warning. Then open **System Settings → Privacy & Security**, scroll to *"OpenWhisperer was blocked"*, and click **Open Anyway**. (Right-click → Open no longer gets past this on macOS 15.)
+- **Any macOS, from Terminal:** clear the download's quarantine flag before you open the DMG:
+  ```bash
+  xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-2.0.7.dmg
+  ```
+  If you already copied the app to Applications: `xattr -cr /Applications/OpenWhisperer.app`
+
+Then allow **Accessibility** (to type into other apps) and **Microphone** when asked. **Settings → General** lists both and opens the right System Settings pane.
+
+**After every update, grant both again.** macOS ties those permissions to the exact build, and without a Developer ID every release is a new build to macOS, so the new version starts without them. In **System Settings → Privacy & Security → Accessibility**, select OpenWhisperer, remove it with **−**, then add it back with **+**. Do the same under **Microphone**. Until then dictation does nothing and the menubar shows a warning triangle.
 
 On first launch, the app:
 - Downloads the Whisper (speech-to-text) and Kokoro (text-to-speech) CoreML models
@@ -274,7 +280,7 @@ Most settings are configured in the Settings window (voice, volume, language, ho
 
 **Push-to-talk not typing text:**
 1. Check Accessibility permission is granted in System Settings
-2. If rebuilt from source, remove and re-add the app in Accessibility settings (macOS caches the code signature)
+2. After an update or a rebuild, remove and re-add the app in Accessibility (and Microphone) settings — macOS ties the grant to the exact build (see [First launch on a new Mac](#first-launch-on-a-new-mac))
 3. Check the Events Log in the menubar for diagnostic details
 
 ---
@@ -308,7 +314,7 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-This produces `OpenWhisperer.app` and `OpenWhisperer-2.0.6.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
+This produces `OpenWhisperer.app` and `OpenWhisperer-<version>.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
 
 ### Step 2: Wire up the hooks
 
