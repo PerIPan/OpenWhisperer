@@ -82,6 +82,52 @@ else
 fi
 chmod +x "$APP_BUNDLE/Contents/Resources/jq"
 
+# Step 5: Bundle Pocket TTS — the default English voice engine since 2.1 (see PocketTTS in the
+# Kit). Kyutai's pinned macOS arm64 program (MIT) goes in Contents/Helpers and Heart's voice
+# state in Resources/pocket; the model itself (~219 MB) is downloaded on first run. Every file is
+# checked against its pin here, at BUILD time: signing below re-signs the program, so its bytes
+# change, and from then on the app's own signature is what covers it. HookTests holds these pins
+# equal to PocketTTS's. Any mismatch fails the build — never ship a program nobody checked.
+POCKET_URL="https://github.com/kyutai-labs/pocket-tts/releases/download/v4.0.1/pocket-tts-3.3.0-aarch64-apple-darwin.tar.gz"
+POCKET_TARBALL_SHA256="ee9ca6c7c000ee72c5846e3a8ba01d08f56636d94a614d2259c3f12b8fd69afa"
+POCKET_PROGRAM_SHA256="447d95181e133b3fda268d248126041722cf1bdf767093f44f2a0d047ab192be"
+POCKET_LICENSE_SHA256="23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+HEART_SHA256="60e5e6cbcac2f61554adcfc1ffd9830308802a3685db49489f5a14e8e65b5425"
+POCKET_CACHE="$BUILD_DIR/pocket-cache"
+POCKET_TARBALL="$POCKET_CACHE/pocket-tts-3.3.0-aarch64-apple-darwin.tar.gz"
+POCKET_TOP="pocket-tts-3.3.0-aarch64-apple-darwin"
+
+sha256_of() { shasum -a 256 "$1" | awk '{print $1}'; }
+require_sha() {
+    local got; got=$(sha256_of "$1")
+    if [ "$got" != "$2" ]; then
+        echo "Error: $1 is not the pinned file (sha256 $got, expected $2)"
+        exit 1
+    fi
+}
+
+echo "Bundling Pocket TTS..."
+mkdir -p "$POCKET_CACHE"
+if [ ! -f "$POCKET_TARBALL" ] || [ "$(sha256_of "$POCKET_TARBALL")" != "$POCKET_TARBALL_SHA256" ]; then
+    rm -f "$POCKET_TARBALL"
+    curl -LsSf --max-filesize 16777216 "$POCKET_URL" -o "$POCKET_TARBALL.part"
+    mv "$POCKET_TARBALL.part" "$POCKET_TARBALL"
+fi
+require_sha "$POCKET_TARBALL" "$POCKET_TARBALL_SHA256"
+POCKET_UNPACK=$(mktemp -d "$POCKET_CACHE/unpack.XXXXXX")
+tar -xzf "$POCKET_TARBALL" -C "$POCKET_UNPACK" "$POCKET_TOP/pocket-tts" "$POCKET_TOP/LICENSE"
+require_sha "$POCKET_UNPACK/$POCKET_TOP/pocket-tts" "$POCKET_PROGRAM_SHA256"
+require_sha "$POCKET_UNPACK/$POCKET_TOP/LICENSE" "$POCKET_LICENSE_SHA256"
+mkdir -p "$APP_BUNDLE/Contents/Helpers" "$APP_BUNDLE/Contents/Resources/pocket"
+cp "$POCKET_UNPACK/$POCKET_TOP/pocket-tts" "$APP_BUNDLE/Contents/Helpers/pocket-tts"
+cp "$POCKET_UNPACK/$POCKET_TOP/LICENSE" "$APP_BUNDLE/Contents/Resources/pocket/LICENSE-pocket-tts.txt"
+chmod 755 "$APP_BUNDLE/Contents/Helpers/pocket-tts"
+xattr -c "$APP_BUNDLE/Contents/Helpers/pocket-tts" 2>/dev/null || true
+rm -rf "$POCKET_UNPACK"
+require_sha "$SCRIPT_DIR/Resources/pocket/heart.safetensors" "$HEART_SHA256"
+cp "$SCRIPT_DIR/Resources/pocket/heart.safetensors" "$APP_BUNDLE/Contents/Resources/pocket/heart.safetensors"
+cp "$PROJECT_DIR/THIRD_PARTY_NOTICES.md" "$APP_BUNDLE/Contents/Resources/THIRD_PARTY_NOTICES.md"
+
 # Step 6: Code sign
 # The signing identity is configurable via OW_SIGN_IDENTITY so the same script
 # serves three cases:
@@ -110,11 +156,15 @@ if [ -n "$OW_NOTARIZE" ] && [ "$SIGN_IDENTITY" != "-" ]; then
     codesign --force --options runtime --timestamp \
         --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Resources/jq"
     codesign --force --options runtime --timestamp \
+        --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Helpers/pocket-tts"
+    codesign --force --options runtime --timestamp \
         --entitlements "$ENTITLEMENTS" \
         --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
 else
     # Ad-hoc or stable-dev local build: plain signature, no hardened runtime
     # (not needed to run locally or to keep TCC grants; only notarization needs it).
+    # The helper explicitly first, so its signature never depends on --deep's traversal rules.
+    codesign --force --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Helpers/pocket-tts"
     codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
 fi
 

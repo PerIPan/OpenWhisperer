@@ -256,7 +256,7 @@ final class TTSHTTPServer {
     private static func userVoice() -> String {
         let v = (try? String(contentsOf: Paths.ttsVoice, encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (v?.isEmpty == false) ? v! : "af_heart"
+        return (v?.isEmpty == false) ? v! : TTSVoiceRouter.defaultVoice
     }
 
     /// The user's global TTS speed (`tts_speed`), clamped, or the 1.1× default.

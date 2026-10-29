@@ -111,6 +111,25 @@ resolve_depth_line() {
 # persona a voice carries; reword here first. HookTests' voicePersonaParityFailures() parses
 # these arms and fails if the two drift.
 # Resolved voice: per-project OW_TTS_VOICE env → global tts_voice file.
+# The key resolve_flavor() looks a voice's persona up by. A Kokoro id: its first character
+# (af_heart → a). A Pocket TTS voice can't use that — `pocket:` starts with p, the Brazilian
+# key — so it gets its speaker's documented accent: heart is af_heart's clone; jane, eve and
+# michael are American VCTK speakers (p339, p361, p360), vera an English one (p229); alba's
+# accent is not documented, so she gets none, like any voice we can't place. Mirrors
+# PocketVoice.personaKey (Kit) and POCKET_PERSONA_KEYS (Pi); HookTests parses these arms, so
+# keep their shape: pocket:<name>) echo "<key>".
+voice_persona_key() {
+  case "$1" in
+    pocket:heart) echo "a" ;;
+    pocket:jane) echo "a" ;;
+    pocket:eve) echo "a" ;;
+    pocket:michael) echo "a" ;;
+    pocket:vera) echo "b" ;;
+    pocket:*) echo "" ;;
+    *) printf '%s' "${1:0:1}" ;;
+  esac
+}
+
 resolve_flavor() {
   local voice="$OW_TTS_VOICE"
   [ -z "$voice" ] && voice=$(cat "$APP_SUPPORT/tts_voice" 2>/dev/null)
@@ -128,11 +147,13 @@ resolve_flavor() {
   # Try the override first, then the voice's own prefix. One `case`, walked at most twice,
   # so an unrecognized override degrades to the voice instead of stripping the persona —
   # and there is no second copy of the map to drift out of sync with this one.
-  local primary="${voice:0:1}" chose_override=0
+  local auto
+  auto=$(voice_persona_key "$(printf '%s' "$voice" | tr 'A-Z' 'a-z')")
+  local primary="$auto" chose_override=0
   [ -n "$override" ] && [ "$override" != "auto" ] && primary="$override" && chose_override=1
 
   local accent="" persona="" desc="" key
-  for key in "$primary" "${voice:0:1}"; do
+  for key in "$primary" "$auto"; do
   case "$key" in
     a|american)  accent="American English";     persona="American";  desc="quietly self-assured, with a light touch of Silicon Valley hype" ;;
     b|british)   accent="British English";      persona="British";   desc="dry and unflappable, with a streak of deadpan wit and gentle irony" ;;
@@ -254,7 +275,7 @@ resolve_speak_args() {
   local voice="$OW_TTS_VOICE"
   [ -z "$voice" ] && voice=$(cat "$APP_SUPPORT/tts_voice" 2>/dev/null)
   voice=$(printf '%s' "$voice" | tr -d '[:space:]')
-  [ -z "$voice" ] && voice="af_heart"
+  [ -z "$voice" ] && voice="pocket:heart"
 
   local ovr=" voice=\"$voice\""
   if [ -n "$OW_TTS_SPEED" ] && printf '%s' "$OW_TTS_SPEED" | grep -Eq '^[0-9]+(\.[0-9]+)?$'; then

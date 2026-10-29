@@ -10,6 +10,7 @@ failures += voiceLanguageParityFailures()
 failures += voicePersonaParityFailures()
 failures += piNudgeParityFailures()
 failures += readmeVersionFailures()
+failures += pocketVoiceParityFailures()
 
 if failures.isEmpty {
     print("✅ HookTests: all checks passed")

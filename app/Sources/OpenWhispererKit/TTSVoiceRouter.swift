@@ -6,15 +6,20 @@ public enum TTSEngineKind: String, Sendable, Equatable, Codable {
     case kokoro
     /// Supertonic-3 via FluidAudio's `Supertonic3Manager` — 31 languages, ANE, 44.1 kHz.
     case supertonic
+    /// Pocket TTS (Kyutai) — English, the default since 2.1, CPU, one program run per sentence.
+    /// Kokoro stands in for any line it can't say. See `PocketTTS`.
+    case pocket
 }
 
 /// A voice id resolved into the engine that can speak it plus that engine's parameters.
 public struct TTSVoiceRoute: Sendable, Equatable {
     public let engine: TTSEngineKind
     /// Kokoro: the bare voice id (`af_heart`). Supertonic: the voice-style name (`F1`).
+    /// Pocket: the voice's name (`heart`).
     public let voice: String
     /// Supertonic: the ISO language code (`nl`). `nil` for Kokoro, whose ids fuse language
-    /// into the voice itself (`af_heart` *is* American English female).
+    /// into the voice itself (`af_heart` *is* American English female), and for Pocket, which
+    /// is English only and never gets a language line.
     public let language: String?
 
     public init(engine: TTSEngineKind, voice: String, language: String? = nil) {
@@ -55,8 +60,14 @@ public enum TTSVoiceRouter {
     public static let defaultSupertonicStyle = "F1"
 
     /// Fallback when an id is unusable — matches the existing "ignore invalid voice names"
-    /// behavior rather than failing a turn's audio.
+    /// behavior rather than failing a turn's audio — and the voice Kokoro speaks a line in
+    /// when Pocket can't (Heart *is* af_heart, cloned, so the stand-in sounds the same).
     public static let defaultKokoroVoice = "af_heart"
+
+    /// What an unset `tts_voice` means: Heart on Pocket TTS (owner, 2026-10-29). The one place
+    /// the default is written in Swift — the hook's `resolve_speak_args` must say the same, and
+    /// `HookTests` holds them equal.
+    public static let defaultVoice = PocketTTS.defaultVoiceID
 
     /// Compose a Supertonic voice id. The single place the id shape is written, so the
     /// registry and any callers can't drift from `route(_:)`.
@@ -75,7 +86,16 @@ public enum TTSVoiceRouter {
     public static func route(_ voiceID: String) -> TTSVoiceRoute {
         let trimmed = voiceID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            return TTSVoiceRoute(engine: .kokoro, voice: defaultKokoroVoice)
+            return TTSVoiceRoute(engine: .pocket, voice: PocketTTS.defaultVoiceName)
+        }
+
+        // `pocket:<name>`: a known voice routes to Pocket; an unknown name can't be spoken by
+        // it, so Kokoro's af_heart takes it (Heart's own original) rather than silence.
+        if PocketTTS.isPocketID(trimmed) {
+            guard let voice = PocketTTS.voice(forID: trimmed) else {
+                return TTSVoiceRoute(engine: .kokoro, voice: defaultKokoroVoice)
+            }
+            return TTSVoiceRoute(engine: .pocket, voice: voice.name)
         }
 
         guard trimmed.lowercased().hasPrefix(supertonicPrefix) else {
@@ -98,5 +118,10 @@ public enum TTSVoiceRouter {
     /// the engine, so they don't re-parse.
     public static func isSupertonic(_ voiceID: String) -> Bool {
         route(voiceID).engine == .supertonic
+    }
+
+    /// Whether `voiceID` is spoken by Pocket TTS (an empty id included: it means the default).
+    public static func isPocket(_ voiceID: String) -> Bool {
+        route(voiceID).engine == .pocket
     }
 }

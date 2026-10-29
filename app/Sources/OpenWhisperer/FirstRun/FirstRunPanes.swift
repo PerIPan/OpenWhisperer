@@ -141,7 +141,7 @@ struct FirstRunDictatePane: View {
 struct FirstRunVoicePane: View {
     @EnvironmentObject var serverManager: ServerManager
 
-    @State private var selectedVoice = "af_heart"
+    @State private var selectedVoice = TTSVoiceRouter.defaultVoice
     @State private var selectedStyle = "normal"
     @State private var voiceSections: [OWPickerSection] = []
 

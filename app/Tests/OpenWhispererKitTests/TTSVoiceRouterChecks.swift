@@ -41,8 +41,17 @@ func ttsVoiceRouterFailures() -> [String] {
     expect("supertonic:zh:F1", .kokoro, "af_heart", nil, "mandarin unsupported by supertonic")
     expect("supertonic:xx:F1", .kokoro, "af_heart", nil, "nonsense language")
     expect("supertonic:", .kokoro, "af_heart", nil, "prefix only")
-    expect("", .kokoro, "af_heart", nil, "empty id")
-    expect("   ", .kokoro, "af_heart", nil, "whitespace only")
+    // Unset means the default: Heart on Pocket TTS (owner, 2026-10-29).
+    expect("", .pocket, "heart", nil, "empty id is the default")
+    expect("   ", .pocket, "heart", nil, "whitespace only is the default")
+    // Pocket ids: a known name routes to Pocket (case-insensitive); an unknown one can't be
+    // spoken by it, so Kokoro's af_heart — Heart's own original — takes it.
+    expect("pocket:heart", .pocket, "heart", nil, "pocket heart")
+    expect("POCKET:Jane", .pocket, "jane", nil, "pocket case")
+    expect("pocket:nobody", .kokoro, "af_heart", nil, "unknown pocket voice")
+    expect("pocket:", .kokoro, "af_heart", nil, "pocket prefix only")
+    if TTSVoiceRouter.defaultVoice != "pocket:heart" { failures.append("TTSVoiceRouter.defaultVoice: expected pocket:heart") }
+    if !TTSVoiceRouter.isPocket("") || TTSVoiceRouter.isPocket("af_heart") { failures.append("TTSVoiceRouter.isPocket") }
 
     // isSupertonic must agree with route() — call sites rely on the shortcut.
     for id in ["supertonic:nl:F1", "af_heart", "supertonic:zh:F1", ""] {

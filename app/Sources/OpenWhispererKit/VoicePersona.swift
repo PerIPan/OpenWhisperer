@@ -128,8 +128,16 @@ public enum VoicePersona {
     /// `isSupertonic` guard: a `supertonic:nl:F1` id starts with `s`, which is not a key, so
     /// it falls out as `nil` for the same reason it does in bash. A guard would make Swift
     /// stricter than the hook in the one case the test cannot see.
+    ///
+    /// A Pocket voice has no meaningful first character (`pocket:` would read as Brazilian), so
+    /// it uses its speaker's accent instead — `PocketVoice.personaKey`, which mirrors the hook's
+    /// `voice_persona_key()` and is held equal to it by `HookTests`.
     public static func forVoice(_ voiceID: String) -> Persona? {
-        guard let first = voiceID.trimmingCharacters(in: .whitespacesAndNewlines).first else { return nil }
+        let trimmed = voiceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if PocketTTS.isPocketID(trimmed) {
+            return PocketTTS.voice(forID: trimmed)?.personaKey.flatMap { byPrefix[$0] }
+        }
+        guard let first = trimmed.first else { return nil }
         return byPrefix[first]
     }
 

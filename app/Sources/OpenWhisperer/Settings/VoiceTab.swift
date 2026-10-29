@@ -8,7 +8,7 @@ struct VoiceTab: View {
     /// preview button reflects real playback instead of a guessed duration.
     @EnvironmentObject var dictationManager: DictationManager
 
-    @State private var selectedVoice = "af_heart"
+    @State private var selectedVoice = TTSVoiceRouter.defaultVoice
     @State private var selectedSpeed: Double = Double(TTSSpeed.default)
     @State private var selectedVolume: Double = 1.0
     @State private var selectedStyle = "normal"

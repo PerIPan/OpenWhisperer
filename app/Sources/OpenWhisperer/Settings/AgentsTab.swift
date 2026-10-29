@@ -11,7 +11,7 @@ struct AgentsTab: View {
     @State private var lastResult: (platform: Platform, ok: Bool, message: String)?
     /// Mirrors the stored voice so "Automatic" can name what it resolves to. Reloaded on
     /// appear, since the voice is changed on a different tab.
-    @State private var selectedVoice = "af_heart"
+    @State private var selectedVoice = TTSVoiceRouter.defaultVoice
     @State private var selectedPersona = VoicePersona.automatic
 
     var body: some View {

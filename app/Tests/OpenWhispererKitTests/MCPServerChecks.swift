@@ -85,6 +85,12 @@ func mcpServerFailures() -> [String] {
         failures.append("tools/call(muted list_voices): unexpected .speak")
     }
 
+    // Pocket voice ids pass validation canonically; an unknown Pocket name does not.
+    if MCPServer.validVoiceID("pocket:Heart") != "pocket:heart" { failures.append("validVoiceID: pocket:Heart should canonicalize to pocket:heart") }
+    if MCPServer.validVoiceID(" pocket:vera ") != "pocket:vera" { failures.append("validVoiceID: pocket:vera") }
+    if MCPServer.validVoiceID("pocket:nobody") != nil { failures.append("validVoiceID: unknown pocket voice should be rejected") }
+    if MCPServer.validVoiceID("af_heart") != "af_heart" { failures.append("validVoiceID: Kokoro ids unchanged") }
+
     // tools/call speak without voice/speed → both nil (handler must not invent them).
     switch req(#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"speak","arguments":{"text":"hi"}}}"#) {
     case let .speak(_, text, voice, speed):
@@ -174,7 +180,7 @@ func mcpServerFailures() -> [String] {
            let voicesObj = (try? JSONSerialization.jsonObject(with: bodyData)) as? [String: Any],
            let voicesList = voicesObj["voices"] as? [[String: Any]] {
             // 54 Kokoro + 48 multilingual (24 languages × F1/M1).
-            if voicesList.count != 102 { failures.append("list_voices tool: expected 102 voices, got \(voicesList.count)") }
+            if voicesList.count != TTSVoiceRegistry.allVoices.count { failures.append("list_voices tool: expected every registry voice (\(TTSVoiceRegistry.allVoices.count)), got \(voicesList.count)") }
             if !voicesList.contains(where: { ($0["id"] as? String) == "supertonic:nl:F1" }) {
                 failures.append("list_voices tool: missing the Dutch supertonic:nl:F1 voice")
             }

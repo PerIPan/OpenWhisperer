@@ -2,8 +2,9 @@ import Foundation
 import FluidAudio
 import OpenWhispererKit
 
-/// Routes synthesis to whichever engine can speak a given voice id: `KokoroTTS` for its nine
-/// languages (the default), `Supertonic3TTS` for the twenty-plus it has no voice for.
+/// Routes synthesis to whichever engine can speak a given voice id: `PocketSpeaker` (Pocket TTS,
+/// English, the default since 2.1), `KokoroTTS` for its nine languages — and as the stand-in for
+/// any line Pocket can't say — and `Supertonic3TTS` for the twenty-plus Kokoro has no voice for.
 ///
 /// Deliberately exposes the same surface `KokoroTTS` did — `prepare()`, `synthesize`,
 /// `synthesizeSamples` — so `TTSPlaybackController`, `TTSHTTPServer`, and `ServeTTSMode` are
@@ -17,6 +18,7 @@ import OpenWhispererKit
 final class TTSEngines: Sendable {
     private let kokoro = KokoroTTS()
     private let supertonic = Supertonic3TTS()
+    private let pocket = PocketSpeaker()
 
     /// Pre-warm the model the *currently selected* voice will actually use.
     ///
@@ -31,8 +33,18 @@ final class TTSEngines: Sendable {
     /// blocked (the documented Little Snitch / Xet-CDN case), even though English TTS is fine.
     /// On failure the model simply loads lazily inside the first `synthesizeSamples`, where
     /// `TTSPlaybackController`'s catch ends that one utterance instead of the server.
+    ///
+    /// Pocket's model (~219 MB the first time) is fetched in the **background**: it must never
+    /// hold `ServerManager` in `.starting`, and until it is ready Kokoro — which loads first,
+    /// always, as the stand-in — says every line.
     func prepare() async throws {
         try await kokoro.prepare()
+        if TTSVoiceRouter.isPocket(Self.selectedVoice()) {
+            let pocket = self.pocket
+            Task.detached(priority: .utility) {
+                do { try await pocket.prepare() } catch { NSLog("TTSEngines: Pocket TTS not ready (Kokoro speaks): \(error)") }
+            }
+        }
         guard TTSVoiceRouter.isSupertonic(Self.selectedVoice()) else { return }
         do {
             try await supertonic.prepare()
@@ -43,10 +55,18 @@ final class TTSEngines: Sendable {
 
     /// Synthesize → WAV `Data` (blocking `/v1/audio/speech`).
     func synthesize(
-        _ text: String, voice: String = KokoroTTS.defaultVoice, speed: Float = TTSSpeed.default
+        _ text: String, voice: String = TTSVoiceRouter.defaultVoice, speed: Float = TTSSpeed.default
     ) async throws -> Data {
         let route = TTSVoiceRouter.route(voice)
         switch route.engine {
+        case .pocket:
+            do {
+                return PocketWAV.wav(try await pocket.samples(text, voice: route.voice))
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                return try await kokoro.synthesize(text, voice: Self.standIn(for: route), speed: speed)
+            }
         case .kokoro:
             return try await kokoro.synthesize(text, voice: route.voice, speed: speed)
         case .supertonic:
@@ -86,11 +106,24 @@ final class TTSEngines: Sendable {
     /// Kokoro has always been 24 kHz — and avoids tearing down a graph with a history of wedging
     /// on reconfiguration (see the `AVAudioEngineConfigurationChange` handler). The native rate
     /// is preserved on the WAV path, which has no such constraint.
+    ///
+    /// Pocket has no speed control (owner, 2026-10-29: leave its own pace — Heart speaks at about
+    /// 4.6 words a second, close to af_heart at the default 1.1), so `speed` reaches it only when
+    /// Kokoro stands in.
     func synthesizeSamples(
-        _ text: String, voice: String = KokoroTTS.defaultVoice, speed: Float = TTSSpeed.default
+        _ text: String, voice: String = TTSVoiceRouter.defaultVoice, speed: Float = TTSSpeed.default
     ) async throws -> (samples: [Float], sampleRate: Int) {
         let route = TTSVoiceRouter.route(voice)
         switch route.engine {
+        case .pocket:
+            do {
+                return (try await pocket.samples(text, voice: route.voice), PocketWAV.sampleRate)
+            } catch is CancellationError {
+                throw CancellationError()   // barge-in: say nothing, not a Kokoro stand-in
+            } catch {
+                // Never silence: Kokoro says the line in the same speaker's stand-in voice.
+                return try await kokoro.synthesizeSamples(text, voice: Self.standIn(for: route), speed: speed)
+            }
         case .kokoro:
             return try await kokoro.synthesizeSamples(text, voice: route.voice, speed: speed)
         case .supertonic:
@@ -103,11 +136,16 @@ final class TTSEngines: Sendable {
         }
     }
 
+    /// The Kokoro voice that says a line Pocket couldn't (af_heart, or am_michael for the male voices).
+    private static func standIn(for route: TTSVoiceRoute) -> String {
+        PocketTTS.voice(named: route.voice)?.kokoroStandIn ?? TTSVoiceRouter.defaultKokoroVoice
+    }
+
     /// The globally selected voice, as the hooks and Settings see it. Per-project `OW_TTS_VOICE`
     /// overrides arrive as an explicit `voice` argument on the `speak` call instead, so this is
     /// only used to decide what to pre-warm.
     private static func selectedVoice() -> String {
         (try? String(contentsOf: Paths.ttsVoice, encoding: .utf8))?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? KokoroTTS.defaultVoice
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? TTSVoiceRouter.defaultVoice
     }
 }

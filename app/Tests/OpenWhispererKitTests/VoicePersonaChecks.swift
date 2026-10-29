@@ -16,9 +16,20 @@ func voicePersonaFailures() -> [String] {
     // Every Kokoro voice the picker offers carries a persona, because the hook keys on the
     // same first character. A voice in the roster with no persona would be one whose tone
     // changes with nothing said about it.
+    // Pocket voices carry their speaker's documented accent instead; one without a documented
+    // accent (Alba) carries none, exactly as the hook gives her none.
     for voice in TTSVoiceRegistry.allVoices where !TTSVoiceRouter.isSupertonic(voice.id) {
+        if let pocket = PocketTTS.voice(forID: voice.id) {
+            let expected = pocket.personaKey.flatMap { VoicePersona.byPrefix[$0] }
+            check("\(voice.id) persona follows its speaker's accent", VoicePersona.forVoice(voice.id) == expected)
+            continue
+        }
         check("\(voice.id) has a persona", VoicePersona.forVoice(voice.id) != nil)
     }
+    // `pocket:` must never fall through to the first-character map (p → Brazilian).
+    check("pocket:heart is American, not Brazilian", VoicePersona.forVoice("pocket:heart")?.name == "American")
+    check("pocket:vera is British", VoicePersona.forVoice("pocket:vera")?.name == "British")
+    check("unknown pocket voice has no persona", VoicePersona.forVoice("pocket:nobody") == nil)
 
     // Supertonic voices get the reply-language line *instead of* a persona. Disclosing one
     // for them would describe a nudge the model never receives.
@@ -79,6 +90,8 @@ func voicePersonaFailures() -> [String] {
     for group in TTSVoiceRegistry.groups {
         let kokoro = group.voices.filter { !TTSVoiceRouter.isSupertonic($0.id) }
         guard let first = kokoro.first else { continue }
+        // A group of only accent-undocumented Pocket voices (Alba) has, rightly, no caption.
+        if kokoro.allSatisfy({ PocketTTS.voice(forID: $0.id).map { $0.personaKey == nil } ?? false }) { continue }
         guard let expected = VoicePersona.forVoice(first.id) else {
             failures.append("VoicePersona: Kokoro group '\(group.name)' has no persona for \(first.id) — its picker header would be blank")
             continue

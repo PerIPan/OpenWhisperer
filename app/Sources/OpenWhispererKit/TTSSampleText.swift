@@ -73,6 +73,8 @@ public enum TTSSampleText {
     public static func language(forVoiceID voiceID: String) -> String? {
         let route = TTSVoiceRouter.route(voiceID)
         if let language = route.language { return language }
+        // Pocket is English only; its names ("heart") would otherwise read as a Kokoro prefix (h → Hindi).
+        if route.engine == .pocket { return "en" }
         guard let first = route.voice.lowercased().first else { return nil }
         return kokoroPrefixLanguage[first]
     }

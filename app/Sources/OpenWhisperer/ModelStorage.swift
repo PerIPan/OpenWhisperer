@@ -26,6 +26,10 @@ enum ModelStorage {
                 name: "Whisper STT model",
                 url: Paths.whisperHubBase),
             Location(
+                // The model and any stock voices fetched; Heart and the program are in the app.
+                name: "Pocket TTS model",
+                url: Paths.pocketFolder),
+            Location(
                 name: "Kokoro TTS models",
                 url: home.appendingPathComponent(".cache/fluidaudio")),
             Location(

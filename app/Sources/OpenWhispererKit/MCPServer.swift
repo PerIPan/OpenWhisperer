@@ -156,6 +156,12 @@ public struct MCPServer {
         // Kokoro shape check below rejects (`:`, uppercase style). Validate them through the
         // router instead and return the canonical spelling, so a `supertonic:NL:f1` from a
         // per-project override isn't silently dropped back to the global voice.
+        // Pocket ids carry `:` too; only a voice Pocket actually has is accepted, canonical
+        // and lowercase, so the model echoing `pocket:Heart` still lands on Heart.
+        if PocketTTS.isPocketID(voice) {
+            return PocketTTS.voice(forID: voice)?.id
+        }
+
         if voice.lowercased().hasPrefix(TTSVoiceRouter.supertonicPrefix) {
             let route = TTSVoiceRouter.route(voice)
             guard route.engine == .supertonic, let language = route.language else { return nil }

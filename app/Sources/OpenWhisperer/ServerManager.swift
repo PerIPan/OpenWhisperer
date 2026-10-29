@@ -20,7 +20,16 @@ class ServerManager: ObservableObject {
     /// Computed, never stored: "Translate to English" swaps the checkpoint, and a value
     /// captured at init would describe whichever model happened to be active at launch.
     var sttModel: String { SpeechTranscriber.activeChoice.displayName }  // native WhisperKit
-    @Published var ttsModel: String = "kokoro-82m"              // native FluidAudio
+    /// Computed, like `sttModel`: which engine speaks follows the selected voice.
+    var ttsModel: String {
+        let voice = (try? String(contentsOf: Paths.ttsVoice, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        switch TTSVoiceRouter.route(voice).engine {
+        case .pocket: return "Pocket TTS, Kokoro as stand-in"
+        case .kokoro: return "Kokoro-82M"
+        case .supertonic: return "Supertonic-3"
+        }
+    }
     @Published var lastError: String = ""
 
     private let tts = TTSEngines()

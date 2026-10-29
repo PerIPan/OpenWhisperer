@@ -61,6 +61,12 @@ enum Paths {
     /// Written only by `DictationManager.setRepliesMuted(_:)`.
     static let ttsMuted = appSupport.appendingPathComponent("tts_muted")
 
+    /// Pocket TTS's folder: the model (weights + tokenizer, ~219 MB, first run), the stock voices
+    /// downloaded on first use, and the config the program reads. The program itself and Heart
+    /// live in the app bundle. The sandbox each run is under can read this folder and nothing else
+    /// of the home — see `PocketTTS.sandboxProfile`.
+    static let pocketFolder = appSupport.appendingPathComponent("models/pocket-tts")
+
     /// The port the TTS/MCP server last bound (absent = 8000). Every agent config points at it;
     /// see `TTSPort`. Written only by `ServerManager.startAll()`, read by the Pi extension too.
     static let ttsPort = appSupport.appendingPathComponent("tts_port")

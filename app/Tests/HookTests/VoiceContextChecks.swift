@@ -348,13 +348,13 @@ func voiceContextFailures() -> [String] {
         }
     }
 
-    // 25) no override → nudge carries voice="af_heart" fallback arg but no speed arg.
+    // 25) no override → nudge carries the default voice (Heart on Pocket, since 2.1) but no speed arg.
     do {
         let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         let n = nudge(r.stdout)
-        if n?.contains("voice=\"af_heart\"") != true {
-            fail("noOverrideFallbackVoice: expected voice=\"af_heart\" fallback: \(n?.debugDescription ?? "nil")")
+        if n?.contains("voice=\"pocket:heart\"") != true {
+            fail("noOverrideFallbackVoice: expected voice=\"pocket:heart\" fallback: \(n?.debugDescription ?? "nil")")
         }
         if n?.contains("speed=") == true {
             fail("noOverrideNoSpeed: unexpected speed arg injected: \(n?.debugDescription ?? "nil")")
@@ -533,6 +533,37 @@ func voiceContextFailures() -> [String] {
         s.writeResponseMode("always"); s.writeMuted()
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "typed prompt", session: "s1"), sandbox: s)
         if !r.stdout.isEmpty { fail("mutedBeatsAlways: expected silence, got \(r.stdout.debugDescription)") }
+    }
+
+    // 40) Pocket voices take their speaker's accent, never the `p` (Brazilian) first-character key.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("pocket:heart")
+        let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
+        if n?.contains("American English accent") != true { fail("pocketHeartAmerican: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("Brazilian") == true { fail("pocketHeartNotBrazilian: \(n!.debugDescription)") }
+        if n?.contains("voice=\"pocket:heart\"") != true { fail("pocketHeartSpeakArg: \(n?.debugDescription ?? "nil")") }
+    }
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("pocket:vera")
+        let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
+        if n?.contains("British English accent") != true { fail("pocketVeraBritish: \(n?.debugDescription ?? "nil")") }
+    }
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("pocket:alba")
+        let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
+        if n == nil { fail("pocketAlbaNudge: no nudge at all") }
+        if n?.contains("persona") == true { fail("pocketAlbaNoPersona: accent undocumented, got \(n!.debugDescription)") }
+    }
+
+    // 41) No tts_voice at all: the speak arg names the default, Heart on Pocket — and its persona.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go")
+        let n = nudge(Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s).stdout)
+        if n?.contains("voice=\"pocket:heart\"") != true { fail("defaultVoiceIsHeart: \(n?.debugDescription ?? "nil")") }
     }
 
     return failures

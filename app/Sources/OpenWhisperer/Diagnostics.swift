@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import ApplicationServices
+import OpenWhispererKit
 
 /// One-shot diagnostics report for support: everything needed to triage a
 /// "models won't download / dictation won't start" report without a screen share.
@@ -31,6 +32,13 @@ enum Diagnostics {
         lines.append("Ready: \(dictation.sttModelReady ? "yes" : "no")\(dictation.sttFailed ? " (FAILED)" : "")")
         if let status = dictation.sttStatus { lines.append("Status: \(status)") }
         if let error = dictation.error { lines.append("Last error: \(error)") }
+        lines.append("")
+
+        lines.append("— Voice model (Pocket TTS) —")
+        lines.append("Program bundled: \(PocketSpeaker.program != nil ? "yes" : "no (not a packaged app — Kokoro speaks)")")
+        let pocketWeights = Paths.pocketFolder.appendingPathComponent(PocketTTS.weights.name)
+        lines.append("Model on disk: \(FileManager.default.fileExists(atPath: pocketWeights.path) ? "yes" : "no")")
+        lines.append("Engine for selected voice: \(server.ttsModel)")
         lines.append("")
 
         lines.append("— Voice model (Kokoro) —")

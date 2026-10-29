@@ -24,6 +24,11 @@ enum VoiceCache {
         // Multilingual voices share one Supertonic model across every language and style,
         // so cache state is per-model, not per-voice: all of them flip to cached together
         // once the pipeline is on disk.
+        // Pocket: Heart ships with the app; a stock voice is cached once its file is on disk.
+        if PocketTTS.isPocketID(voice) {
+            return PocketTTS.voice(forID: voice).map(PocketSpeaker.isCached) ?? false
+        }
+
         if TTSVoiceRouter.isSupertonic(voice) {
             return FileManager.default.fileExists(
                 atPath: home.appendingPathComponent(supertonicMarker).path)

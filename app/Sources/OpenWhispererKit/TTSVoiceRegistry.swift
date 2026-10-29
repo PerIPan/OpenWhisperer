@@ -30,8 +30,9 @@ public struct TTSVoiceGroup: Sendable {
 
 public enum TTSVoiceRegistry {
     public static let groups: [TTSVoiceGroup] = [
-        TTSVoiceGroup(name: "English (US)", voices: [
-            TTSVoice(id: "af_heart", name: "Heart", language: "English", region: "US", gender: "Female"),
+        TTSVoiceGroup(name: "English (US)", voices: pocketVoices(region: "US") + [
+            // Kokoro's own Heart — the stand-in for every Pocket line, still selectable.
+            TTSVoice(id: "af_heart", name: "Heart (Kokoro)", language: "English", region: "US", gender: "Female"),
             TTSVoice(id: "af_bella", name: "Bella", language: "English", region: "US", gender: "Female"),
             TTSVoice(id: "af_alloy", name: "Alloy", language: "English", region: "US", gender: "Female"),
             TTSVoice(id: "af_aoede", name: "Aoede", language: "English", region: "US", gender: "Female"),
@@ -52,7 +53,7 @@ public enum TTSVoiceRegistry {
             TTSVoice(id: "am_puck", name: "Puck", language: "English", region: "US", gender: "Male"),
             TTSVoice(id: "am_santa", name: "Santa", language: "English", region: "US", gender: "Male")
         ]),
-        TTSVoiceGroup(name: "English (UK)", voices: [
+        TTSVoiceGroup(name: "English (UK)", voices: pocketVoices(region: "UK") + [
             TTSVoice(id: "bf_alice", name: "Alice", language: "English", region: "UK", gender: "Female"),
             TTSVoice(id: "bf_emma", name: "Emma", language: "English", region: "UK", gender: "Female"),
             TTSVoice(id: "bf_isabella", name: "Isabella", language: "English", region: "UK", gender: "Female"),
@@ -62,6 +63,9 @@ public enum TTSVoiceRegistry {
             TTSVoice(id: "bm_george", name: "George", language: "English", region: "UK", gender: "Male"),
             TTSVoice(id: "bm_lewis", name: "Lewis", language: "English", region: "UK", gender: "Male")
         ]),
+        // Alba: Pocket's voice-acted speaker, accent not documented — her own group, so neither
+        // English header (and its persona caption) claims her.
+        TTSVoiceGroup(name: "English", voices: pocketVoices(region: "")),
         TTSVoiceGroup(name: "French", voices: [
             TTSVoice(id: "ff_siwis", name: "Siwis", language: "French", region: "FR", gender: "Female")
         ]),
@@ -160,6 +164,18 @@ public enum TTSVoiceRegistry {
                 id: TTSVoiceRouter.supertonicID(language: code, style: "M1"),
                 name: "M1", language: label, region: region, gender: "Male"),
         ])
+    }
+
+    /// Pocket TTS's English voices of one accent, first in that accent's group: Heart (af_heart
+    /// cloned onto Pocket, the default, ships with the app) and the stock voices, each downloaded
+    /// on first use. Grouped by accent, not by engine — the picker never asks anyone to choose an
+    /// engine, and each group's header shows one persona, which every row in it must share
+    /// (`VoicePersonaChecks`). Their routes carry no language, so the language-line parity check
+    /// passes them by, as it does Kokoro's English groups.
+    static func pocketVoices(region: String) -> [TTSVoice] {
+        PocketTTS.voices.filter { $0.region == region }.map {
+            TTSVoice(id: $0.id, name: $0.displayName, language: "English", region: $0.region, gender: $0.gender)
+        }
     }
 
     public static var allVoices: [TTSVoice] {

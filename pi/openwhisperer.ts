@@ -105,10 +105,23 @@ const PERSONAS: Array<{ keys: string[]; accent: string; persona: string; desc: s
  * override is tried first and the voice's prefix second, so an unrecognized override degrades
  * to the voice instead of stripping the persona.
  */
+/**
+ * The persona key of a voice — mirrors `voice_persona_key()` in hooks/voice-shared.sh. A Kokoro
+ * id: its first character. A Pocket TTS voice: its speaker's documented accent (`pocket:` starts
+ * with p, the Brazilian key, so the first-character rule would turn every one Brazilian); alba's
+ * accent is undocumented, so none. HookTests holds this map equal to the hook's and the Kit's.
+ */
+const POCKET_PERSONA_KEYS: Record<string, string> = { heart: "a", jane: "a", eve: "a", michael: "a", vera: "b" };
+function personaKey(voice: string): string {
+  const v = voice.toLowerCase();
+  if (v.startsWith("pocket:")) return POCKET_PERSONA_KEYS[v.slice("pocket:".length)] ?? "";
+  return v.charAt(0);
+}
+
 function resolveFlavor(): string {
   const voice = readPref("OW_TTS_VOICE", "tts_voice", "").replace(/\s+/g, "");
   const override = readPref("OW_TTS_PERSONA", "tts_persona", "").replace(/\s+/g, "").toLowerCase();
-  const prefix = voice.charAt(0);
+  const prefix = personaKey(voice);
   let choseOverride = Boolean(override) && override !== "auto";
   for (const key of [choseOverride ? override : prefix, prefix]) {
     const hit = key ? PERSONAS.find((p) => p.keys.includes(key)) : undefined;

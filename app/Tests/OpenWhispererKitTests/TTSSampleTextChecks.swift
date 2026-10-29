@@ -28,6 +28,9 @@ func ttsSampleTextFailures() -> [String] {
 
     // Voice id -> language, both engines
     check("Kokoro af_heart is English", TTSSampleText.language(forVoiceID: "af_heart") == "en")
+    // "heart" would otherwise read as Kokoro's h prefix — the Hindi sample.
+    check("Pocket Heart is English, not Hindi", TTSSampleText.language(forVoiceID: "pocket:heart") == "en")
+    check("Pocket Vera is English", TTSSampleText.language(forVoiceID: "pocket:vera") == "en")
     check("Kokoro bm_george is English", TTSSampleText.language(forVoiceID: "bm_george") == "en")
     check("Kokoro ff_siwis is French", TTSSampleText.language(forVoiceID: "ff_siwis") == "fr")
     check("Kokoro jf_alpha is Japanese", TTSSampleText.language(forVoiceID: "jf_alpha") == "ja")

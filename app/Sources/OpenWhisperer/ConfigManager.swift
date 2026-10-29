@@ -567,6 +567,22 @@ enum ConfigManager {
     /// Writing the file rather than defaulting in the reader keeps Settings honest — the
     /// picker shows the language actually in force instead of an invisible fallback. A
     /// stored value of any kind, `auto` included, is left alone.
+    /// 2.1: move af_heart to Heart on Pocket TTS (`VoiceMigration.pocketHeart`), once. A marker
+    /// rather than the usual "old state present" check, because af_heart is also a choice someone
+    /// can make again afterwards ("Heart (Kokoro)") — that must stick. Per-project `OW_TTS_VOICE`
+    /// overrides are left alone: they are written by hand, per repository, on purpose.
+    static func migrateAfHeartToPocketHeart() {
+        let marker = Paths.appSupport.appendingPathComponent(".migrated-pocket-heart")
+        guard !FileManager.default.fileExists(atPath: marker.path) else { return }
+        Paths.ensureDirectories()
+        let current = try? String(contentsOf: Paths.ttsVoice, encoding: .utf8)
+        if let moved = VoiceMigration.pocketHeart(current: current) {
+            try? moved.write(to: Paths.ttsVoice, atomically: true, encoding: .utf8)
+            NSLog("Voice moved from af_heart to \(moved) (2.1)")
+        }
+        try? "".write(to: marker, atomically: true, encoding: .utf8)
+    }
+
     static func migrateDefaultSTTLanguage() {
         let stored = try? String(contentsOf: Paths.sttLanguage, encoding: .utf8)
         guard let language = STTLanguages.defaultedLanguage(existing: stored) else { return }

@@ -26,6 +26,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Pin English when no dictation language is stored — must run before the Settings
         // UI or DictationManager reads the file, so both see the same value.
         ConfigManager.migrateDefaultSTTLanguage()
+        // 2.1: af_heart → Heart on Pocket TTS, once — before anything reads tts_voice.
+        ConfigManager.migrateAfHeartToPocketHeart()
         // Strip the obsolete Stop hook (replaced by the speak MCP tool) from existing installs.
         ConfigManager.migrateRemoveClaudeStopHook()
         // Move a Codex hook still written inline in config.toml over to hooks.json.
