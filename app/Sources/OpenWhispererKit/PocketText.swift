@@ -37,8 +37,23 @@ public enum PocketText {
 
     static func rewrite(_ text: String) -> String {
         var s = text
-        // Money: digits stay digits (Pocket reads them), only the shape changes.
-        s = replace(s, #"\$([0-9][0-9,]*)(?:\.([0-9]{2}))?(?![0-9])"#) { g in
+        // Ranges of times and of money first: the rules below would otherwise rewrite each side
+        // and leave a hyphen between them ("9 o'clock-17 hundred", "10 dollars-20").
+        s = replace(s, #"(?<![0-9:.])([0-9]{1,2}:[0-9]{2})\s?[-–]\s?([0-9]{1,2}:[0-9]{2})(?![0-9:])"#) { g in
+            "\(g[1] ?? "") to \(g[2] ?? "")"
+        }
+        s = replace(s, #"\$([0-9]+)\s?[-–]\s?\$?([0-9]+)(?![0-9]|[.,][0-9]|\p{L})"#) { g in
+            "\(g[1] ?? "") to \(g[2] ?? "") dollars"
+        }
+        // Money with a scale ("$1.5M", "$2.5k", "$3B"): the number as written, the scale as a word.
+        s = replace(s, #"\$([0-9]+(?:\.[0-9]+)?)\s?([kKmMbB])(?![\p{L}0-9])"#) { g in
+            let scale = ["k": "thousand", "m": "million", "b": "billion"][(g[2] ?? "").lowercased()] ?? ""
+            return "\(g[1] ?? "") \(scale) dollars"
+        }
+        // Money. Digits stay digits (Pocket reads them), only the shape changes. Thousands groups
+        // are matched exactly and the amount must end there, so a comma or full stop after it
+        // ("$20, billed") stays prose, and "$5.999" or "$0.5" are left alone rather than mangled.
+        s = replace(s, #"\$([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.([0-9]{2}))?(?![0-9]|[.,][0-9]|\p{L})"#) { g in
             let whole = g[1] ?? ""
             let units = Int(whole.replacingOccurrences(of: ",", with: "")) ?? 0
             var out = "\(whole) dollar" + (units == 1 ? "" : "s")
@@ -55,10 +70,15 @@ public enum PocketText {
             let h = Int(hour) ?? 0
             return h >= 13 || hour.hasPrefix("0") ? "\(hour) hundred" : "\(hour) o'clock"
         }
-        // A range of exactly two numbers. The lookarounds keep dates (2026-10-29), versions and
-        // names with digits (x86-64, COVID-19) out of it.
-        s = replace(s, #"(?<![\p{L}0-9.:/\-])([0-9]{1,4})\s?[-–]\s?([0-9]{1,4})(?![\p{L}0-9.:/\-])"#) { g in
-            "\(g[1] ?? "") to \(g[2] ?? "")"
+        // A range of exactly two numbers — including at a sentence's end or before a colon, where
+        // most of them are: a full stop or colon only blocks it when a digit follows (a version, a
+        // time). Dates (2026-10-29), versions (3.10-3.12), sequences (1-2-3) and names with digits
+        // (x86-64, COVID-19) stay out; so do a year-month (2026-10) and a phone number (555-1234).
+        s = replace(s, #"(?<![\p{L}0-9:/\-]|[0-9]\.)([0-9]{1,4})\s?[-–]\s?([0-9]{1,4})(?![\p{L}0-9/\-]|[.:][0-9])"#) { g in
+            let a = g[1] ?? "", b = g[2] ?? ""
+            if a.count == 4, b.count == 2, let month = Int(b), (1...12).contains(month) { return g[0] ?? "" }
+            if a.count == 3, b.count == 4 { return g[0] ?? "" }
+            return "\(a) to \(b)"
         }
         // All-caps words Pocket reads as a different English word.
         s = replace(s, #"(?<![\p{L}\p{N}])WHO(?![\p{L}\p{N}])"#) { _ in "W-H-O" }

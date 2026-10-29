@@ -286,18 +286,23 @@ public enum PocketTTS {
         """
 }
 
-/// When to stop trying Pocket for a while. Three failed runs in a row rest it — 1, 5, then 30
-/// minutes, every 30 after — so a broken install costs one slow line, not every line (Estia's
-/// `SpeakingRetry`). Any success clears it. While resting, Kokoro speaks.
+/// When to stop trying something for a while. For runs: three failures in a row rest Pocket —
+/// 1, 5, then 30 minutes, every 30 after — so a broken install costs one slow line, not every
+/// line (Estia's `SpeakingRetry`). For downloads (the model, a stock voice) one failure is enough
+/// to wait, so a bad network can't start a fetch on every sentence. Any success clears it. While
+/// resting, Kokoro speaks.
 public struct PocketHealth: Sendable, Equatable {
-    public static let failuresBeforeRest = 3
+    public static let runFailuresBeforeRest = 3
     public static let rests: [TimeInterval] = [60, 300, 1800]
 
+    public let failuresBeforeRest: Int
     public private(set) var consecutiveFailures = 0
     public private(set) var restsTaken = 0
     public private(set) var restingUntil: Date?
 
-    public init() {}
+    public init(failuresBeforeRest: Int = PocketHealth.runFailuresBeforeRest) {
+        self.failuresBeforeRest = max(1, failuresBeforeRest)
+    }
 
     public func isResting(at now: Date) -> Bool {
         guard let until = restingUntil else { return false }
@@ -312,7 +317,7 @@ public struct PocketHealth: Sendable, Equatable {
 
     public mutating func recordFailure(at now: Date) {
         consecutiveFailures += 1
-        guard consecutiveFailures >= Self.failuresBeforeRest else { return }
+        guard consecutiveFailures >= failuresBeforeRest else { return }
         let rest = Self.rests[min(restsTaken, Self.rests.count - 1)]
         restsTaken += 1
         restingUntil = now.addingTimeInterval(rest)

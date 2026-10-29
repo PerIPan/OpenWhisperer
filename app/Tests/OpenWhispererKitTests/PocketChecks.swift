@@ -65,6 +65,26 @@ func pocketFailures() -> [String] {
     said("Pages 10-20 need review.", "Pages 10 to 20 need review.", "range: was \"1020\"")
     said("Released 2026-10-29.", "Released 2026-10-29.", "a date is not a range")
     said("Built for x86-64 and COVID-19 data.", "Built for x86-64 and COVID-19 data.", "names with digits are not ranges")
+    // Review, 2026-10-29: a range at a sentence's end (where SentenceSplitter puts most of them)
+    // or before a colon was missed; a comma after an amount was swallowed into it; k/M/B and
+    // decimal amounts were mangled; year-months and phone numbers became ranges.
+    said("I edited lines 10-20.", "I edited lines 10 to 20.", "range at sentence end")
+    said("Ports 8000-8010.", "Ports 8000 to 8010.", "range at sentence end, 4 digits")
+    said("See lines 10-20: they changed.", "See lines 10 to 20: they changed.", "range before a colon")
+    said("It takes 2–3 days.", "It takes 2 to 3 days.", "en dash range")
+    said("Python 3.10-3.12 works.", "Python 3.10-3.12 works.", "version range untouched")
+    said("Steps 1-2-3 again.", "Steps 1-2-3 again.", "three-part sequence untouched")
+    said("Shipped the 2026-10 build.", "Shipped the 2026-10 build.", "year-month is not a range")
+    said("Call 555-1234 now.", "Call 555-1234 now.", "phone number is not a range")
+    said("Open 9:00-17:00 daily.", "Open 9 o'clock to 17 hundred daily.", "time range")
+    said("It costs $20, billed yearly.", "It costs 20 dollars, billed yearly.", "money: comma after amount")
+    said("That is $1,000, give or take.", "That is 1,000 dollars, give or take.", "money: thousands then comma")
+    said("Budgets: $5, $10 and $20.", "Budgets: 5 dollars, 10 dollars and 20 dollars.", "money: list")
+    said("They raised $1.5M last year.", "They raised 1.5 million dollars last year.", "money: millions")
+    said("About $2.5k a month.", "About 2.5 thousand dollars a month.", "money: thousands suffix")
+    said("A $3B market.", "A 3 billion dollars market.", "money: billions")
+    said("Plans are $10-20 a seat.", "Plans are 10 to 20 dollars a seat.", "money range")
+    said("It was $1,000.50 exactly.", "It was 1,000 dollars and 50 cents exactly.", "money: thousands and cents")
     said("WHO is it?", "W-H-O is it?", "WHO: was \"Oh is it?\"")
     said("Ask who did it.", "Ask who did it.", "lowercase who untouched")
     said("Check the TODO list and two TODOs.", "Check the to-do list and two to-dos.", "TODO: was \"total\"")
@@ -161,6 +181,14 @@ func pocketFailures() -> [String] {
     check(h.isResting(at: t0.addingTimeInterval(1799)) && !h.isResting(at: t0.addingTimeInterval(1801)), "health: then 30 min, capped")
     h.recordSuccess()
     check(!h.isResting(at: t0) && h.consecutiveFailures == 0 && h.restsTaken == 0, "health: success clears everything")
+
+    // Downloads wait after a single failure (review: a failed fetch was retried on every sentence).
+    var d = PocketHealth(failuresBeforeRest: 1)
+    d.recordFailure(at: t0)
+    check(d.isResting(at: t0.addingTimeInterval(30)) && !d.isResting(at: t0.addingTimeInterval(61)), "download backoff: one failure waits 1 min")
+    d.recordFailure(at: t0)
+    check(d.isResting(at: t0.addingTimeInterval(299)), "download backoff: then 5 min")
+    check(PocketHealth(failuresBeforeRest: 0).failuresBeforeRest == 1, "health: threshold floors at 1")
 
     return failures
 }

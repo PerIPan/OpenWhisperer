@@ -17,9 +17,16 @@ enum SettingsData {
     static var voiceSections: [OWPickerSection] {
         TTSVoiceRegistry.groups.map { group in
             let isSupertonic = group.voices.allSatisfy { TTSVoiceRouter.isSupertonic($0.id) }
+            // The engine word only when one engine speaks the whole group. Since 2.1 the English
+            // groups mix Pocket voices (first) with Kokoro's, and calling them "Kokoro" put the
+            // default voice under the wrong engine (review, 2026-10-29).
+            let engines = Set(group.voices.map { TTSVoiceRouter.route($0.id).engine })
+            let engineWord: String? = engines.count == 1
+                ? [.pocket: "Pocket TTS", .kokoro: "Kokoro", .supertonic: "Supertonic"][engines.first!] : nil
+            let unplaced = group.voices.allSatisfy { PocketTTS.voice(forID: $0.id).map { $0.personaKey == nil } ?? false }
             return OWPickerSection(
                 id: group.name,
-                title: "\(group.name) · \(isSupertonic ? "Supertonic" : "Kokoro")",
+                title: engineWord.map { "\(group.name) · \($0)" } ?? group.name,
                 // Each engine's groups need a different thing explained.
                 //
                 // Supertonic: F1/M1 read as accents or quality grades unless told otherwise
@@ -32,7 +39,9 @@ enum SettingsData {
                 // asserts every voice in a group agrees rather than trusting it.
                 caption: isSupertonic
                     ? "Speaker styles, not regional accents."
-                    : group.voices.first.flatMap { VoicePersona.summary(for: $0.id) },
+                    : unplaced
+                        ? "No persona: this speaker's accent isn't documented."
+                        : group.voices.first.flatMap { VoicePersona.summary(for: $0.id) },
                 options: group.voices.map { voice in
                     OWPickerOption(
                         id: voice.id,

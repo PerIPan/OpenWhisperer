@@ -121,6 +121,8 @@ require_sha "$POCKET_UNPACK/$POCKET_TOP/LICENSE" "$POCKET_LICENSE_SHA256"
 mkdir -p "$APP_BUNDLE/Contents/Helpers" "$APP_BUNDLE/Contents/Resources/pocket"
 cp "$POCKET_UNPACK/$POCKET_TOP/pocket-tts" "$APP_BUNDLE/Contents/Helpers/pocket-tts"
 cp "$POCKET_UNPACK/$POCKET_TOP/LICENSE" "$APP_BUNDLE/Contents/Resources/pocket/LICENSE-pocket-tts.txt"
+# The Rust crates' notices — generated from the release's Cargo.lock (scripts/pocket-licences/).
+cp "$SCRIPT_DIR/Resources/pocket/THIRD_PARTY_LICENSES-pocket-tts.txt" "$APP_BUNDLE/Contents/Resources/pocket/"
 chmod 755 "$APP_BUNDLE/Contents/Helpers/pocket-tts"
 xattr -c "$APP_BUNDLE/Contents/Helpers/pocket-tts" 2>/dev/null || true
 rm -rf "$POCKET_UNPACK"

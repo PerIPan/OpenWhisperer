@@ -88,5 +88,20 @@ func pocketVoiceParityFailures() -> [String] {
     if let heart = PocketTTS.voice(named: "heart"), !dmg.contains(heart.file.sha256) {
         failures.append("build-dmg.sh: Heart's sha256 differs from PocketTTS's pin")
     }
+
+    // The crates' licence notices must ship with the program, and describe this release: the DMG
+    // redistributes the binary, so its MIT/Apache/MPL obligations travel with it.
+    let notices = Hook.repoRoot.appendingPathComponent("app/Resources/pocket/THIRD_PARTY_LICENSES-pocket-tts.txt")
+    if let text = try? String(contentsOf: notices, encoding: .utf8) {
+        let release = PocketTTS.releaseURL.pathComponents.first { $0.hasPrefix("v") } ?? "?"
+        if !text.contains("release \(release)") {
+            failures.append("THIRD_PARTY_LICENSES-pocket-tts.txt doesn't describe release \(release) — regenerate it (scripts/pocket-licences/)")
+        }
+    } else {
+        failures.append("app/Resources/pocket/THIRD_PARTY_LICENSES-pocket-tts.txt is missing — the bundled binary's crate notices")
+    }
+    if !dmg.contains("THIRD_PARTY_LICENSES-pocket-tts.txt") {
+        failures.append("build-dmg.sh doesn't bundle THIRD_PARTY_LICENSES-pocket-tts.txt")
+    }
     return failures
 }
