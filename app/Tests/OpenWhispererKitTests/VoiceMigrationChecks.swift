@@ -3,7 +3,7 @@ import OpenWhispererKit
 func voiceMigrationFailures() -> [String] {
     var failures: [String] = []
 
-    // 2.1: af_heart → Heart on Pocket; nothing else moves.
+    // 2.0.9: af_heart → Heart on Pocket; nothing else moves.
     for (current, expected) in [("af_heart", "pocket:heart"), ("af_heart\n", "pocket:heart"), (" af_heart ", "pocket:heart")] {
         if VoiceMigration.pocketHeart(current: current) != expected {
             failures.append("VoiceMigration.pocketHeart(\(current.debugDescription)): expected \(expected)")

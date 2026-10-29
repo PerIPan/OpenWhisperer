@@ -10,7 +10,9 @@
 TTS_PORT=$(tr -d '[:space:]' 2>/dev/null < "$HOME/Library/Application Support/OpenWhisperer/tts_port")
 case "$TTS_PORT" in ''|*[!0-9]*) TTS_PORT=8000 ;; esac
 TTS_URL="${TTS_URL:-http://localhost:$TTS_PORT/v1/audio/speech}"
-VOICE="${TTS_VOICE:-af_heart}"
+# Unset: no voice in the request, so the app uses the one chosen in Settings (Heart by default).
+# It used to default to af_heart here, which kept speak.sh on Kokoro after the app moved to Heart.
+VOICE="${TTS_VOICE:-}"
 TMPFILE=$(mktemp /tmp/tts_XXXXXX.wav)
 
 if [ -n "$1" ]; then
@@ -26,7 +28,7 @@ TEXT="${TEXT:0:2000}"
 
 curl -s -X POST "$TTS_URL" \
   -H "Content-Type: application/json" \
-  -d "$(jq -n --arg t "$TEXT" --arg v "$VOICE" '{input: $t, voice: $v}')" \
+  -d "$(jq -n --arg t "$TEXT" --arg v "$VOICE" 'if $v == "" then {input: $t} else {input: $t, voice: $v} end')" \
   --output "$TMPFILE" 2>/dev/null
 afplay -v "${TTS_VOLUME:-1}" "$TMPFILE" 2>/dev/null
 rm -f "$TMPFILE"

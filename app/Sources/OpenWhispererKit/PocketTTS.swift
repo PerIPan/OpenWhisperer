@@ -42,7 +42,7 @@ public struct PocketVoice: Sendable, Equatable {
     public var id: String { PocketTTS.prefix + name }
 }
 
-/// Pocket TTS (Kyutai Labs): the default English engine since 2.1, replacing Kokoro as the voice
+/// Pocket TTS (Kyutai Labs): the default English engine since 2.0.9, replacing Kokoro as the voice
 /// people hear, with Kokoro kept as the stand-in for any line Pocket can't say.
 ///
 /// **What it is and how it runs — taken from Estia (local-assistant 0.9.8, `tools/voice/`), which

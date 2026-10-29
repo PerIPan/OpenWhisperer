@@ -26,6 +26,15 @@ Everything runs on your Mac — no cloud APIs; nothing you say or type leaves yo
 
 ## What's New
 
+### 2.0.9
+
+- **A new voice: Heart.** Spoken replies now come from **Pocket TTS**, Kyutai's small, fast text-to-speech model, and the default voice is **Heart** — Kokoro's af_heart, the voice OpenWhisperer has spoken in by default all along, cloned onto Pocket. If you use af_heart today you're moved to Heart once; pick **Heart (Kokoro)** in Settings → Voice to go back.
+- **Five more English voices** — Jane, Eve, Vera, Alba and Michael, each downloaded the first time you choose it (~6–7 MB).
+- **Runs on your Mac, sandboxed.** Pocket runs on the CPU, one sentence at a time, inside a macOS sandbox with no network access, no other program and nothing written. A typical sentence takes about a third of a second, so a reply starts almost at once. The program ships inside the app; its model (~219 MB) downloads in the background the first time you launch.
+- **Kokoro stays as the backup.** Anything Pocket can't say — while its model is still downloading, or if a run fails — Kokoro says in a matching voice, so a reply is never silent. Kokoro's other voices and languages, and Supertonic-3's, are unchanged.
+- **Speed applies to Kokoro and Supertonic voices.** Pocket speaks at its own pace (Heart's is close to af_heart at the default 1.1×).
+- The download is larger (~24 MB) because the Pocket program and Heart ship inside it. Credits and licences: `THIRD_PARTY_NOTICES.md`.
+
 ### 2.0.8
 
 - **Hold-to-talk no longer sticks in recording.** Pressing a shortcut while holding the trigger key — Ctrl+C with Ctrl as the trigger, which terminal users do all day — used to leave the recording running until your next tap, which then typed everything captured in between. A shortcut during a hold now cancels that recording. A key release macOS never reports (it happens in password fields and Secure Keyboard Entry terminals) is also recovered within about half a second. ([#26](https://github.com/PerIPan/OpenWhisperer/issues/26))
@@ -134,7 +143,7 @@ Everything runs on your Mac — no cloud APIs; nothing you say or type leaves yo
 
 ## Install
 
-[**Download OpenWhisperer-2.0.8.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v2.0.8/OpenWhisperer-2.0.8.dmg) — drag to Applications and launch. Or build it yourself: see [Building from Source](#building-from-source).
+[**Download OpenWhisperer-2.0.9.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v2.0.9/OpenWhisperer-2.0.9.dmg) — drag to Applications and launch. Or build it yourself: see [Building from Source](#building-from-source).
 
 ### First launch on a new Mac
 
@@ -143,7 +152,7 @@ OpenWhisperer isn't signed with a paid Apple Developer ID, so macOS blocks the f
 - **macOS 15 (Sequoia) and later:** open the app and dismiss the *"Apple could not verify…"* warning. Then open **System Settings → Privacy & Security**, scroll to *"OpenWhisperer was blocked"*, and click **Open Anyway**. (Right-click → Open no longer gets past this on macOS 15.)
 - **Any macOS, from Terminal:** clear the download's quarantine flag before you open the DMG:
   ```bash
-  xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-2.0.8.dmg
+  xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-2.0.9.dmg
   ```
   If you already copied the app to Applications: `xattr -cr /Applications/OpenWhisperer.app`
 
@@ -152,8 +161,8 @@ Then allow **Accessibility** (to type into other apps) and **Microphone** when a
 **After every update, grant both again.** macOS ties those permissions to the exact build, and without a Developer ID every release is a new build to macOS, so the new version starts without them. In **System Settings → Privacy & Security → Accessibility**, select OpenWhisperer, remove it with **−**, then add it back with **+**. Do the same under **Microphone**. Until then dictation does nothing and the menubar shows a warning triangle.
 
 On first launch, the app:
-- Downloads the Whisper (speech-to-text) and Kokoro (text-to-speech) CoreML models
-- Loads both models on the Apple Neural Engine
+- Downloads the Whisper speech-to-text model and the Kokoro voice models (CoreML), and Pocket TTS's model (~219 MB) in the background
+- Loads Whisper and Kokoro on the Apple Neural Engine; Pocket TTS runs on the CPU, one sentence at a time — until its model is ready, Kokoro speaks
 - Starts the in-app TTS server automatically (loopback only, port 8000)
 
 While that one-time download and Neural-Engine compile runs, Settings opens on **General**, which shows live progress so you know it isn't stuck. The menubar icon shows an hourglass for the same reason.
@@ -171,7 +180,7 @@ Everything else lives in the **Settings** window (⌘,), across five tabs:
 - **App Focus** — switch to a target app before typing, press Return afterwards, and hand focus back
 
 **Voice**
-- **Voice** — **102 voices across 32 languages**, searchable: the full Kokoro-82M roster (~54 voices) plus **every one of the 24 languages Kokoro can't speak** — Arabic, Bulgarian, Croatian, Czech, Danish, Dutch, Estonian, Finnish, German, **Greek**, Hungarian, Indonesian, Korean, Latvian, Lithuanian, Polish, Romanian, Russian, Slovak, Slovenian, Swedish, Turkish, Ukrainian and Vietnamese. Rows show the language, the speaker, and whether it still needs downloading; **▶ previews any voice reading a sample in its own language**. Non-default voices download on demand
+- **Voice** — **108 voices across 32 languages**, searchable: **Heart** (the default) and five more English voices on Pocket TTS, the full Kokoro-82M roster (~54 voices), plus **every one of the 24 languages Kokoro can't speak** — Arabic, Bulgarian, Croatian, Czech, Danish, Dutch, Estonian, Finnish, German, **Greek**, Hungarian, Indonesian, Korean, Latvian, Lithuanian, Polish, Romanian, Russian, Slovak, Slovenian, Swedish, Turkish, Ukrainian and Vietnamese. Rows show the language, the speaker, and whether it still needs downloading; **▶ previews any voice reading a sample in its own language**. Non-default voices download on demand
 - **Speed** (0.7×–1.5×, default 1.1×) and **Volume**
 - **Length** — how much is spoken: Terse, Normal (default), Rich, or **Full** (a spoken paragraph that explains the reasoning, not just the outcome)
 - **Speak** — Only when I dictate (default), On every turn, or **Only when I'm needed** (silent unless the turn ends on you)
@@ -244,7 +253,7 @@ There's no special tag to add — voice mode works automatically. The app and it
 
 1. When you dictate, the app records a fingerprint of the text it inserted.
 2. The **UserPromptSubmit** hook recognizes that turn as a voice turn and quietly nudges the model to open its reply by calling an in-app `speak` tool with a short summary that stands alone.
-3. The model calls `speak` and the app synthesizes it sentence-by-sentence on-device — through Kokoro, or Supertonic-3 if you picked one of the 24 languages Kokoro can't speak — so speech starts mid-turn, not after the whole reply lands. (There is no Stop hook; Pi uses an equivalent extension instead of a hook + tool.)
+3. The model calls `speak` and the app synthesizes it sentence-by-sentence on-device — through Pocket TTS for the English voices (Heart by default, with Kokoro standing in for any line Pocket can't say), Kokoro for its other voices, or Supertonic-3 if you picked one of the 24 languages Kokoro can't speak — so speech starts mid-turn, not after the whole reply lands. (There is no Stop hook; Pi uses an equivalent extension instead of a hook + tool.)
 
 - **Screen**: you see the full detailed response
 - **Speakers**: you hear the spoken opening summary
@@ -268,11 +277,11 @@ Most settings are configured in the Settings window (voice, volume, language, ho
 
 | Variable | Default | Used by | Description |
 |----------|---------|---------|-------------|
-| `TTS_VOICE` | `af_heart` | `speak.sh` | Voice id — a Kokoro name (`af_heart`) or a multilingual id (`supertonic:nl:F1`); the menubar voice picker overrides this |
+| `TTS_VOICE` | the voice chosen in Settings | `speak.sh` | Voice id — a Pocket voice (`pocket:heart`, `pocket:jane`, …), a Kokoro name (`af_heart`) or a multilingual id (`supertonic:nl:F1`). Unset, `speak.sh` sends none and the app uses Settings' choice |
 | `TTS_URL` | `http://localhost:8000/v1/audio/speech` | `speak.sh` | Blocking synthesize-to-WAV endpoint |
 | `TTS_VOLUME` | `1` | `speak.sh` | Playback volume (the in-app player uses the menubar volume setting instead) |
 | `OW_TTS_STYLE` | Settings → Voice → **Length** | hooks | Per-project spoken-summary length (`terse`/`normal`/`rich`/`full`); overrides the global `tts_style` |
-| `OW_TTS_VOICE` | menubar voice | hooks | Per-project voice id, Kokoro or `supertonic:<lang>:<style>` (any of its 31 languages — the picker shows the 24 Kokoro can't speak); overrides the global `tts_voice` |
+| `OW_TTS_VOICE` | menubar voice | hooks | Per-project voice id: `pocket:<name>` (heart, jane, eve, vera, alba, michael), a Kokoro name, or `supertonic:<lang>:<style>` (any of its 31 languages — the picker shows the 24 Kokoro can't speak); overrides the global `tts_voice` |
 | `OW_TTS_RESPONSE` | menubar **Response** | hooks | Per-project response mode (`voice`/`always`/`needed`); overrides the global `tts_response_mode` |
 | `OW_TTS_PERSONA` | Settings → Voice → **Persona** | hooks | Per-project persona (`auto`, or an id such as `british`/`japanese`/`dutch`); overrides the global `tts_persona`. An unrecognized value falls back to the voice's own persona rather than removing it |
 | `OW_TTS_SPEED` | Settings → Voice → **Speed** | hooks | Per-project playback rate, clamped to 0.7–1.5; overrides the global `tts_speed` |
@@ -313,7 +322,7 @@ Most settings are configured in the Settings window (voice, volume, language, ho
   brew install jq
   ```
 
-There is **no Python, virtualenv, or `pip`/`uv` step** — speech-to-text and text-to-speech are native Swift (WhisperKit for STT; FluidAudio Kokoro and Supertonic-3 for TTS) and run in-process on the Apple Neural Engine.
+There is **no Python, virtualenv, or `pip`/`uv` step** — speech-to-text and text-to-speech are native (WhisperKit for STT; Kyutai's Pocket TTS program, which `build-dmg.sh` downloads at a pinned release, checks by sha256 and bundles, plus FluidAudio Kokoro and Supertonic-3 for TTS) and run in-process on the Apple Neural Engine.
 
 ### Step 1: Build the app
 
@@ -324,7 +333,7 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-This produces `OpenWhisperer.app` and `OpenWhisperer-<version>.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
+This produces `OpenWhisperer.app` and `OpenWhisperer-<version>.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper, Kokoro and Pocket TTS models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
 
 ### Step 2: Wire up the hooks
 
@@ -369,7 +378,7 @@ OpenWhisperer/
 └── app/                      # macOS menubar app (Swift Package)
     ├── Package.swift
     ├── Sources/
-    │   ├── OpenWhisperer/     # App + native STT (WhisperKit) + native TTS (Kokoro, Supertonic-3)
+    │   ├── OpenWhisperer/     # App + native STT (WhisperKit) + native TTS (Pocket TTS, Kokoro, Supertonic-3)
     │   │   ├── FirstRun/       # First-launch setup sheet
     │   │   └── Settings/       # Settings window tabs
     │   └── OpenWhispererKit/  # Pure, unit-tested logic
@@ -390,7 +399,9 @@ The native rewrite at the heart of this app — replacing the out-of-process Pyt
 
 - [WhisperKit](https://github.com/argmaxinc/WhisperKit) — on-device speech-to-text (CoreML / Apple Neural Engine)
 - [FluidAudio](https://github.com/FluidInference/FluidAudio) — on-device Kokoro and Supertonic-3 text-to-speech (CoreML / Apple Neural Engine)
-- [Kokoro](https://huggingface.co/prince-canuma/Kokoro-82M) — TTS model (English and eight other languages)
+- [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) by Kyutai — the default English voice engine (program MIT, model and voices [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)); its voices Jane, Eve, Vera and Michael come from the VCTK corpus (University of Edinburgh), Alba from Alba MacKenna
+- **Heart** — Kokoro's af_heart cloned onto Pocket TTS, made for [Estia](https://estia.one); full credits and licences in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
+- [Kokoro](https://huggingface.co/prince-canuma/Kokoro-82M) — TTS model (English and eight other languages), and the stand-in for any line Pocket can't say
 - [Supertonic-3](https://github.com/FluidInference/FluidAudio) — multilingual TTS model, via FluidAudio
 - [jq](https://jqlang.github.io/jq/) — JSON processor (used by the hooks)
 - [Claude Code](https://claude.ai/claude-code) — Anthropic's CLI

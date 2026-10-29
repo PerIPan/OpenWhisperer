@@ -3,7 +3,7 @@ import FluidAudio
 import OpenWhispererKit
 
 /// Routes synthesis to whichever engine can speak a given voice id: `PocketSpeaker` (Pocket TTS,
-/// English, the default since 2.1), `KokoroTTS` for its nine languages — and as the stand-in for
+/// English, the default since 2.0.9), `KokoroTTS` for its nine languages — and as the stand-in for
 /// any line Pocket can't say — and `Supertonic3TTS` for the twenty-plus Kokoro has no voice for.
 ///
 /// Deliberately exposes the same surface `KokoroTTS` did — `prepare()`, `synthesize`,

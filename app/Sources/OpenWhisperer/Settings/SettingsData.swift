@@ -17,7 +17,7 @@ enum SettingsData {
     static var voiceSections: [OWPickerSection] {
         TTSVoiceRegistry.groups.map { group in
             let isSupertonic = group.voices.allSatisfy { TTSVoiceRouter.isSupertonic($0.id) }
-            // The engine word only when one engine speaks the whole group. Since 2.1 the English
+            // The engine word only when one engine speaks the whole group. Since 2.0.9 the English
             // groups mix Pocket voices (first) with Kokoro's, and calling them "Kokoro" put the
             // default voice under the wrong engine (review, 2026-10-29).
             let engines = Set(group.voices.map { TTSVoiceRouter.route($0.id).engine })

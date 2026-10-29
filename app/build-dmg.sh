@@ -82,7 +82,7 @@ else
 fi
 chmod +x "$APP_BUNDLE/Contents/Resources/jq"
 
-# Step 5: Bundle Pocket TTS — the default English voice engine since 2.1 (see PocketTTS in the
+# Step 5: Bundle Pocket TTS — the default English voice engine since 2.0.9 (see PocketTTS in the
 # Kit). Kyutai's pinned macOS arm64 program (MIT) goes in Contents/Helpers and Heart's voice
 # state in Resources/pocket; the model itself (~219 MB) is downloaded on first run. Every file is
 # checked against its pin here, at BUILD time: signing below re-signs the program, so its bytes

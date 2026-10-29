@@ -6,7 +6,7 @@ public enum TTSEngineKind: String, Sendable, Equatable, Codable {
     case kokoro
     /// Supertonic-3 via FluidAudio's `Supertonic3Manager` — 31 languages, ANE, 44.1 kHz.
     case supertonic
-    /// Pocket TTS (Kyutai) — English, the default since 2.1, CPU, one program run per sentence.
+    /// Pocket TTS (Kyutai) — English, the default since 2.0.9, CPU, one program run per sentence.
     /// Kokoro stands in for any line it can't say. See `PocketTTS`.
     case pocket
 }

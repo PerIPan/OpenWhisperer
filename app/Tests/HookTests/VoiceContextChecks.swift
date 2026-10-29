@@ -348,7 +348,7 @@ func voiceContextFailures() -> [String] {
         }
     }
 
-    // 25) no override → nudge carries the default voice (Heart on Pocket, since 2.1) but no speed arg.
+    // 25) no override → nudge carries the default voice (Heart on Pocket, since 2.0.9) but no speed arg.
     do {
         let s = newSandbox(); s.writeVoiceTurn(forPrompt: "go")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
